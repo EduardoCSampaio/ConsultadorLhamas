@@ -60,10 +60,10 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
     const providerApiMap = {
       cartos: "CARTOS",
       bms: "BMS",
-      qi: "QI", // Supondo que "qi" seja "QI", ajuste se necessário
+      qi: "QI_TECH", // Supondo que "qi" seja "QI", ajuste se necessário
     };
 
-    const providerForApi = providerApiMap[provider];
+    const providerForApi = providerApiMap[provider as keyof typeof providerApiMap];
 
     if (!providerForApi) {
         throw new Error(`Provedor inválido selecionado: ${provider}`);
@@ -71,7 +71,13 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
 
     const API_URL_CONSULTA = 'https://bff.v8sistema.com/fgts/balance'; 
 
-    console.log(`Consultando CPF: ${documentNumber} no provedor: ${providerForApi}`);
+    const requestBody = {
+      documentNumber: documentNumber,
+      provider: providerForApi,
+    };
+
+    console.log(`[V8 API] Consultando... Endpoint: ${API_URL_CONSULTA}, Corpo da Requisição: ${JSON.stringify(requestBody)}`);
+
 
     const consultaResponse = await fetch(API_URL_CONSULTA, {
       method: 'POST',
@@ -79,10 +85,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${authToken}`, 
       },
-      body: JSON.stringify({
-        documentNumber: documentNumber,
-        provider: providerForApi,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!consultaResponse.ok) {
