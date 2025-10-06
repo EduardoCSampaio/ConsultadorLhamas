@@ -17,7 +17,7 @@ type ActionResult = {
 // Função de autenticação alinhada com a documentação oficial da V8
 async function getAuthToken(): Promise<{token: string | null, error: string | null}> {
   // CORREÇÃO: URL de autenticação corrigida para o host correto.
-  const tokenUrl = 'https://api.v8digital.com/oauth/token';
+  const tokenUrl = 'https://auth.v8sistema.com/oauth/token';
 
   // CORREÇÃO: A API de autenticação exige 'application/x-www-form-urlencoded'.
   const bodyPayload = new URLSearchParams({
