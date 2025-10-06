@@ -68,31 +68,29 @@ export default function LoginPage() {
         const newUser = userCredential.user;
         const isAdmin = newUser.email === 'admin@lhamascred.com.br';
 
-        // Set admin custom claim via server action if it's the admin user
-        if (isAdmin) {
-          const claimResult = await setAdminClaim({ uid: newUser.uid });
-          if (!claimResult.success) {
-            throw new Error(claimResult.error || "Falha ao definir permissões de administrador.");
-          }
-        }
-        
         // Create user profile in Firestore
         const userProfile = {
           uid: newUser.uid,
           email: newUser.email,
           role: isAdmin ? 'admin' : 'user',
-          status: isAdmin ? 'active' : 'pending', // Admin is active by default
+          status: isAdmin ? 'active' : 'pending', // Admin is active by default, others are pending
           createdAt: serverTimestamp(),
         };
 
         await setDoc(doc(firestore, "users", newUser.uid), userProfile);
         
-        if(isAdmin) {
-            // Force token refresh to pick up the new claim immediately
-            await getIdTokenResult(newUser, true);
-            router.push('/dashboard');
+        // Set admin custom claim via server action if it's the admin user
+        if (isAdmin) {
+          const claimResult = await setAdminClaim({ uid: newUser.uid });
+          if (!claimResult.success) {
+            // This is not a fatal error for the user flow, but should be logged.
+            console.error("Failed to set admin claim:", claimResult.error);
+          }
+           // Force token refresh to pick up the new claim immediately and redirect
+           await getIdTokenResult(newUser, true);
+           router.push('/dashboard');
         } else {
-            // Show pending message and sign out the non-admin user
+            // For regular users, show pending message and sign them out.
             setShowPendingMessage(true);
             await signOut(auth);
         }

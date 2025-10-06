@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { PageHeader } from "@/components/page-header";
@@ -31,6 +30,7 @@ export default function AdminUsersPage() {
             });
             setUsers([]);
         } else {
+            // Filtra o usuário admin da lista principal se necessário, ou apenas exibe todos
             setUsers(fetchedUsers || []);
         }
         setIsLoading(false);
@@ -131,7 +131,7 @@ export default function AdminUsersPage() {
                                             </TableCell>
                                             <TableCell className="capitalize">{user.role}</TableCell>
                                             <TableCell className="text-right">
-                                                {user.status === 'pending' ? (
+                                                {user.status === 'pending' && user.role !== 'admin' ? (
                                                     <div className="flex gap-2 justify-end">
                                                         <Button 
                                                             variant="outline" 
@@ -153,7 +153,9 @@ export default function AdminUsersPage() {
                                                         </Button>
                                                     </div>
                                                 ) : (
-                                                    <span className="text-xs text-muted-foreground">Nenhuma ação pendente</span>
+                                                    <span className="text-xs text-muted-foreground">
+                                                        {user.role === 'admin' ? 'Admin' : 'Nenhuma ação pendente'}
+                                                    </span>
                                                 )}
                                             </TableCell>
                                         </TableRow>
