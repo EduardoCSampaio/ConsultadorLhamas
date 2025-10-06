@@ -1,71 +1,60 @@
 /**
  * @file Firestore Security Rules
- * @description This ruleset implements a role-based access control system with user-owned profiles and public webhook responses.
- *
- * Core Philosophy:
- *   - Users can only manage their own profiles.
- *   - Webhook responses are publicly readable but only writeable with proper authorization.
+ * @description This ruleset enforces a strict user-ownership model for user profiles
+ * and allows public read access to webhook responses while restricting write access to authorized users only.
  *
  * Data Structure:
- *   - User profiles are stored under `/users/{userId}`, where `userId` matches the Firebase Auth UID.
- *   - Webhook responses are stored under `/webhookResponses/{webhookResponseId}`.
+ * - /users/{userId}: Stores user profile information, with 'userId' matching the Firebase Auth UID.
+ * - /webhookResponses/{webhookResponseId}: Stores webhook responses, accessible for public reading.
  *
  * Key Security Decisions:
- *   - Listing of user profiles is disallowed for privacy.
- *   - User profile creation is allowed via "Self-Creation" but only if the Firebase Auth UID matches the document ID.
+ * - User profiles are strictly owned by the corresponding user; only the authenticated user can read/write their own profile.
+ * - Webhook responses are publicly readable but only writeable by authenticated users (TODO: implement specific logic).
+ * - Listing of users is disallowed to protect user privacy and prevent enumeration attacks.
  *
  * Denormalization for Authorization:
- *   - Webhook responses do not contain ownership data. Write access will be controlled by a pre-defined admin role.
+ * - The `UserProfile` includes the Firebase Auth UID to easily enforce ownership.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Controls access to user profiles.
+     * @description Secures user profiles, ensuring users can only access their own data.
      * @path /users/{userId}
-     * @allow (create) User with UID 'user123' can create their profile at /users/user123.
-     * @deny (create) User with UID 'user123' cannot create a profile at /users/otherUser.
-     * @deny (update) User with UID 'user123' cannot update profile at /users/otherUser.
-     * @principle Enforces user ownership and restricts modifications to the owner.
+     * @allow (create) Authenticated user creates their own profile.
+     *          Request: auth.uid = "user123", resource.data.uid = "user123"
+     * @allow (get, update, delete) Authenticated user reads, updates, or deletes their own profile.
+     *          Request: auth.uid = "user123", path = "/databases/(default)/documents/users/user123"
+     * @deny (create) User attempts to create a profile with a mismatched user ID.
+     *         Request: auth.uid = "user456", resource.data.uid = "user123"
+     * @deny (get, update, delete) User attempts to access another user's profile.
+     *         Request: auth.uid = "user456", path = "/databases/(default)/documents/users/user123"
+     * @principle Enforces document ownership for all operations on user profiles.
      */
     match /users/{userId} {
-      // Helper function to check if the user is signed in and owns the resource.
       function isOwner(userId) {
         return request.auth != null && request.auth.uid == userId;
       }
 
-      // Allow a user to create their own profile if the userId matches their auth.uid
-      allow create: if request.auth.uid == userId;
-
-      // Allow a user to get their own profile.
       allow get: if isOwner(userId);
-
-      // Disallow listing all user profiles (privacy).
+      // Listing users is not permitted to protect user privacy.
       allow list: if false;
-
-      // Allow a user to update their own profile
-      allow update: if isOwner(userId);
-
-      // Allow a user to delete their own profile.
-      allow delete: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.uid == userId;
+      allow update: if isOwner(userId) && resource.data.uid == userId;
+      allow delete: if isOwner(userId) && resource != null;
     }
 
     /**
-     * @description Controls access to webhook responses.
+     * @description Secures webhook responses, allowing public read access while restricting write access.
      * @path /webhookResponses/{webhookResponseId}
-     * @allow (get) Any user can read a webhook response.
-     * @allow (list) Any user can list webhook responses.
-     * @deny (create) No one can create a webhook response without authorization logic.
-     * @deny (update) No one can update a webhook response without authorization logic.
-     * @principle Public read access with restricted write access via role.
+     * @allow (get, list) Any user can read webhook responses.
+     * @deny (create, update, delete) Only authenticated users can modify webhook responses (TODO: implement specific logic).
+     * @principle Allows public read access with restricted write access.
      */
     match /webhookResponses/{webhookResponseId} {
-      // Allow anyone to read webhook responses.
       allow get, list: if true;
-
-      // TODO: Add owner validation once the schema is updated with an ownership field.
-      allow create, update, delete: if false;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
   }
 }
