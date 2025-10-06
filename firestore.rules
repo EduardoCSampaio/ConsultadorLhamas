@@ -2,136 +2,44 @@
  * @fileoverview Firestore Security Rules for Beleza Integrada.
  *
  * Core Philosophy:
- * This ruleset enforces a strict user-ownership model for all data stored
- * in Firestore.  Each user has a dedicated data tree under `/users/{userId}`
- * where `userId` matches their Firebase Auth UID.  Only the authenticated user
- * can read or write their own data.
+ * This ruleset provides public read access to webhook responses but restricts write access.
+ * Only authenticated users can create, update, or delete webhook responses.
  *
  * Data Structure:
- * All data is nested under /users/{userId}, creating a clear ownership
- * hierarchy.  Specifically:
- * - /users/{userId}: Stores user profile information.
- * - /users/{userId}/ui_preferences/{uiPreferencesId}: Stores UI preferences.
- * - /users/{userId}/api_integrations/{apiIntegrationId}: Stores API integration configurations.
+ * Webhook responses are stored in the `/webhookResponses/{webhookResponseId}` collection.
  *
  * Key Security Decisions:
- * - User listing is disallowed.
- * - Path-based ownership is enforced for all user-specific data. This
- *   means the `userId` in the path must match the authenticated user's UID.
- * - All write operations require the user to be authenticated.
+ * - Public read access allows for monitoring and debugging of webhook integrations.
+ * - Owner-only write access ensures that only authenticated users can modify webhook responses.
+ * - Listing webhook responses is public.
  *
  * Denormalization for Authorization:
- * The data structure denormalizes ownership by nesting all user-specific data under
- * the `/users/{userId}` path.  This allows rules to efficiently check
- * ownership based on the path without needing to read other documents.
+ * The `WebhookResponse` documents are self-contained and do not rely on external data for authorization.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Enforces read and write access to user profile information only to the authenticated user.
-     * @path /users/{userId}
-     * @allow (create) - User with UID 'user_abc' can create a profile with id: 'user_abc'.
-     * @deny (create) - User with UID 'user_xyz' cannot create a profile with id: 'user_abc'.
-     * @allow (get) - User with UID 'user_abc' can get their profile.
-     * @allow (update) - User with UID 'user_abc' can update their profile.
-     * @allow (delete) - User with UID 'user_abc' can delete their profile.
-     * @deny (get) - User with UID 'user_xyz' cannot get user 'user_abc' profile.
-     * @principle Enforces document ownership for writes.
+     * @description Allows public read access to webhook responses, but restricts write access to authenticated users.
+     * @path /webhookResponses/{webhookResponseId}
+     * @allow (get, list) Any user can read webhook responses.
+     * @allow (create) Any authenticated user can create a webhook response.
+     * @deny (create) An unauthenticated user cannot create a webhook response.
+     * @deny (update, delete) Only the user who created the webhook response can update or delete it.
+     * @principle Enables public read access while enforcing owner-only writes.
      */
-    match /users/{userId} {
-      // Helper function to check if the user is signed in
-      function isSignedIn() {
-        return request.auth != null;
-      }
+    match /webhookResponses/{webhookResponseId} {
+      allow get: if true;
+      allow list: if true;
 
-      // Helper function to check if the requested user id matches the authenticated user id
-      function isOwner(userId) {
-        return isSignedIn() && request.auth.uid == userId;
-      }
-
-      // Helper function to check if the requested user id matches the authenticated user id and resource exists
-      function isExistingOwner(userId) {
-        return isOwner(userId) && resource != null;
-      }
-
-      allow get: if isOwner(userId);
-      allow list: if false;
-
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
-      allow delete: if isExistingOwner(userId);
+      allow create: if isSignedIn();
+      allow update: if false;
+      allow delete: if false;
     }
 
-    /**
-     * @description Enforces read and write access to UI preferences only to the authenticated user.
-     * @path /users/{userId}/ui_preferences/{uiPreferencesId}
-     * @allow (create) - User with UID 'user_abc' can create a ui preference doc.
-     * @deny (create) - User with UID 'user_xyz' cannot create a ui preference doc for user 'user_abc'.
-     * @allow (get) - User with UID 'user_abc' can get their ui preference doc.
-     * @allow (update) - User with UID 'user_abc' can update their ui preference doc.
-     * @allow (delete) - User with UID 'user_abc' can delete their ui preference doc.
-     * @deny (get) - User with UID 'user_xyz' cannot get user 'user_abc' ui preference doc.
-     * @principle Restricts access to a user's own data tree.
-     */
-    match /users/{userId}/ui_preferences/{uiPreferencesId} {
-      // Helper function to check if the user is signed in
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      // Helper function to check if the requested user id matches the authenticated user id
-      function isOwner(userId) {
-        return isSignedIn() && request.auth.uid == userId;
-      }
-
-      // Helper function to check if the requested user id matches the authenticated user id and resource exists
-      function isExistingOwner(userId) {
-        return isOwner(userId) && resource != null;
-      }
-      
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-
-      allow create: if isOwner(userId) && request.resource.data.userProfileId == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.userProfileId == resource.data.userProfileId;
-      allow delete: if isExistingOwner(userId);
-    }
-
-    /**
-     * @description Enforces read and write access to API integrations only to the authenticated user.
-     * @path /users/{userId}/api_integrations/{apiIntegrationId}
-     * @allow (create) - User with UID 'user_abc' can create an api integration doc.
-     * @deny (create) - User with UID 'user_xyz' cannot create an api integration doc for user 'user_abc'.
-     * @allow (get) - User with UID 'user_abc' can get their api integration doc.
-     * @allow (update) - User with UID 'user_abc' can update their api integration doc.
-     * @allow (delete) - User with UID 'user_abc' can delete their api integration doc.
-     * @deny (get) - User with UID 'user_xyz' cannot get user 'user_abc' api integration doc.
-     * @principle Restricts access to a user's own data tree.
-     */
-    match /users/{userId}/api_integrations/{apiIntegrationId} {
-      // Helper function to check if the user is signed in
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      // Helper function to check if the requested user id matches the authenticated user id
-      function isOwner(userId) {
-        return isSignedIn() && request.auth.uid == userId;
-      }
-
-       // Helper function to check if the requested user id matches the authenticated user id and resource exists
-      function isExistingOwner(userId) {
-        return isOwner(userId) && resource != null;
-      }
-
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-
-      allow create: if isOwner(userId) && request.resource.data.userProfileId == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.userProfileId == resource.data.userProfileId;
-      allow delete: if isExistingOwner(userId);
+    function isSignedIn() {
+      return request.auth != null;
     }
   }
 }

@@ -1,50 +1,69 @@
-
 {
   "entities": {
-    "UserProfile": {
+    "WebhookResponse": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "UserProfile",
+      "title": "WebhookResponse",
       "type": "object",
-      "description": "Represents a user profile within the Lhamascred system.",
+      "description": "Represents the response received from a webhook.",
       "properties": {
-        "email": {
+        "id": {
           "type": "string",
-          "description": "Email address of the user.",
-          "format": "email"
+          "description": "Unique identifier for the webhook response."
         },
-        "displayName": {
+        "status": {
           "type": "string",
-          "description": "Display name of the user."
+          "description": "The status of the webhook response (e.g., pending, completed, failed)."
+        },
+        "message": {
+          "type": "string",
+          "description": "A descriptive message associated with the webhook response."
+        },
+        "initialResponse": {
+          "type": "string",
+          "description": "The initial response from the service that triggered the webhook."
+        },
+        "responseBody": {
+          "type": "string",
+          "description": "The full response body received from the webhook endpoint."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp indicating when the webhook response was received.",
+          "format": "date-time"
         }
       },
       "required": [
-        "email"
+        "id",
+        "status",
+        "message"
       ]
     }
   },
   "auth": {
     "providers": [
-      "password"
+      "password",
+      "anonymous"
     ]
   },
   "firestore": {
     "structure": [
       {
-        "path": "/users/{userId}",
+        "path": "/webhookResponses/{webhookResponseId}",
         "definition": {
-          "entityName": "UserProfile",
+          "entityName": "WebhookResponse",
           "schema": {
-            "$ref": "#/backend/entities/UserProfile"
+            "$ref": "#/backend/entities/WebhookResponse"
           },
-          "description": "Stores user profile information. The `userId` parameter corresponds to the Firebase Auth UID. This path provides the root for user-specific data.",
+          "description": "Stores webhook responses. The webhookResponseId is the unique ID for each response.",
           "params": [
             {
-              "name": "userId",
-              "description": "The Firebase Auth UID of the user."
+              "name": "webhookResponseId",
+              "description": "The unique identifier for the webhook response."
             }
           ]
         }
       }
-    ]
+    ],
+    "reasoning": "Based on the provided information, the application 'Beleza Integrada' primarily deals with processing webhook responses. Given the requirement to store webhook responses, a suitable Firestore structure would be to create a dedicated collection for these responses. Since the user mentioned tokens and API integrations for improvements, it's also important to structure the data for potential future user-specific customization or association of responses. This structure supports authorization independence as each WebhookResponse is self-contained and doesn't rely on parent document data for access control. Segregation is achieved by dedicating a collection solely for WebhookResponse entities, ensuring homogeneous security postures. QAPs are addressed by ensuring that list operations can be secured based on the presence or absence of specific fields, if needed, or by potentially scoping them to a user context if user accounts are later associated with these responses."
   }
 }
