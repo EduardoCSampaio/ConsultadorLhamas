@@ -1,5 +1,4 @@
 
-
 'use server';
 
 import { z } from 'zod';
@@ -100,29 +99,31 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                 const data = docSnap.data();
                 const responseBody = data?.responseBody;
                 
-                // Check for a specific error message in the response body first
-                const errorMessage = responseBody?.error || responseBody?.errorMessage || responseBody?.message;
-
-                if (responseBody && errorMessage && typeof errorMessage === 'string' && responseBody.balance === undefined) {
-                    results.push({
-                        CPF: cpf,
-                        Saldo: 'N/A',
-                        Mensagem: `Erro: ${errorMessage}`,
-                    });
-                } else if (responseBody && responseBody.balance !== undefined && responseBody.balance !== null) {
+                if (responseBody && responseBody.balance !== undefined && responseBody.balance !== null) {
+                    // Success case
                     results.push({
                         CPF: cpf,
                         Saldo: parseFloat(responseBody.balance),
                         Mensagem: 'Sucesso',
                     });
-                } else {
+                } else if (responseBody) {
+                    // Error case: response exists but no balance
+                    const errorMessage = responseBody.error || responseBody.errorMessage || responseBody.message || "Resposta inválida do webhook";
                     results.push({
                         CPF: cpf,
                         Saldo: 'N/A',
-                        Mensagem: 'Resposta do webhook recebida, mas sem saldo ou formato de erro conhecido.',
+                        Mensagem: `Erro: ${errorMessage}`,
+                    });
+                } else {
+                    // Still waiting case
+                    results.push({
+                        CPF: cpf,
+                        Saldo: 'N/A',
+                        Mensagem: 'Aguardando resposta do webhook...',
                     });
                 }
             } else {
+                // Document not even created case
                 results.push({
                     CPF: cpf,
                     Saldo: 'N/A',
