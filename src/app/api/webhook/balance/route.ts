@@ -18,20 +18,11 @@ function initializeFirebaseClient() {
  * Handles POST requests from the V8 API balance webhook.
  * This endpoint now uses the Client SDK and authenticates anonymously
  * to ensure it has permissions to write to Firestore based on security rules.
+ * It also handles webhook validation requests with empty bodies.
  */
 export async function POST(request: NextRequest) {
-  const app = initializeFirebaseClient();
-  const db = getFirestore(app);
-  const auth = getAuth(app);
-
   try {
-    // Etapa 1: Autenticar como um serviço anônimo para ter permissão de escrita
-    // As regras do Firestore devem permitir a escrita para usuários autenticados.
-    await signInAnonymously(auth);
-    console.log("Webhook endpoint authenticated anonymously.");
-
     const payload = await request.json();
-
     console.log("--- Balance Webhook Received ---");
     console.log("Headers:", Object.fromEntries(request.headers));
     console.log("Body (Payload):", JSON.stringify(payload, null, 2));
@@ -40,12 +31,23 @@ export async function POST(request: NextRequest) {
     const docId = payload.documentNumber || payload.id;
 
     if (!docId) {
-      console.error("Error: Webhook payload is missing 'documentNumber' or 'id'. Cannot create document.");
+      // This is likely a test/validation request from V8 with an empty body.
+      // We respond with 200 OK to pass their validation check.
+      console.log("Webhook validation request received (empty or invalid body). Responding 200 OK.");
       return NextResponse.json({
-        status: 'error',
-        message: 'Payload missing required identifier (documentNumber or id).',
-      }, { status: 400 });
+        status: 'success',
+        message: 'Webhook test successful. Endpoint is active.',
+      }, { status: 200 });
     }
+    
+    // If we have a docId, proceed to write to Firestore.
+    const app = initializeFirebaseClient();
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+    
+    // Etapa 1: Autenticar como um serviço anônimo para ter permissão de escrita
+    await signInAnonymously(auth);
+    console.log("Webhook endpoint authenticated anonymously to write data.");
 
     // Criar uma referência para o documento na coleção 'webhookResponses'.
     const docRef = doc(db, 'webhookResponses', docId.toString());
@@ -66,7 +68,16 @@ export async function POST(request: NextRequest) {
         message: 'Webhook received and processed successfully.' 
     }, { status: 200 });
 
-  } catch (error) {
+  } catch (error: any) {
+    // Handle JSON parsing errors, which can happen with empty bodies.
+    if (error instanceof SyntaxError && error.message.includes('Unexpected end of JSON input')) {
+        console.log("Webhook validation request received (empty body). Responding 200 OK.");
+        return NextResponse.json({
+            status: 'success',
+            message: 'Webhook test successful. Endpoint is active.',
+        }, { status: 200 });
+    }
+
     console.error("Error processing webhook:", error);
     let errorMessage = "Unknown error";
     if (error instanceof Error) {
