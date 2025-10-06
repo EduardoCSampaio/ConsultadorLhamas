@@ -77,22 +77,16 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   let userCredentials: ApiCredentials;
   try {
     initializeFirebaseAdmin();
-    const adminAuth = getAuth();
     const firestore = getFirestore();
     
-    // As Server Actions não têm acesso direto ao token do cliente.
-    // O correto seria passar o UID do cliente para a action e validar.
-    // Por simplicidade aqui, vamos assumir que a action é chamada por um usuário autenticado
-    // e que teríamos uma forma de obter o UID dele. Como isso não é trivial,
-    // vamos deixar um placeholder para a lógica de buscar o usuário atual.
-    // Em um cenário real, o UID seria obtido de um token de ID verificado.
-    // Para este caso, vamos buscar o primeiro usuário admin para demonstração.
+    // Busca as credenciais do usuário admin específico.
+    const userQuery = await firestore.collection('users').where('email', '==', 'admin@lhamascred.com.br').limit(1).get();
     
-    const userSnap = await firestore.collection('users').limit(1).get(); // ATENÇÃO: Simplificação para demonstração
-    if (userSnap.empty) {
-        return { status: 'error', stepIndex: 0, message: 'Nenhum usuário encontrado para buscar as credenciais.' };
+    if (userQuery.empty) {
+        return { status: 'error', stepIndex: 0, message: 'Usuário administrador não encontrado para buscar as credenciais.' };
     }
-    const userData = userSnap.docs[0].data();
+    
+    const userData = userQuery.docs[0].data();
     userCredentials = {
       v8_username: userData.v8_username,
       v8_password: userData.v8_password,
