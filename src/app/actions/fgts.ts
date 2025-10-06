@@ -97,6 +97,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
         data = JSON.parse(responseBody);
       }
     } catch (e) {
+      // Se a resposta não for um JSON válido, consideramos um erro.
       return { 
           status: 'error', 
           stepIndex: 1, 
@@ -104,24 +105,27 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       };
     }
       
-    if (!consultaResponse.ok) {
-        let errorMessage = `Erro ao enviar consulta: ${consultaResponse.status} ${consultaResponse.statusText}.`;
-        if (data && data.error) {
-            errorMessage += ` Detalhes: ${JSON.stringify(data.error)}`;
-        } else if(responseBody) {
-            errorMessage += ` Resposta: ${responseBody}`;
-        }
-        return { status: 'error', stepIndex: 1, message: errorMessage };
-    }
-   
-    if (data === null || (typeof data === 'object' && Object.keys(data).length === 0 && responseBody.trim() !== '{}')) {
+    // A API da V8 retorna 200 OK com corpo `null` ou `{}` em caso de falha lógica.
+    // Portanto, não podemos confiar em `consultaResponse.ok`.
+    // Verificamos se a resposta é nula ou um objeto vazio.
+    if (data === null || (typeof data === 'object' && Object.keys(data).length === 0)) {
         return { 
             status: 'error', 
             stepIndex: 1, 
             message: "A API parceira aceitou a requisição, mas não iniciou a consulta (resposta vazia). Verifique as credenciais ou contate o suporte da V8." 
         };
     }
-    
+
+    // Se a resposta tem conteúdo, mas o status não é 2xx (ex: erro 400 com JSON)
+    if (!consultaResponse.ok) {
+        let errorMessage = `Erro ao enviar consulta: ${consultaResponse.status} ${consultaResponse.statusText}.`;
+        if (data && (data.error || data.message)) {
+            errorMessage += ` Detalhes: ${JSON.stringify(data)}`;
+        }
+        return { status: 'error', stepIndex: 1, message: errorMessage };
+    }
+   
+    // Se tudo deu certo, a resposta deve conter algum dado.
     return { 
         status: 'success', 
         stepIndex: 1, 
