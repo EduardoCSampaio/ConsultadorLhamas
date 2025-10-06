@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Loader2, Search, CheckCircle2, XCircle, Circle, User, Briefcase, Landmark, Calendar, Banknote, Upload, FileText, Download } from "lucide-react";
+import { Loader2, Search, CheckCircle2, XCircle, Circle, User, Briefcase, Landmark, Calendar, Banknote, Upload, FileText, Download, RefreshCw } from "lucide-react";
 import { useState, useEffect, useRef, ChangeEvent } from "react";
 import { consultarSaldoFgts } from "@/app/actions/fgts";
 import { useDoc } from "@/firebase/firestore/use-doc";
@@ -28,7 +28,8 @@ import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import * as XLSX from 'xlsx';
-import { processarLoteFgts } from "@/app/actions/batch";
+import { processarLoteFgts, gerarRelatorioLote } from "@/app/actions/batch";
+import { useToast } from "@/hooks/use-toast";
 
 const manualFormSchema = z.object({
   documentNumber: z.string().min(11, {
@@ -113,9 +114,10 @@ const StepIcon = ({ status }: { status: StepStatus }) => {
     }
   };
 
-const formatCurrency = (value: string | number | undefined) => {
-    if (value === undefined) return 'N/A';
+const formatCurrency = (value: string | number | undefined | null) => {
+    if (value === undefined || value === null) return 'N/A';
     const numberValue = typeof value === 'string' ? parseFloat(value) : value;
+    if (isNaN(numberValue)) return 'N/A';
     return new Intl.NumberFormat('pt-BR', {
         style: 'currency',
         currency: 'BRL',
@@ -124,11 +126,16 @@ const formatCurrency = (value: string | number | undefined) => {
 
 const formatDate = (dateString: string | undefined) => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('pt-BR', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-    });
+    // Handle ISO string with or without milliseconds
+    try {
+        return new Date(dateString).toLocaleDateString('pt-BR', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+        });
+    } catch {
+        return 'Data inválida';
+    }
 };
 
 export default function FgtsPage() {
@@ -138,9 +145,14 @@ export default function FgtsPage() {
   const [showStatus, setShowStatus] = useState(false);
   
   const [file, setFile] = useState<File | null>(null);
+  const [lastProcessedCpfs, setLastProcessedCpfs] = useState<string[]>([]);
+  const [lastProcessedProvider, setLastProcessedProvider] = useState<string | null>(null);
   const [isProcessingBatch, setIsProcessingBatch] = useState(false);
-  const [batchResult, setBatchResult] = useState<{file: string, name: string} | null>(null);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [batchStarted, setBatchStarted] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
 
   const firestore = useFirestore();
 
@@ -176,7 +188,9 @@ export default function FgtsPage() {
     const files = event.target.files;
     if (files && files.length > 0) {
       setFile(files[0]);
-      setBatchResult(null); 
+      setBatchStarted(false);
+      setLastProcessedCpfs([]);
+      setLastProcessedProvider(null);
     }
   };
 
@@ -190,7 +204,7 @@ export default function FgtsPage() {
     }
 
     setIsProcessingBatch(true);
-    setBatchResult(null);
+    setBatchStarted(false);
 
     const reader = new FileReader();
     reader.onload = async (e) => {
@@ -200,29 +214,62 @@ export default function FgtsPage() {
         const worksheet = workbook.Sheets[sheetName];
         const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         
-        const cpfs = json.map(row => String((row as any)[0])).filter(cpf => cpf && cpf.length >= 11);
+        const cpfs = json.slice(1).map(row => String((row as any)[0])).filter(cpf => cpf && cpf.length >= 11);
+        
+        setLastProcessedCpfs(cpfs);
+        setLastProcessedProvider(provider);
 
         const result = await processarLoteFgts({ cpfs, provider });
-
-        if (result.status === 'success') {
-            setBatchResult({ file: result.fileContent, name: result.fileName });
-        } else {
-            console.error("Erro ao processar lote:", result.message);
-        }
-
+        
         setIsProcessingBatch(false);
+        if (result.status === 'success') {
+            setBatchStarted(true);
+            toast({
+                title: "Lote enviado para processamento!",
+                description: `${result.count} consultas foram iniciadas em segundo plano.`,
+            });
+        } else {
+            toast({
+                variant: "destructive",
+                title: "Erro ao processar lote",
+                description: result.message,
+            });
+        }
     };
     reader.readAsArrayBuffer(file);
   };
   
-  const downloadExcel = () => {
-    if (!batchResult) return;
-    const link = document.createElement('a');
-    link.href = batchResult.file;
-    link.download = batchResult.name;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleGenerateReport = async () => {
+    if (lastProcessedCpfs.length === 0 || !lastProcessedProvider) {
+        toast({
+            variant: "destructive",
+            title: "Nenhum lote processado",
+            description: "Inicie o processamento de um lote antes de gerar um relatório."
+        });
+        return;
+    }
+    setIsGeneratingReport(true);
+    const result = await gerarRelatorioLote({ cpfs: lastProcessedCpfs, provider: lastProcessedProvider });
+    setIsGeneratingReport(false);
+
+    if (result.status === 'success') {
+        const link = document.createElement('a');
+        link.href = result.fileContent;
+        link.download = result.fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast({
+            title: "Relatório gerado com sucesso!",
+            description: `O arquivo ${result.fileName} está sendo baixado.`
+        });
+    } else {
+        toast({
+            variant: "destructive",
+            title: "Erro ao gerar relatório",
+            description: result.message,
+        });
+    }
   };
 
 
@@ -341,7 +388,7 @@ export default function FgtsPage() {
                     </Card>
                   )}
 
-                  {webhookData && (
+                  {webhookData && statusSteps[2].status === 'success' && (
                      <Card className="mt-6">
                         <CardHeader>
                             <CardTitle>Resultado da Consulta</CardTitle>
@@ -410,31 +457,31 @@ export default function FgtsPage() {
                  <CardHeader>
                   <CardTitle>Consulta de FGTS em Lote</CardTitle>
                   <CardDescription>
-                    Faça o upload de um arquivo XLSX com os CPFs na primeira coluna para consultar múltiplos clientes. Os resultados serão compilados em um novo arquivo Excel para download.
+                    Faça o upload de um arquivo XLSX com os CPFs na primeira coluna para consultar múltiplos clientes. O processo é assíncrono.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Form {...loteForm}>
                         <form onSubmit={(e) => e.preventDefault()} className="space-y-8">
-                          <div className="grid md:grid-cols-2 gap-8">
-                            <ProviderSelector control={loteForm.control} disabled={isProcessingBatch} />
+                          <div className="grid md:grid-cols-2 gap-8 items-start">
+                            <ProviderSelector control={loteForm.control} disabled={isProcessingBatch || isGeneratingReport} />
                             
                             <div className="space-y-4">
-                                <FormLabel>Arquivo de CPFs</FormLabel>
+                                <FormLabel>Arquivo de CPFs (.xlsx)</FormLabel>
                                 <Input 
                                     type="file" 
                                     ref={fileInputRef} 
                                     onChange={handleFileChange} 
                                     accept=".xlsx, .xls"
                                     className="hidden" 
-                                    disabled={isProcessingBatch}
+                                    disabled={isProcessingBatch || isGeneratingReport}
                                 />
                                 <div 
                                     className={cn(
                                         "flex flex-col items-center justify-center gap-2 text-center h-48 border-2 border-dashed rounded-lg",
-                                        !isProcessingBatch && "cursor-pointer hover:border-primary"
+                                        !isProcessingBatch && !isGeneratingReport && "cursor-pointer hover:border-primary"
                                     )}
-                                    onClick={() => !isProcessingBatch && fileInputRef.current?.click()}
+                                    onClick={() => !isProcessingBatch && !isGeneratingReport && fileInputRef.current?.click()}
                                 >
                                     <Upload className="h-8 w-8 text-muted-foreground" />
                                     {file ? (
@@ -455,33 +502,48 @@ export default function FgtsPage() {
                                 </div>
                             </div>
                           </div>
-                           <Button type="button" onClick={handleProcessBatch} disabled={!file || isProcessingBatch}>
-                                {isProcessingBatch ? (
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                ) : (
-                                    <Search className="mr-2 h-4 w-4" />
-                                )}
-                                {isProcessingBatch ? 'Processando...' : 'Iniciar Processamento em Lote'}
-                           </Button>
+                           <div className="flex gap-4">
+                                <Button type="button" onClick={handleProcessBatch} disabled={!file || isProcessingBatch || isGeneratingReport}>
+                                    {isProcessingBatch ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Search className="mr-2 h-4 w-4" />
+                                    )}
+                                    {isProcessingBatch ? 'Enviando...' : '1. Enviar Lote para Fila'}
+                                </Button>
+                                <Button 
+                                    type="button" 
+                                    variant="secondary"
+                                    onClick={handleGenerateReport} 
+                                    disabled={!batchStarted || isGeneratingReport || isProcessingBatch}
+                                >
+                                    {isGeneratingReport ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Download className="mr-2 h-4 w-4" />
+                                    )}
+                                    {isGeneratingReport ? 'Gerando...' : '2. Baixar Relatório de Saldo'}
+                                </Button>
+                           </div>
                         </form>
                     </Form>
-                    {batchResult && (
+                    {batchStarted && (
                         <Card className="mt-6">
                             <CardHeader>
-                                <CardTitle>Processamento Concluído</CardTitle>
-                                <CardDescription>O processamento do seu lote foi finalizado. Clique no botão abaixo para baixar o arquivo com os resultados.</CardDescription>
+                                <CardTitle>Processamento em Andamento</CardTitle>
+                                <CardDescription>O lote foi enviado para a fila de processamento. As consultas estão sendo realizadas em segundo plano. Você pode gerar o relatório a qualquer momento para obter os resultados já disponíveis.</CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <div className="flex items-center gap-4 p-4 border rounded-lg bg-green-50 dark:bg-green-900/10">
-                                    <CheckCircle2 className="h-8 w-8 text-green-600" />
+                                <div className="flex items-center gap-4 p-4 border rounded-lg bg-blue-50 dark:bg-blue-900/10">
+                                    <RefreshCw className="h-8 w-8 text-blue-600 animate-spin" />
                                     <div className="flex-grow">
-                                        <h4 className="font-semibold">Lote Processado com Sucesso!</h4>
-                                        <p className="text-sm text-muted-foreground">Seu arquivo <span className="font-medium text-primary">{batchResult.name}</span> está pronto.</p>
+                                        <h4 className="font-semibold">Lote em Processamento!</h4>
+                                        <p className="text-sm text-muted-foreground">
+                                            Aguarde alguns minutos e depois clique em "Baixar Relatório de Saldo". 
+                                            <br/>
+                                            {lastProcessedCpfs.length} CPFs estão na fila.
+                                        </p>
                                     </div>
-                                    <Button onClick={downloadExcel}>
-                                        <Download className="mr-2 h-4 w-4" />
-                                        Baixar Resultados
-                                    </Button>
                                 </div>
                             </CardContent>
                         </Card>
@@ -495,3 +557,5 @@ export default function FgtsPage() {
     </div>
   );
 }
+
+    
