@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Users, UserCheck, UserPlus, ArrowRight } from "lucide-react";
-import React, { useMemo, useEffect, useState } from "react";
+import React, { useMemo } from "react";
 import { useFirestore, useMemoFirebase, useUser } from "@/firebase";
 import { doc } from "firebase/firestore";
 import Link from "next/link";
@@ -16,7 +16,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { UserProfile } from "@/app/actions/users";
 import { getUsers } from "@/app/actions/users";
 import { useDoc } from "@/firebase/firestore/use-doc";
-import { useToast } from "@/hooks/use-toast";
 
 
 async function AdminDashboard({ userProfile }: { userProfile: UserProfile }) {
