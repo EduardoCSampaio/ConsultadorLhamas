@@ -40,7 +40,10 @@ export default function LoginPage() {
     // The layout will handle redirecting back if the user is not 'active'.
     if (!isUserLoading && user) {
       // Force refresh of the token to get new custom claims after login.
-      getIdTokenResult(user, true).then(() => {
+      getIdTokenResult(user, true).then((idTokenResult) => {
+        // The custom claim might not be immediately available on first sign-up,
+        // but on subsequent logins it should be.
+        // We push to dashboard regardless, and let the dashboard logic handle role access.
         router.push('/dashboard');
       });
     }
@@ -156,7 +159,7 @@ export default function LoginPage() {
                 </div>
                <CardTitle className="font-headline text-2xl font-semibold mt-4">Solicitação Enviada!</CardTitle>
                <CardDescription className="text-base">
-                 Assim que a sua solicitação for concluída, o administrador te retornará.
+                 Sua conta foi criada e está aguardando aprovação de um administrador.
                </CardDescription>
              </CardHeader>
              <CardFooter>
@@ -248,4 +251,3 @@ export default function LoginPage() {
     </div>
   );
 }
-

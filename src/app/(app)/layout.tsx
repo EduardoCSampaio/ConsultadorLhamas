@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import * as React from 'react';
@@ -27,7 +28,7 @@ import {
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth, useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
-import { signOut } from 'firebase/auth';
+import { signOut, getIdTokenResult } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Skeleton } from '@/components/ui/skeleton';
 import { doc } from 'firebase/firestore';
@@ -68,24 +69,35 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     const isLoading = isUserLoading || isProfileLoading;
-    if (isLoading) return; // Aguarda o carregamento do usuário e do perfil
+    if (isLoading) return; // Wait for user and profile to load
 
-    // Se não há usuário logado, redireciona para a página inicial
     if (!user) {
       router.push('/');
       return;
     }
 
-    // Se o usuário está logado, mas o perfil ainda não foi carregado, não faz nada ainda.
+    // If user is logged in, but profile isn't loaded yet, do nothing.
     if (!userProfile) return;
 
-    // Se o perfil foi carregado e o status não é 'ativo', desloga o usuário.
+    // Once profile is loaded, check status
     if (userProfile.status !== 'active') {
-      if (auth) {
-        signOut(auth); 
-      }
-      router.push(`/?status=${userProfile.status || 'pending'}`);
+        if (auth) {
+            signOut(auth);
+        }
+        router.push(`/?status=${userProfile.status || 'pending'}`);
+        return; // Important to stop execution
     }
+
+    // Also check for custom claim for admin role as a fallback/primary truth source
+    getIdTokenResult(user).then((idTokenResult) => {
+        const isAdminClaim = idTokenResult.claims.admin === true;
+
+        // If the profile role is admin but the claim isn't there, something is wrong.
+        // For now, we trust the claim more. If claim is missing, and they try to access admin,
+        // Firestore rules will block them anyway.
+        // This effect mainly handles logging out non-active users.
+    });
+
 
   }, [user, userProfile, isUserLoading, isProfileLoading, router, auth]);
 
@@ -94,7 +106,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return email.substring(0, 2).toUpperCase();
   }
 
-  // Mostra um estado de carregamento enquanto o usuário ou o perfil estão sendo carregados.
+  // Show a loading state while user or profile are being loaded.
   if (isUserLoading || isProfileLoading) {
     return (
         <div className="flex min-h-screen items-center justify-center bg-background">
