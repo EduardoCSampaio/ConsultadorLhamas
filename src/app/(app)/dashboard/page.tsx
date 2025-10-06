@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Users, UserCheck, UserPlus, ArrowRight } from "lucide-react";
 import React from "react";
 import { useFirestore, useMemoFirebase, useUser } from "@/firebase";
-import { doc } from "firebase/firestore";
+import { collection, doc } from "firebase/firestore";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { UserProfile } from "@/app/actions/users";
@@ -17,12 +17,11 @@ import { getUsers } from "@/app/actions/users";
 import { useDoc } from "@/firebase/firestore/use-doc";
 
 
-async function AdminDashboard({ userProfile }: { userProfile: UserProfile }) {
-  const { users, error } = await getUsers();
+function AdminDashboard({ initialUsers, error }: { initialUsers: UserProfile[] | null, error?: string }) {
   
-  const pendingUsers = users?.filter(u => u.status === 'pending') || [];
-  const activeUsers = users?.filter(u => u.status === 'active') || [];
-  const recentUsers = users?.slice(0, 5) || [];
+  const pendingUsers = initialUsers?.filter(u => u.status === 'pending') || [];
+  const activeUsers = initialUsers?.filter(u => u.status === 'active') || [];
+  const recentUsers = initialUsers?.slice(0, 5) || [];
   
   const getStatusVariant = (status: string) => {
     switch (status) {
@@ -98,7 +97,7 @@ async function AdminDashboard({ userProfile }: { userProfile: UserProfile }) {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{users?.length || 0}</div>
+            <div className="text-2xl font-bold">{initialUsers?.length || 0}</div>
             <p className="text-xs text-muted-foreground">Total de contas registradas</p>
           </CardContent>
         </Card>
@@ -165,18 +164,7 @@ function UserDashboardPlaceholder() {
   );
 }
 
-export default function DashboardPage() {
-  const { user, isUserLoading } = useUser();
-  const firestore = useFirestore();
-
-  const userProfileRef = useMemoFirebase(() => {
-    if (!firestore || !user) return null;
-    return doc(firestore, 'users', user.uid);
-  }, [firestore, user]);
-
-  const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userProfileRef);
-  
-  if (isUserLoading || isProfileLoading) {
+function AdminDashboardLoader() {
     return (
         <div className="flex flex-col gap-6">
             <PageHeader
@@ -194,11 +182,51 @@ export default function DashboardPage() {
             </Card>
         </div>
     );
+}
+
+export default function DashboardPage() {
+  const { user, isUserLoading } = useUser();
+  const firestore = useFirestore();
+
+  const [adminData, setAdminData] = React.useState<{users: UserProfile[] | null, error?: string}>({users: null, error: undefined});
+  const [isAdminLoading, setIsAdminLoading] = React.useState(true);
+
+  const userProfileRef = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [firestore, user]);
+
+  const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userProfileRef);
+
+  React.useEffect(() => {
+    async function fetchAdminData() {
+        if (userProfile?.role === 'admin') {
+            setIsAdminLoading(true);
+            const { users, error } = await getUsers();
+            setAdminData({ users, error });
+            setIsAdminLoading(false);
+        } else {
+            setIsAdminLoading(false);
+        }
+    }
+
+    if (!isProfileLoading) {
+      fetchAdminData();
+    }
+  }, [userProfile, isProfileLoading]);
+  
+  if (isUserLoading || isProfileLoading) {
+    return <AdminDashboardLoader />;
   }
 
   if (userProfile?.role === 'admin') {
-    return <AdminDashboard userProfile={userProfile} />;
+    if (isAdminLoading) {
+        return <AdminDashboardLoader />;
+    }
+    return <AdminDashboard initialUsers={adminData.users} error={adminData.error} />;
   }
 
   return <UserDashboardPlaceholder />;
 }
+
+    
