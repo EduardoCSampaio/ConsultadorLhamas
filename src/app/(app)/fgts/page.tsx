@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Loader2, Search, CheckCircle2, XCircle, Circle, User, Briefcase, Landmark, Calendar, Banknote, Upload, FileText, Download } from "lucide-react";
+import { Loader2, Search, CheckCircle2, XCircle, Circle, User, Briefcase, Landmark, Calendar, Banknote, Upload, FileText, Download, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState, useEffect, useRef, ChangeEvent } from "react";
 import { consultarSaldoFgts } from "@/app/actions/fgts";
 import { useDoc } from "@/firebase/firestore/use-doc";
@@ -32,6 +32,7 @@ import * as XLSX from 'xlsx';
 import { processarLoteFgts, gerarRelatorioLote } from "@/app/actions/batch";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 const manualFormSchema = z.object({
   documentNumber: z.string().min(11, {
@@ -152,6 +153,7 @@ const formatDate = (dateString: string | undefined) => {
 };
 
 const LOCAL_STORAGE_KEY = 'recentBatches';
+const ITEMS_PER_PAGE = 5;
 
 export default function FgtsPage() {
   const [isLoading, setIsLoading] = useState(false);
@@ -182,6 +184,12 @@ export default function FgtsPage() {
     }
   });
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const totalPages = Math.ceil(recentBatches.length / ITEMS_PER_PAGE);
+  const paginatedBatches = recentBatches.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
 
   // Save batches to localStorage whenever they change
   useEffect(() => {
@@ -288,6 +296,9 @@ export default function FgtsPage() {
             });
         }
         setFile(null);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+        }
     };
     reader.readAsArrayBuffer(file);
   };
@@ -315,6 +326,14 @@ export default function FgtsPage() {
             description: result.message,
         });
     }
+  };
+
+  const handleDeleteBatch = (batchId: string) => {
+    setRecentBatches(prev => prev.filter(b => b.id !== batchId));
+    toast({
+      title: "Lote excluído",
+      description: "O lote foi removido do seu histórico local.",
+    });
   };
 
 
@@ -579,16 +598,17 @@ export default function FgtsPage() {
                                 <CardDescription>Os resultados ficam disponíveis para download assim que o processamento é concluído.</CardDescription>
                             </CardHeader>
                             <CardContent>
+                                <div className="border rounded-md">
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead>Lote</TableHead>
                                             <TableHead className="w-[200px]">Progresso</TableHead>
-                                            <TableHead className="text-right w-[150px]">Ação</TableHead>
+                                            <TableHead colSpan={2} className="text-right w-[200px]">Ação</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {recentBatches.map((batch) => (
+                                        {paginatedBatches.map((batch) => (
                                             <TableRow key={batch.id}>
                                                 <TableCell>
                                                     <div className="font-medium">HIGIENIZACAO_{batch.fileName}_{new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}</div>
@@ -614,10 +634,62 @@ export default function FgtsPage() {
                                                         Baixar
                                                     </Button>
                                                 </TableCell>
+                                                 <TableCell className="text-right pr-4">
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                                <Trash2 className="h-4 w-4 text-destructive"/>
+                                                            </Button>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                            <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                Esta ação não pode ser desfeita. Isso excluirá permanentemente o lote do seu histórico local.
+                                                            </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                            <AlertDialogAction onClick={() => handleDeleteBatch(batch.id)} className="bg-destructive hover:bg-destructive/90">Excluir</AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                </TableCell>
                                             </TableRow>
                                         ))}
                                     </TableBody>
                                 </Table>
+                                {recentBatches.length === 0 && (
+                                     <div className="text-center p-8 text-muted-foreground">
+                                        Nenhum lote enviado ainda.
+                                    </div>
+                                )}
+                                </div>
+                                {totalPages > 1 && (
+                                    <div className="flex items-center justify-end space-x-2 py-4">
+                                        <div className="text-sm text-muted-foreground">
+                                            Página {currentPage} de {totalPages}
+                                        </div>
+                                        <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                        disabled={currentPage === 1}
+                                        >
+                                            <ChevronLeft className="h-4 w-4" />
+                                            Anterior
+                                        </Button>
+                                        <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                        disabled={currentPage === totalPages}
+                                        >
+                                            Próxima
+                                            <ChevronRight className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
                     )}
