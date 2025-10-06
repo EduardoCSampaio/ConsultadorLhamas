@@ -17,7 +17,6 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
-import { PlaceHolderImages } from "@/lib/placeholder-images";
 import {
   Cog,
   Home,
@@ -28,6 +27,10 @@ import {
 } from "lucide-react";
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { useAuth, useUser } from '@/firebase';
+import { signOut } from 'firebase/auth';
+import { useRouter } from 'next/navigation';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const menuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard", tooltip: "Dashboard" },
@@ -39,7 +42,24 @@ const menuItems = [
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const avatarImage = PlaceHolderImages.find(p => p.id === "user-avatar");
+  const auth = useAuth();
+  const { user, isUserLoading } = useUser();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    router.push('/login');
+  };
+
+  React.useEffect(() => {
+    if (!isUserLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, isUserLoading, router]);
+
+  const getInitials = (email = '') => {
+    return email.substring(0, 2).toUpperCase();
+  }
 
   return (
     <SidebarProvider>
@@ -66,26 +86,43 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter>
-          <div className="flex items-center gap-3">
-             <Avatar className="size-8">
-              {avatarImage && <AvatarImage src={avatarImage.imageUrl} alt="User Avatar" />}
-              <AvatarFallback>AD</AvatarFallback>
-            </Avatar>
-            <span className="font-medium text-sm truncate">Ana de Armas</span>
-            <Button variant="ghost" size="icon" className="ml-auto size-7" asChild>
-                <Link href="/login">
-                    <LogOut />
-                </Link>
-            </Button>
-          </div>
+          {isUserLoading ? (
+             <div className="flex items-center gap-3">
+                <Skeleton className="h-8 w-8 rounded-full" />
+                <Skeleton className="h-4 w-24" />
+            </div>
+          ) : user ? (
+            <div className="flex items-center gap-3">
+              <Avatar className="size-8">
+                {user.photoURL && <AvatarImage src={user.photoURL} alt="User Avatar" />}
+                <AvatarFallback>{getInitials(user.email || '??')}</AvatarFallback>
+              </Avatar>
+              <span className="font-medium text-sm truncate">{user.email}</span>
+              <Button variant="ghost" size="icon" className="ml-auto size-7" onClick={handleLogout}>
+                <LogOut />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+                <Avatar className="size-8">
+                    <AvatarFallback>??</AvatarFallback>
+                </Avatar>
+                <span className="font-medium text-sm truncate">Não autenticado</span>
+                <Button variant="ghost" size="icon" className="ml-auto size-7" asChild>
+                    <Link href="/login">
+                        <LogOut />
+                    </Link>
+                </Button>
+            </div>
+          )}
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
         <header className="flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
-            <SidebarTrigger className="md:hidden"/>
-            <div className="flex-1">
-                {/* We can add breadcrumbs here */}
-            </div>
+          <SidebarTrigger className="md:hidden"/>
+          <div className="flex-1">
+            {/* We can add breadcrumbs here */}
+          </div>
         </header>
         <main className="flex-1 p-4 md:p-6">{children}</main>
       </SidebarInset>

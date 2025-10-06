@@ -1,3 +1,6 @@
+
+'use client';
+
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -5,17 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
-import { ArrowUpRight, DollarSign, Users, Landmark } from "lucide-react";
-import Link from "next/link";
-
-const chartData = [
-  { month: "Janeiro", total: Math.floor(Math.random() * 20000) + 5000 },
-  { month: "Fevereiro", total: Math.floor(Math.random() * 20000) + 5000 },
-  { month: "Março", total: Math.floor(Math.random() * 20000) + 5000 },
-  { month: "Abril", total: Math.floor(Math.random() * 20000) + 5000 },
-  { month: "Maio", total: Math.floor(Math.random() * 20000) + 5000 },
-  { month: "Junho", total: Math.floor(Math.random() * 20000) + 5000 },
-];
+import { DollarSign, Users, Landmark } from "lucide-react";
+import React from "react";
 
 const chartConfig = {
   total: {
@@ -32,6 +26,27 @@ const recentProposals = [
 ];
 
 export default function DashboardPage() {
+  const [chartData, setChartData] = React.useState([
+    { month: "Janeiro", total: 0 },
+    { month: "Fevereiro", total: 0 },
+    { month: "Março", total: 0 },
+    { month: "Abril", total: 0 },
+    { month: "Maio", total: 0 },
+    { month: "Junho", total: 0 },
+  ]);
+
+  React.useEffect(() => {
+    setChartData([
+      { month: "Janeiro", total: Math.floor(Math.random() * 20000) + 5000 },
+      { month: "Fevereiro", total: Math.floor(Math.random() * 20000) + 5000 },
+      { month: "Março", total: Math.floor(Math.random() * 20000) + 5000 },
+      { month: "Abril", total: Math.floor(Math.random() * 20000) + 5000 },
+      { month: "Maio", total: Math.floor(Math.random() * 20000) + 5000 },
+      { month: "Junho", total: Math.floor(Math.random() * 20000) + 5000 },
+    ]);
+  }, []);
+
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader 

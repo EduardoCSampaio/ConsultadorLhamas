@@ -4,7 +4,7 @@ import Link from "next/link";
 
 export function Logo({ className }: { className?: string }) {
   return (
-    <Link href="/dashboard" className={cn("flex items-center gap-2 text-inherit", className)}>
+    <Link href="/" className={cn("flex items-center gap-2 text-inherit", className)}>
       <div className="bg-primary/20 p-2 rounded-lg">
         <Landmark className="h-5 w-5 text-primary" />
       </div>
