@@ -152,7 +152,6 @@ export default function FgtsPage() {
       if (!payload.documentNumber) {
         throw new Error("O payload de simulação precisa ter a propriedade 'documentNumber'.");
       }
-      // Set the current CPF to listen to the document that will be created
       setCurrentCpf(payload.documentNumber);
       await simulateWebhook(payload);
     } catch (error) {
@@ -244,7 +243,6 @@ export default function FgtsPage() {
                 </CardContent>
               </Card>
 
-              {/* Ferramenta de Simulação/Depuração */}
               <Card className="mt-6">
                 <CardHeader>
                   <CardTitle>Simulador de Webhook</CardTitle>
