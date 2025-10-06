@@ -1,4 +1,3 @@
-
 'use client';
 
 import { PageHeader } from "@/components/page-header";
@@ -18,7 +17,10 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Search } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
+import { useState } from "react";
+import { consultarSaldoFgts } from "@/app/actions/fgts";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const manualFormSchema = z.object({
   documentNumber: z.string().min(11, {
@@ -77,6 +79,10 @@ function ProviderSelector({ control }: { control: any }) {
 }
 
 export default function FgtsPage() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [apiResponse, setApiResponse] = useState<any>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
+
   const manualForm = useForm<z.infer<typeof manualFormSchema>>({
     resolver: zodResolver(manualFormSchema),
     defaultValues: {
@@ -88,8 +94,23 @@ export default function FgtsPage() {
       resolver: zodResolver(loteFormSchema),
   });
 
-  function onManualSubmit(values: z.infer<typeof manualFormSchema>) {
-    console.log(values);
+  async function onManualSubmit(values: z.infer<typeof manualFormSchema>) {
+    setIsLoading(true);
+    setApiResponse(null);
+    setApiError(null);
+
+    try {
+      const result = await consultarSaldoFgts(values);
+      setApiResponse(result);
+    } catch (error) {
+        if (error instanceof Error) {
+            setApiError(error.message);
+        } else {
+            setApiError("Ocorreu um erro inesperado.");
+        }
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -124,7 +145,7 @@ export default function FgtsPage() {
                             <FormItem>
                               <FormLabel>CPF do Cliente</FormLabel>
                               <FormControl>
-                                <Input placeholder="Digite o CPF" {...field} />
+                                <Input placeholder="Digite o CPF" {...field} disabled={isLoading}/>
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -132,12 +153,32 @@ export default function FgtsPage() {
                         />
                         <ProviderSelector control={manualForm.control} />
                       </div>
-                      <Button type="submit">
-                        <Search className="mr-2 h-4 w-4" />
+                      <Button type="submit" disabled={isLoading}>
+                        {isLoading ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                            <Search className="mr-2 h-4 w-4" />
+                        )}
                         Consultar Saldo
                       </Button>
                     </form>
                   </Form>
+                  {apiResponse && (
+                    <Alert className="mt-6">
+                      <AlertTitle>Consulta Realizada com Sucesso!</AlertTitle>
+                      <AlertDescription>
+                        <pre className="mt-2 rounded-md bg-muted p-4 overflow-auto">
+                            {JSON.stringify(apiResponse, null, 2)}
+                        </pre>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  {apiError && (
+                    <Alert variant="destructive" className="mt-6">
+                      <AlertTitle>Erro na Consulta</AlertTitle>
+                      <AlertDescription>{apiError}</AlertDescription>
+                    </Alert>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -152,16 +193,18 @@ export default function FgtsPage() {
                 <CardContent>
                     <Form {...loteForm}>
                         <form className="space-y-8">
-                            <ProviderSelector control={loteForm.control} />
-                            <div className="flex flex-col items-center justify-center gap-4 text-center h-64 border-2 border-dashed rounded-lg">
-                                <h3 className="text-2xl font-bold tracking-tight">
-                                    Upload de Arquivo
-                                </h3>
-                                <p className="text-sm text-muted-foreground">
-                                    A funcionalidade de upload será implementada aqui.
-                                </p>
-                                <Button variant="outline">Selecionar Arquivo</Button>
-                            </div>
+                          <div className="grid md:grid-cols-2 gap-8">
+                              <ProviderSelector control={loteForm.control} />
+                              <div className="flex flex-col items-center justify-center gap-4 text-center h-48 border-2 border-dashed rounded-lg">
+                                  <h3 className="text-2xl font-bold tracking-tight">
+                                      Upload de Arquivo
+                                  </h3>
+                                  <p className="text-sm text-muted-foreground">
+                                      A funcionalidade de upload será implementada aqui.
+                                  </p>
+                                  <Button variant="outline">Selecionar Arquivo</Button>
+                              </div>
+                          </div>
                         </form>
                     </Form>
                 </CardContent>
