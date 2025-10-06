@@ -9,13 +9,14 @@ import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { Logo } from "@/components/logo";
 import { useAuth, useUser } from "@/firebase";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, AuthError, signOut } from "firebase/auth";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, AuthError, signOut, getIdTokenResult } from "firebase/auth";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, CheckCircle } from "lucide-react";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useFirestore } from "@/firebase";
+import { setAdminClaim } from "@/app/actions/users";
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -38,7 +39,10 @@ export default function LoginPage() {
     // If user is logged in, redirect to dashboard.
     // The layout will handle redirecting back if the user is not 'active'.
     if (!isUserLoading && user) {
-      router.push('/dashboard');
+      // Force refresh of the token to get new custom claims after login.
+      getIdTokenResult(user, true).then(() => {
+        router.push('/dashboard');
+      });
     }
   }, [user, isUserLoading, router]);
 
@@ -61,6 +65,14 @@ export default function LoginPage() {
         const newUser = userCredential.user;
         const isAdmin = newUser.email === 'admin@lhamascred.com.br';
 
+        // Set admin custom claim via server action if it's the admin user
+        if (isAdmin) {
+          const claimResult = await setAdminClaim({ uid: newUser.uid });
+          if (!claimResult.success) {
+            throw new Error(claimResult.error || "Falha ao definir permissões de administrador.");
+          }
+        }
+        
         // Create user profile in Firestore
         const userProfile = {
           uid: newUser.uid,
@@ -73,6 +85,8 @@ export default function LoginPage() {
         await setDoc(doc(firestore, "users", newUser.uid), userProfile);
         
         if(isAdmin) {
+            // Force token refresh to pick up the new claim immediately
+            await getIdTokenResult(newUser, true);
             router.push('/dashboard');
         } else {
             // Show pending message and sign out the non-admin user
@@ -81,7 +95,14 @@ export default function LoginPage() {
         }
 
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        // Handle sign in
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const loggedInUser = userCredential.user;
+        
+        // This is important: force a token refresh after sign-in
+        // to ensure the latest custom claims are loaded into the token.
+        await getIdTokenResult(loggedInUser, true);
+
         // Redirect is handled by the useEffect hook
       }
     } catch (err) {
@@ -227,3 +248,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

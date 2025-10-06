@@ -58,7 +58,7 @@
             "admin",
             "user"
           ],
-          "description": "The user's role in the system."
+          "description": "The user's role in the system. The 'admin' role is primarily managed via custom claims."
         },
         "status": {
           "type": "string",
@@ -88,7 +88,12 @@
     "providers": [
       "password",
       "anonymous"
-    ]
+    ],
+    "customClaims": {
+      "admin": {
+        "type": "boolean"
+      }
+    }
   },
   "firestore": {
     "/webhookResponses/{webhookResponseId}": {

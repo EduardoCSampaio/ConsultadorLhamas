@@ -4,6 +4,7 @@
 import { z } from 'zod';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
 
 
 const updateUserStatusSchema = z.object({
@@ -11,12 +12,36 @@ const updateUserStatusSchema = z.object({
   status: z.enum(['pending', 'active', 'rejected']),
 });
 
+const setAdminClaimSchema = z.object({
+  uid: z.string().min(1, { message: "UID do usuário é obrigatório." }),
+});
+
+
 export type UserProfile = {
     uid: string;
     email: string;
     role: 'admin' | 'user';
     status: 'pending' | 'active' | 'rejected';
 };
+
+export async function setAdminClaim(input: z.infer<typeof setAdminClaimSchema>): Promise<{success: boolean, error?: string}> {
+  const validation = setAdminClaimSchema.safeParse(input);
+  if (!validation.success) {
+    return { success: false, error: "UID inválido." };
+  }
+  
+  try {
+    initializeFirebaseAdmin();
+    const auth = getAuth();
+    await auth.setCustomUserClaims(validation.data.uid, { admin: true });
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao definir a claim de admin.";
+    console.error("Erro ao definir custom claim:", message);
+    return { success: false, error: message };
+  }
+}
+
 
 export async function updateUserStatus(input: z.infer<typeof updateUserStatusSchema>) {
   const validation = updateUserStatusSchema.safeParse(input);
@@ -40,3 +65,4 @@ export async function updateUserStatus(input: z.infer<typeof updateUserStatusSch
     return { success: false, error: message };
   }
 }
+
