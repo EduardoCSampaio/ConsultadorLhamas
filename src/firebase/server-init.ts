@@ -2,6 +2,7 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { firebaseConfig } from './config';
+import { getAuth } from 'firebase/auth';
 
 /**
  * Initializes Firebase for server-side usage (e.g., API routes, server actions).
@@ -21,9 +22,7 @@ export function initializeFirebaseAdmin() {
 function getSdks(firebaseApp: FirebaseApp) {
   return {
     firebaseApp,
-    firestore: getFirestore(firebaseApp)
-    // Note: Auth is not typically used on the server in this manner.
-    // For admin tasks, you would use the Firebase Admin SDK. For this webhook,
-    // we only need Firestore.
+    firestore: getFirestore(firebaseApp),
+    auth: getAuth(firebaseApp)
   };
 }

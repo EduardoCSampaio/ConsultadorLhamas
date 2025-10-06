@@ -1,25 +1,42 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { initializeFirebaseAdmin } from '@/firebase/server-init';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
+import { getAuth, signInAnonymously } from 'firebase/auth';
+import { firebaseConfig } from '@/firebase/config';
+
+// Helper para inicializar o Firebase no lado do cliente (adequado para /api routes)
+function initializeFirebaseClient() {
+  if (getApps().length) {
+    return getApp();
+  }
+  return initializeApp(firebaseConfig);
+}
 
 /**
  * Handles POST requests from the V8 API balance webhook.
- * V8 may send a request to validate the URL and then to send results.
+ * This endpoint now uses the Client SDK and authenticates anonymously
+ * to ensure it has permissions to write to Firestore based on security rules.
  */
 export async function POST(request: NextRequest) {
+  const app = initializeFirebaseClient();
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+
   try {
-    // Initialize Firebase within the request handler for serverless environments.
-    const { firestore: db } = initializeFirebaseAdmin();
-    
+    // Etapa 1: Autenticar como um serviço anônimo para ter permissão de escrita
+    // As regras do Firestore devem permitir a escrita para usuários autenticados.
+    await signInAnonymously(auth);
+    console.log("Webhook endpoint authenticated anonymously.");
+
     const payload = await request.json();
 
     console.log("--- Balance Webhook Received ---");
     console.log("Headers:", Object.fromEntries(request.headers));
     console.log("Body (Payload):", JSON.stringify(payload, null, 2));
 
-    // The most reliable identifier is the documentNumber (CPF) from the payload.
-    // Let's ensure we use that as the document ID.
+    // O identificador mais confiável é o documentNumber (CPF) do payload.
     const docId = payload.documentNumber || payload.id;
 
     if (!docId) {
@@ -30,16 +47,16 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Create a reference to the document in the 'webhookResponses' collection.
+    // Criar uma referência para o documento na coleção 'webhookResponses'.
     const docRef = doc(db, 'webhookResponses', docId.toString());
 
-    // Save the webhook payload to Firestore.
+    // Salvar o payload do webhook no Firestore.
     await setDoc(docRef, {
       responseBody: payload,
       createdAt: serverTimestamp(),
       status: 'received',
       message: 'Webhook payload successfully stored in Firestore.',
-      id: docId.toString(), // Also save the ID inside the document for reference
+      id: docId.toString(), // Salvar o ID também dentro do documento
     }, { merge: true });
 
     console.log(`Payload stored in Firestore with ID: ${docId}`);
