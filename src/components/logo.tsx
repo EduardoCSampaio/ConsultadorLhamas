@@ -23,7 +23,7 @@ function LlamaIcon(props: React.SVGProps<SVGSVGElement>) {
 export function Logo({ className }: { className?: string }) {
   return (
     <Link href="/" className={cn("flex items-center gap-2 text-inherit", className)}>
-      <div className="bg-primary/20 p-2 rounded-lg">
+      <div className="bg-primary/10 dark:bg-primary/20 p-2 rounded-lg">
         <LlamaIcon className="h-5 w-5 text-primary" />
       </div>
       <span className="text-lg font-bold tracking-tight font-headline">Lhamascred</span>
