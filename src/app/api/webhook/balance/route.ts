@@ -1,10 +1,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { initializeFirebase } from '@/firebase';
+import { initializeFirebaseAdmin } from '@/firebase/server-init';
 
-// Initialize Firebase using the standard method
-const { firestore: db } = initializeFirebase();
+// Initialize Firebase using the server-specific method
+const { firestore: db } = initializeFirebaseAdmin();
 
 /**
  * Handles POST requests from the V8 API balance webhook.
