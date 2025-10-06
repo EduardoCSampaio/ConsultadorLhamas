@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { PageHeader } from "@/components/page-header";
@@ -18,13 +19,14 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Loader2, Search } from "lucide-react";
+import { Loader2, Search, Send } from "lucide-react";
 import { useState } from "react";
 import { consultarSaldoFgts } from "@/app/actions/fgts";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useDoc } from "@/firebase/firestore/use-doc";
 import { useFirestore, useMemoFirebase } from "@/firebase";
 import { doc } from "firebase/firestore";
+import { Textarea } from "@/components/ui/textarea";
 
 const manualFormSchema = z.object({
   documentNumber: z.string().min(11, {
@@ -40,6 +42,22 @@ const loteFormSchema = z.object({
         required_error: "Você precisa selecionar um provedor.",
     }),
 });
+
+// Helper function to simulate a webhook call
+async function simulateWebhook(payload: any) {
+  const response = await fetch('/api/webhook/balance', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(`Simulação de Webhook falhou: ${errorData.message || 'Erro desconhecido'}`);
+  }
+  return response.json();
+}
 
 function ProviderSelector({ control }: { control: any }) {
   return (
@@ -86,6 +104,7 @@ export default function FgtsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [currentCpf, setCurrentCpf] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [simulationPayload, setSimulationPayload] = useState('{\n  "documentNumber": "37227404870",\n  "balance": 1234.56\n}');
   
   const firestore = useFirestore();
 
@@ -100,11 +119,8 @@ export default function FgtsPage() {
       resolver: zodResolver(loteFormSchema),
   });
 
-  // This hook will listen for changes on the document with the ID of the current CPF
   const docRef = useMemoFirebase(() => {
     if (!firestore || !currentCpf) return null;
-    // We are assuming the webhook will save the response with the CPF as the ID.
-    // This might need adjustment based on the actual webhook payload.
     return doc(firestore, "webhookResponses", currentCpf);
   }, [firestore, currentCpf]);
   
@@ -114,9 +130,9 @@ export default function FgtsPage() {
     setIsLoading(true);
     setCurrentCpf(values.documentNumber);
     setApiError(null);
+    setSimulationPayload(`{\n  "documentNumber": "${values.documentNumber}",\n  "balance": 1234.56\n}`);
 
     try {
-      // We don't need the initial response, as we'll get the data from the webhook
       await consultarSaldoFgts(values);
     } catch (error) {
         if (error instanceof Error) {
@@ -124,9 +140,28 @@ export default function FgtsPage() {
         } else {
             setApiError("Ocorreu um erro inesperado.");
         }
-        setCurrentCpf(null); // Reset CPF if the initial call fails
+        setCurrentCpf(null);
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function handleSimulation() {
+    setApiError(null);
+    try {
+      const payload = JSON.parse(simulationPayload);
+      if (!payload.documentNumber) {
+        throw new Error("O payload de simulação precisa ter a propriedade 'documentNumber'.");
+      }
+      // Set the current CPF to listen to the document that will be created
+      setCurrentCpf(payload.documentNumber);
+      await simulateWebhook(payload);
+    } catch (error) {
+       if (error instanceof Error) {
+            setApiError(error.message);
+        } else {
+            setApiError("Ocorreu um erro inesperado na simulação.");
+        }
     }
   }
 
@@ -134,7 +169,7 @@ export default function FgtsPage() {
     <div className="flex flex-col gap-6">
       <PageHeader 
         title="Consulta de Saldo FGTS" 
-        description="Realize consultas de saldo de FGTS de forma manual ou em lote."
+        description="Realize consultas de saldo de forma manual ou em lote."
       />
       <Card>
         <CardContent className="pt-6">
@@ -180,7 +215,7 @@ export default function FgtsPage() {
                       </Button>
                     </form>
                   </Form>
-                  {currentCpf && !webhookResponse && !apiError && (
+                  {currentCpf && !webhookResponse && !apiError && !isLoading && (
                     <Alert className="mt-6">
                       <AlertTitle>Consulta Iniciada!</AlertTitle>
                       <AlertDescription>
@@ -209,6 +244,29 @@ export default function FgtsPage() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Ferramenta de Simulação/Depuração */}
+              <Card className="mt-6">
+                <CardHeader>
+                  <CardTitle>Simulador de Webhook</CardTitle>
+                   <CardDescription>
+                    Use esta ferramenta para testar o recebimento de dados sem precisar de um deploy. 
+                    Cole o JSON que a V8 enviaria e clique em simular.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Textarea
+                    placeholder="Cole o JSON de resposta do webhook aqui"
+                    value={simulationPayload}
+                    onChange={(e) => setSimulationPayload(e.target.value)}
+                    rows={5}
+                  />
+                  <Button onClick={handleSimulation}>
+                    <Send className="mr-2 h-4 w-4" />
+                    Simular Resposta do Webhook
+                  </Button>
+                </CardContent>
+              </Card>
             </TabsContent>
             <TabsContent value="lote">
                <Card className="mt-4">
@@ -217,7 +275,7 @@ export default function FgtsPage() {
                   <CardDescription>
                     Faça o upload de um arquivo para consultar múltiplos clientes de uma vez.
                   </CardDescription>
-                </CardHeader>
+                </Header>
                 <CardContent>
                     <Form {...loteForm}>
                         <form className="space-y-8">
