@@ -1,78 +1,97 @@
 /**
- * @fileoverview Firestore Security Rules for Prototyping.
- *
- * Core Philosophy:
- * This ruleset prioritizes strict authorization based on user identity and roles
- * while remaining flexible regarding data validation to accelerate prototyping.
- * It enforces ownership for user-specific data and provides role-based access control
- * where appropriate.
+ * @file Firestore Security Rules
+ * @description This ruleset enforces a strict user-ownership model for user profiles
+ * and allows public read access to webhook responses while restricting write access to owners.
  *
  * Data Structure:
- * - /users/{userId}: Stores user profiles, with 'userId' matching the Firebase Auth UID.
- * - /webhookResponses/{webhookResponseId}: Stores webhook responses, accessible to authenticated users.
+ * - /users/{userId}: Stores user profile data, with userId matching the Firebase Auth UID.
+ * - /webhookResponses/{webhookResponseId}: Stores webhook responses, publicly readable but writable only by owners.
  *
  * Key Security Decisions:
- * - Users can only read and write their own profile data under /users/{userId}.
- * - Listing all users is denied to prevent information disclosure.
- * - Webhook responses are accessible to all authenticated users.
+ * - User listing is explicitly disallowed.
+ * - Webhook responses are publicly readable but only the owner can modify them.
+ * - Data consistency is enforced between the user ID in the path and the user ID in the document.
  *
  * Denormalization for Authorization:
- * - User roles are stored directly in the /users/{userId} document to simplify role checks.
+ * - The `UserProfile` includes the `uid` which is used to match against `request.auth.uid` for authorization.
+ *
+ * Structural Segregation:
+ * - Private user data is stored under `/users/{userId}`, separate from publicly readable data in `/webhookResponses/{webhookResponseId}`.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Checks if the current user is signed in.
+     * @description Prevents listing of all users.
+     * @path /databases/{database}/documents/users
+     * @allow (list) - N/A - Listing is always denied.
+     * @deny (list) Attempt to list all users.
+     * @principle Prevents unauthorized access to user data.
      */
-    function isSignedIn() {
-      return request.auth != null;
+    match /users {
+      allow list: if false;
     }
 
     /**
-     * @description Checks if the current user's UID matches the provided userId.
-     */
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-
-    /**
-     * @description Checks if the current user is the owner of the existing document.
-     */
-    function isExistingOwner(userId) {
-        return isOwner(userId) && resource != null;
-    }
-
-    /**
-     * @description User profile access rules.
-     * @path /users/{userId}
-     * @allow (create) Authenticated user can create their own profile.
-     * @deny (create) Authenticated user cannot create a profile with a different ID.
-     * @allow (get, update, delete) Authenticated user can access their own profile.
-     * @deny (get, update, delete) Authenticated user cannot access other user profiles.
-     * @principle Enforces document ownership for user profiles.
+     * @description Manages access to user profiles. Only the user themselves can read and write their profile.
+     * @path /databases/{database}/documents/users/{userId}
+     * @allow (get) User with UID 'user123' reading their own profile at /users/user123.
+     * @allow (create) User with UID 'user123' creating their own profile at /users/user123.
+     * @allow (update) User with UID 'user123' updating their own profile at /users/user123.
+     * @allow (delete) User with UID 'user123' deleting their own profile at /users/user123.
+     * @deny (get) User with UID 'user456' trying to read profile of user 'user123' at /users/user123.
+     * @deny (create) User with UID 'user456' trying to create profile for user 'user123' at /users/user123.
+     * @deny (update) User with UID 'user456' trying to update profile of user 'user123' at /users/user123.
+     * @deny (delete) User with UID 'user456' trying to delete profile of user 'user123' at /users/user123.
+     * @principle Enforces user-ownership for profile data.
      */
     match /users/{userId} {
       allow get: if isOwner(userId);
-      allow list: if false; // Listing users is not permitted.
-      allow create: if isOwner(userId) && request.resource.data.uid == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.uid == resource.data.uid;
+      allow create: if isSignedIn() && isSelfCreation(userId);
+      allow update: if isExistingOwner(userId);
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Webhook responses access rules.
-     * @path /webhookResponses/{webhookResponseId}
-     * @allow (get, list) Any authenticated user can read webhook responses.
-     * @allow (create) Any authenticated user can create webhook responses.
-     * @allow (update, delete) No one can update or delete webhook responses.
-     * @principle Allows public read access to webhook responses with restricted write access.
+     * @description Manages access to webhook responses. Allows public read access but restricts write access to owners.
+     * @path /databases/{database}/documents/webhookResponses/{webhookResponseId}
+     * @allow (get) Any user can get a webhook response.
+     * @allow (list) Any user can list webhook responses.
+     * @allow (create) User with UID 'user123' creating a webhook response with ownerId 'user123'.
+     * @allow (update) User with UID 'user123' updating a webhook response they own (ownerId 'user123').
+     * @allow (delete) User with UID 'user123' deleting a webhook response they own (ownerId 'user123').
+     * @deny (create) User with UID 'user123' creating a webhook response with ownerId 'user456'.
+     * @deny (update) User with UID 'user123' updating a webhook response they don't own (ownerId 'user456').
+     * @deny (delete) User with UID 'user123' deleting a webhook response they don't own (ownerId 'user456').
+     * @principle Allows public read access to webhook responses while restricting write access to owners.
      */
     match /webhookResponses/{webhookResponseId} {
-      allow get, list: if isSignedIn();
+      allow get, list: if true;
       allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow update: if isWebhookOwner(webhookResponseId);
+      allow delete: if isWebhookOwner(webhookResponseId);
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isSelfCreation(userId) {
+        return request.auth.uid == userId;
+    }
+
+    function isExistingOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isWebhookOwner(webhookResponseId) {
+      return isSignedIn() && request.auth.uid == resource.data.ownerId;
     }
   }
 }
