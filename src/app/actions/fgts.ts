@@ -88,6 +88,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
+        'User-Agent': 'insomnia/11.6.1',
       },
       body: JSON.stringify(requestBody),
     });
