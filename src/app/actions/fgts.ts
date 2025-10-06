@@ -16,7 +16,7 @@ type ActionResult = {
 
 // Função de autenticação alinhada com a documentação oficial da V8
 async function getAuthToken(): Promise<{token: string | null, error: string | null}> {
-  // CORREÇÃO: URL de autenticação corrigida para o host correto.
+  // CORREÇÃO: URL de autenticação corrigida para o host correto da documentação.
   const tokenUrl = 'https://auth.v8sistema.com/oauth/token';
 
   // CORREÇÃO: A API de autenticação exige 'application/x-www-form-urlencoded'.
@@ -79,8 +79,8 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   const { documentNumber, provider } = validation.data;
   const API_URL_CONSULTA = 'https://bff.v8sistema.com/fgts/balance';
   
-  // CORREÇÃO: Enviando o provider em maiúsculas, como no exemplo da documentação.
-  const requestBody = { documentNumber, provider: provider.toUpperCase() };
+  // CORREÇÃO: Enviando o provider em minúsculas, conforme o erro 400 indica.
+  const requestBody = { documentNumber, provider };
 
   try {
     const consultaResponse = await fetch(API_URL_CONSULTA, {

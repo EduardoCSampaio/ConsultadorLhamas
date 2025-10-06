@@ -183,6 +183,7 @@ export default function FgtsPage() {
     // Start step 2 (Waiting for Webhook)
     updateStep(2, 'running');
   
+    // isLoading is set to false to re-enable the button, but we show a different text
     setIsLoading(false);
   }
 
