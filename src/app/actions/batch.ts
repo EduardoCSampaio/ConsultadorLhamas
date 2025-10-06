@@ -66,5 +66,3 @@ export async function processarLoteFgts(input: z.infer<typeof actionSchema>): Pr
     message: 'Processamento em lote finalizado. O arquivo de resultados está pronto para download.',
   };
 }
-
-    

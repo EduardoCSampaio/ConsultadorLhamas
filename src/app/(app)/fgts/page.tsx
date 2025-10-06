@@ -495,5 +495,3 @@ export default function FgtsPage() {
     </div>
   );
 }
-
-    
