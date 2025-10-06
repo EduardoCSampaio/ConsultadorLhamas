@@ -2,8 +2,6 @@
 'use server';
 
 import { z } from 'zod';
-import { initializeFirebase } from '@/firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 // Schema para validação dos dados de entrada da action
 const actionSchema = z.object({
@@ -101,7 +99,12 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
     }
 
     const data = await consultaResponse.json();
-    console.log("[V8 API] Resposta de início de consulta:", data);
+    
+    // Validar se a resposta da V8 é válida para iniciar o processo de webhook.
+    if (!data || (typeof data === 'object' && Object.keys(data).length === 0 && data.constructor === Object) || data === null) {
+      console.error("[V8 API] Resposta de início de consulta inesperada (vazia ou nula):", data);
+      throw new Error("A API parceira retornou uma resposta inesperada (vazia ou nula). A consulta não pôde ser iniciada. Verifique os logs da Vercel para mais detalhes.");
+    }
 
     // Agora, a resposta final virá pelo webhook. 
     // A resposta imediata provavelmente é um status de que a consulta foi iniciada.
