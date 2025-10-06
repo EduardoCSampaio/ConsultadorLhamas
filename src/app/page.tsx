@@ -59,21 +59,26 @@ export default function LoginPage() {
         // Create user
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const newUser = userCredential.user;
+        const isAdmin = newUser.email === 'admin@lhamascred.com.br';
 
         // Create user profile in Firestore
         const userProfile = {
           uid: newUser.uid,
           email: newUser.email,
-          role: newUser.email === 'admin@lhamascred.com.br' ? 'admin' : 'user',
-          status: 'pending',
+          role: isAdmin ? 'admin' : 'user',
+          status: isAdmin ? 'active' : 'pending', // Admin is active by default
           createdAt: serverTimestamp(),
         };
 
         await setDoc(doc(firestore, "users", newUser.uid), userProfile);
         
-        // Show pending message and sign out the user
-        setShowPendingMessage(true);
-        await signOut(auth);
+        if(isAdmin) {
+            router.push('/dashboard');
+        } else {
+            // Show pending message and sign out the non-admin user
+            setShowPendingMessage(true);
+            await signOut(auth);
+        }
 
       } else {
         await signInWithEmailAndPassword(auth, email, password);
