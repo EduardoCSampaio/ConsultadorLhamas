@@ -68,18 +68,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     const isLoading = isUserLoading || isProfileLoading;
-    if (isLoading) return; 
+    if (isLoading) return; // Aguarda o carregamento do usuário e do perfil
 
+    // Se não há usuário logado, redireciona para a página inicial
     if (!user) {
       router.push('/');
       return;
     }
 
-    if (userProfile?.status !== 'active') {
+    // Se o usuário está logado, mas o perfil ainda não foi carregado, não faz nada ainda.
+    if (!userProfile) return;
+
+    // Se o perfil foi carregado e o status não é 'ativo', desloga o usuário.
+    if (userProfile.status !== 'active') {
       if (auth) {
         signOut(auth); 
       }
-      router.push(`/?status=${userProfile?.status || 'pending'}`);
+      router.push(`/?status=${userProfile.status || 'pending'}`);
     }
 
   }, [user, userProfile, isUserLoading, isProfileLoading, router, auth]);
@@ -89,6 +94,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return email.substring(0, 2).toUpperCase();
   }
 
+  // Mostra um estado de carregamento enquanto o usuário ou o perfil estão sendo carregados.
   if (isUserLoading || isProfileLoading) {
     return (
         <div className="flex min-h-screen items-center justify-center bg-background">
