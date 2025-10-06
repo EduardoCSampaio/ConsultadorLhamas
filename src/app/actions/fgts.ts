@@ -75,6 +75,8 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
         documentNumber: documentNumber,
         provider: provider,
       }),
+      // @ts-ignore - Required for some environments to handle POST requests correctly
+      duplex: 'half',
     });
 
     const data = await consultaResponse.json();
