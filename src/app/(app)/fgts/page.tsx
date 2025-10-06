@@ -20,13 +20,19 @@ import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Search } from "lucide-react";
 
-const formSchema = z.object({
+const manualFormSchema = z.object({
   documentNumber: z.string().min(11, {
     message: "O CPF deve ter no mínimo 11 caracteres.",
   }),
   provider: z.enum(["cartos", "bms", "qi"], {
     required_error: "Você precisa selecionar um provedor.",
   }),
+});
+
+const loteFormSchema = z.object({
+    provider: z.enum(["cartos", "bms", "qi"], {
+        required_error: "Você precisa selecionar um provedor.",
+    }),
 });
 
 function ProviderSelector({ control }: { control: any }) {
@@ -71,14 +77,18 @@ function ProviderSelector({ control }: { control: any }) {
 }
 
 export default function FgtsPage() {
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+  const manualForm = useForm<z.infer<typeof manualFormSchema>>({
+    resolver: zodResolver(manualFormSchema),
     defaultValues: {
       documentNumber: "",
     },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
+  const loteForm = useForm<z.infer<typeof loteFormSchema>>({
+      resolver: zodResolver(loteFormSchema),
+  });
+
+  function onManualSubmit(values: z.infer<typeof manualFormSchema>) {
     console.log(values);
   }
 
@@ -104,11 +114,11 @@ export default function FgtsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+                  <Form {...manualForm}>
+                    <form onSubmit={manualForm.handleSubmit(onManualSubmit)} className="space-y-8">
                       <div className="grid md:grid-cols-2 gap-8">
                         <FormField
-                          control={form.control}
+                          control={manualForm.control}
                           name="documentNumber"
                           render={({ field }) => (
                             <FormItem>
@@ -120,7 +130,7 @@ export default function FgtsPage() {
                             </FormItem>
                           )}
                         />
-                        <ProviderSelector control={form.control} />
+                        <ProviderSelector control={manualForm.control} />
                       </div>
                       <Button type="submit">
                         <Search className="mr-2 h-4 w-4" />
@@ -140,18 +150,20 @@ export default function FgtsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-8">
-                     <ProviderSelector control={form.control} />
-                     <div className="flex flex-col items-center justify-center gap-4 text-center h-64 border-2 border-dashed rounded-lg">
-                        <h3 className="text-2xl font-bold tracking-tight">
-                            Upload de Arquivo
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                            A funcionalidade de upload será implementada aqui.
-                        </p>
-                        <Button variant="outline">Selecionar Arquivo</Button>
-                    </div>
-                  </div>
+                    <Form {...loteForm}>
+                        <form className="space-y-8">
+                            <ProviderSelector control={loteForm.control} />
+                            <div className="flex flex-col items-center justify-center gap-4 text-center h-64 border-2 border-dashed rounded-lg">
+                                <h3 className="text-2xl font-bold tracking-tight">
+                                    Upload de Arquivo
+                                </h3>
+                                <p className="text-sm text-muted-foreground">
+                                    A funcionalidade de upload será implementada aqui.
+                                </p>
+                                <Button variant="outline">Selecionar Arquivo</Button>
+                            </div>
+                        </form>
+                    </Form>
                 </CardContent>
               </Card>
             </TabsContent>
