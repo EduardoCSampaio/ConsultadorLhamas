@@ -65,7 +65,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
 
     const requestBody = {
       documentNumber: documentNumber,
-      provider: provider,
+      provider: provider.toUpperCase(), // <-- Alteração Chave: Converter para maiúsculas
     };
     
     console.log(`[V8 API] Iniciando consulta... Endpoint: ${API_URL_CONSULTA}, Corpo: ${JSON.stringify(requestBody)}`);
@@ -86,11 +86,8 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
         let errorMessage = `Erro ao iniciar consulta: ${consultaResponse.status} ${consultaResponse.statusText}.`;
         try {
             const errorJson = JSON.parse(errorText);
-
-            if (errorJson.error === "body/provider must be equal to one of the allowed values") {
-                 throw new Error(`Erro Crítico: A API da V8 rejeitou o valor do provedor '${requestBody.provider}'. Verifique com a V8 quais são os valores exatos esperados para 'provider' (ex: 'bms', 'cartos', 'qi') e ajuste o mapeamento no arquivo src/app/actions/fgts.ts.`);
-            }
-
+            // Este log é útil para ver a estrutura exata do erro da V8
+            console.error("[V8 API] Detalhes do erro JSON:", errorJson); 
             errorMessage += ` Detalhes: ${errorJson.message || JSON.stringify(errorJson)}`;
         } catch(e) {
             errorMessage += ` Resposta: ${errorText}`;
