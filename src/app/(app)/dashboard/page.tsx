@@ -1,6 +1,4 @@
 
-'use client';
-
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,27 +23,18 @@ const recentProposals = [
     { id: '4', client: 'Lucia Fernandes', value: 'R$ 3.000,00', status: 'Recusado' },
 ];
 
+// Generate chart data on the server to avoid hydration issues.
+const generateChartData = () => {
+  const months = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"];
+  return months.map(month => ({
+    month,
+    total: Math.floor(Math.random() * 20000) + 5000,
+  }));
+};
+
+
 export default function DashboardPage() {
-  const [chartData, setChartData] = React.useState([
-    { month: "Janeiro", total: 0 },
-    { month: "Fevereiro", total: 0 },
-    { month: "Março", total: 0 },
-    { month: "Abril", total: 0 },
-    { month: "Maio", total: 0 },
-    { month: "Junho", total: 0 },
-  ]);
-
-  React.useEffect(() => {
-    setChartData([
-      { month: "Janeiro", total: Math.floor(Math.random() * 20000) + 5000 },
-      { month: "Fevereiro", total: Math.floor(Math.random() * 20000) + 5000 },
-      { month: "Março", total: Math.floor(Math.random() * 20000) + 5000 },
-      { month: "Abril", total: Math.floor(Math.random() * 20000) + 5000 },
-      { month: "Maio", total: Math.floor(Math.random() * 20000) + 5000 },
-      { month: "Junho", total: Math.floor(Math.random() * 20000) + 5000 },
-    ]);
-  }, []);
-
+  const chartData = generateChartData();
 
   return (
     <div className="flex flex-col gap-6">
