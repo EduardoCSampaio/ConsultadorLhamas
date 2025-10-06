@@ -32,9 +32,9 @@ async function getAuthToken() {
   });
 
   if (!response.ok) {
-    const errorBody = await response.json().catch(() => ({ message: 'Erro ao obter token de autenticação.' }));
-    console.error('Erro de autenticação V8:', errorBody);
-    throw new Error(`Falha na autenticação com a V8: ${response.status} ${response.statusText}`);
+    const errorText = await response.text();
+    console.error('Erro de autenticação V8:', errorText);
+    throw new Error(`Falha na autenticação com a V8: ${response.status} ${response.statusText}. Resposta: ${errorText}`);
   }
 
   const data = await response.json();
@@ -72,8 +72,18 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
     });
 
     if (!consultaResponse.ok) {
-      const errorBody = await consultaResponse.json().catch(() => ({ message: 'Não foi possível obter detalhes do erro.' }));
-      throw new Error(`Erro na API de consulta: ${consultaResponse.status} ${consultaResponse.statusText}. Detalhes: ${errorBody.message || 'Erro desconhecido'}`);
+        const errorText = await consultaResponse.text();
+        console.error("Erro na API de consulta:", errorText);
+        let errorMessage = `Erro na API de consulta: ${consultaResponse.status} ${consultaResponse.statusText}.`;
+        try {
+            // Tenta fazer o parse do erro como JSON para uma mensagem mais bonita, se possível
+            const errorJson = JSON.parse(errorText);
+            errorMessage += ` Detalhes: ${errorJson.message || JSON.stringify(errorJson)}`;
+        } catch {
+            // Se não for JSON, anexa o texto bruto
+            errorMessage += ` Resposta: ${errorText}`;
+        }
+        throw new Error(errorMessage);
     }
 
     const data = await consultaResponse.json();
