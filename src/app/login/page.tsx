@@ -1,14 +1,13 @@
-
 'use client';
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { Logo } from "@/components/logo";
-import { useAuth } from "@/firebase";
+import { useAuth, useUser } from "@/firebase";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, AuthError } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
@@ -25,6 +24,14 @@ export default function LoginPage() {
   const auth = useAuth();
   const router = useRouter();
   const { toast } = useToast();
+  const { user, isUserLoading } = useUser();
+
+  useEffect(() => {
+    // Se o usuário já está logado e não está carregando, redireciona para o dashboard
+    if (!isUserLoading && user) {
+      router.push('/dashboard');
+    }
+  }, [user, isUserLoading, router]);
 
   const handleAuth = async (e: FormEvent) => {
     e.preventDefault();
@@ -41,13 +48,14 @@ export default function LoginPage() {
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
-      router.push('/dashboard');
+      // O redirecionamento será feito pelo useEffect
     } catch (err) {
       const authError = err as AuthError;
       let friendlyMessage = 'Ocorreu um erro. Tente novamente.';
       switch (authError.code) {
         case 'auth/user-not-found':
-          friendlyMessage = 'Nenhum usuário encontrado com este e-mail.';
+        case 'auth/invalid-credential':
+          friendlyMessage = 'Credenciais inválidas. Verifique seu e-mail e senha.';
           break;
         case 'auth/wrong-password':
           friendlyMessage = 'Senha incorreta. Por favor, tente novamente.';
@@ -59,7 +67,7 @@ export default function LoginPage() {
           friendlyMessage = 'O formato do e-mail é inválido.';
           break;
         case 'auth/weak-password':
-          friendlyMessage = 'A senha é muito fraca. Tente uma mais forte.';
+          friendlyMessage = 'A senha é muito fraca. Deve ter no mínimo 6 caracteres.';
           break;
         default:
           friendlyMessage = authError.message;
@@ -71,6 +79,11 @@ export default function LoginPage() {
       setIsLoading(false);
     }
   };
+
+  // Não renderiza nada enquanto verifica a autenticação
+  if (isUserLoading || user) {
+    return <div className="flex min-h-screen items-center justify-center bg-background"><Logo /></div>;
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -106,6 +119,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={isLoading}
+                  autoComplete="email"
                 />
               </div>
               <div className="space-y-2">
@@ -124,6 +138,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isLoading}
+                  autoComplete={isSignUp ? "new-password" : "current-password"}
                 />
               </div>
             </CardContent>

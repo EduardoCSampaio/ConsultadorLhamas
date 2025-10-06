@@ -48,12 +48,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const handleLogout = async () => {
     await signOut(auth);
-    router.push('/login');
+    router.push('/');
   };
 
   React.useEffect(() => {
     if (!isUserLoading && !user) {
-      router.push('/login');
+      router.push('/');
     }
   }, [user, isUserLoading, router]);
 
@@ -109,7 +109,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </Avatar>
                 <span className="font-medium text-sm truncate">Não autenticado</span>
                 <Button variant="ghost" size="icon" className="ml-auto size-7" asChild>
-                    <Link href="/login">
+                    <Link href="/">
                         <LogOut />
                     </Link>
                 </Button>
