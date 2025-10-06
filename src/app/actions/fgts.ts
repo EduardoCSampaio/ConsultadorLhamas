@@ -65,7 +65,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
 
     const requestBody = {
       documentNumber: documentNumber,
-      provider: provider.toUpperCase(), // <-- Alteração Chave: Converter para maiúsculas
+      provider: provider, // <-- REVERTIDO: Enviar em minúsculas
     };
     
     console.log(`[V8 API] Iniciando consulta... Endpoint: ${API_URL_CONSULTA}, Corpo: ${JSON.stringify(requestBody)}`);
