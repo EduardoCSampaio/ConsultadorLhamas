@@ -63,12 +63,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
     
     const API_URL_CONSULTA = 'https://bff.v8sistema.com/fgts/balance'; 
 
-    const requestBody = {
-      documentNumber: documentNumber,
-      provider: provider, // <-- REVERTIDO: Enviar em minúsculas
-    };
-    
-    console.log(`[V8 API] Iniciando consulta... Endpoint: ${API_URL_CONSULTA}, Corpo: ${JSON.stringify(requestBody)}`);
+    console.log(`[V8 API] Iniciando consulta... Endpoint: ${API_URL_CONSULTA}, Corpo: ${JSON.stringify({ documentNumber, provider })}`);
 
     const consultaResponse = await fetch(API_URL_CONSULTA, {
       method: 'POST',
@@ -76,26 +71,26 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${authToken}`, 
       },
-      body: JSON.stringify(requestBody),
+      body: JSON.stringify({
+        documentNumber: documentNumber,
+        provider: provider,
+      }),
     });
 
+    const data = await consultaResponse.json();
+
     if (!consultaResponse.ok) {
-        const errorText = await consultaResponse.text();
-        console.error("Erro na API de consulta:", errorText);
+        console.error("Erro na API de consulta:", data);
 
         let errorMessage = `Erro ao iniciar consulta: ${consultaResponse.status} ${consultaResponse.statusText}.`;
         try {
-            const errorJson = JSON.parse(errorText);
-            // Este log é útil para ver a estrutura exata do erro da V8
-            console.error("[V8 API] Detalhes do erro JSON:", errorJson); 
-            errorMessage += ` Detalhes: ${errorJson.message || JSON.stringify(errorJson)}`;
+            console.error("[V8 API] Detalhes do erro JSON:", data); 
+            errorMessage += ` Detalhes: ${data.message || JSON.stringify(data)}`;
         } catch(e) {
-            errorMessage += ` Resposta: ${errorText}`;
+            errorMessage += ` Resposta: ${await consultaResponse.text()}`;
         }
         throw new Error(errorMessage);
     }
-
-    const data = await consultaResponse.json();
     
     // Validar se a resposta da V8 é válida para iniciar o processo de webhook.
     if (!data || (typeof data === 'object' && Object.keys(data).length === 0 && data.constructor === Object) || data === null) {
