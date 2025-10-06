@@ -1,19 +1,24 @@
 
-import { initializeApp, getApps, App, cert } from 'firebase-admin/app';
+import { initializeApp, getApps, App, cert, ServiceAccount } from 'firebase-admin/app';
 
-// This is a placeholder for the actual service account credentials.
-// In a real environment, these would be loaded securely (e.g., from environment variables).
-const getServiceAccount = () => {
-    const serviceAccount = {
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    };
+/**
+ * Parses the service account credentials from environment variables.
+ * Firebase Studio provides the credentials in a JSON string.
+ */
+const getServiceAccount = (): ServiceAccount => {
+    const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_CREDENTIALS;
 
-    if (!serviceAccount.projectId || !serviceAccount.clientEmail || !serviceAccount.privateKey) {
+    if (!serviceAccountJson) {
         throw new Error('Firebase Admin SDK service account credentials are not fully set in environment variables.');
     }
-    return serviceAccount;
+    
+    try {
+        const serviceAccount = JSON.parse(serviceAccountJson);
+        return serviceAccount;
+    } catch (e) {
+        console.error("Failed to parse FIREBASE_SERVICE_ACCOUNT_CREDENTIALS:", e);
+        throw new Error("Could not parse Firebase service account credentials.");
+    }
 }
 
 
