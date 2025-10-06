@@ -60,7 +60,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
     const providerApiMap = {
       cartos: "CARTOS",
       bms: "BMS",
-      qi: "QI_TECH", // Supondo que "qi" seja "QI", ajuste se necessário
+      qi: "QI_TECH",
     };
 
     const providerForApi = providerApiMap[provider as keyof typeof providerApiMap];
@@ -91,13 +91,24 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
     if (!consultaResponse.ok) {
         const errorText = await consultaResponse.text();
         console.error("Erro na API de consulta:", errorText);
+
         let errorMessage = `Erro na API de consulta: ${consultaResponse.status} ${consultaResponse.statusText}.`;
         try {
-            // Tenta fazer o parse do erro como JSON para uma mensagem mais bonita, se possível
             const errorJson = JSON.parse(errorText);
+
+            if (errorJson.error === 'body/provider must be equal to one of the allowed values') {
+                throw new Error(
+                    `Erro Crítico: A API da V8 rejeitou o valor do provedor '${providerForApi}'. ` +
+                    `Verifique com a V8 quais são os valores exatos esperados para 'provider' (ex: 'BMS', 'CARTOS', 'QI_TECH') e ajuste o mapeamento no arquivo src/app/actions/fgts.ts.`
+                );
+            }
+
             errorMessage += ` Detalhes: ${errorJson.message || JSON.stringify(errorJson)}`;
-        } catch {
-            // Se não for JSON, anexa o texto bruto
+        } catch(e) {
+            // Se o erro for o que lançamos, propaga ele. Senão, anexa o texto bruto.
+            if (e instanceof Error && e.message.startsWith('Erro Crítico')) {
+                throw e;
+            }
             errorMessage += ` Resposta: ${errorText}`;
         }
         throw new Error(errorMessage);
