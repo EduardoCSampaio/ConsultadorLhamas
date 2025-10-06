@@ -1,62 +1,83 @@
 /**
- * @fileoverview Firestore Security Rules for the application.
+ * @fileoverview Firestore Security Rules for Prototyping.
  *
  * Core Philosophy:
- * This ruleset enforces a user-ownership model for user profiles,
- * allowing only the authenticated user to read and write their own profile data.
- * Webhook responses are publicly readable but only writeable by a privileged process (e.g., backend).
+ * This ruleset prioritizes secure authorization while permitting flexible data shapes to enable rapid prototyping.
+ * It implements a strict user-ownership model for user profiles and allows public read access to webhook responses,
+ * with restricted write access based on ownership.
  *
  * Data Structure:
- * - /users/{userId}: Stores user profile data, with userId matching the Firebase Auth UID.
- * - /webhookResponses/{webhookResponseId}: Stores webhook responses, accessible to all for reading.
+ * - User profiles are stored under `/users/{userId}`, where `{userId}` matches the Firebase Auth UID.
+ * - Webhook responses are stored under `/webhookResponses/{webhookResponseId}`.
  *
  * Key Security Decisions:
- * - User listing is disallowed to protect user privacy.
- * - User profile creation is restricted to self-creation (a user can only create their own profile).
- * - Webhook responses are publicly readable to allow client-side monitoring of webhook status.
- *   Write access to webhook responses is not yet implemented and requires a trusted environment.
+ * - Listing of users is explicitly denied.
+ * - Data type validation is skipped in favor of rapid iteration, except for fields directly involved in authorization and relational integrity.
+ *
+ * Denormalization for Authorization:
+ * - The `UserProfile` document's `uid` field MUST match the document ID (`userId`) to ensure ownership.
+ *
+ * Structural Segregation:
+ * - No separation of public/private content is needed in this data model, as the webhook responses are globally readable.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Secure user profiles. Only the authenticated user can read/write their own profile.
-     * @path /users/{userId}
-     * @allow (create) - An authenticated user with UID 'user_abc' can create their profile at /users/user_abc.
-     * @allow (get, update, delete) - An authenticated user with UID 'user_abc' can read/update/delete their profile at /users/user_abc.
-     * @deny (create) - An authenticated user with UID 'user_abc' cannot create a profile at /users/user_xyz.
-     * @deny (get, update, delete) - An unauthenticated user cannot read/update/delete any user profile.
-     * @principle Enforces document ownership; users can only manage their own profiles.
+     * @description Prevents listing all users.
+     * @path /databases/{database}/documents/users
+     * @allow (get) - Allows getting an specific user if the user ID matches the authenticated user's ID.
+     * @deny (list) - Denies listing all users. This is a security best practice.
+     * @allow (create) - Allows creating a user profile if the user ID matches the authenticated user's ID.
+     * @allow (update) - Allows updating a user profile if the user ID matches the authenticated user's ID.
+     * @allow (delete) - Allows deleting a user profile if the user ID matches the authenticated user's ID.
+     * @principle Prevents listing all user documents for privacy.
      */
     match /users/{userId} {
-      allow get: if isOwner(userId);
-      allow list: if false; // User listing is disabled for privacy.
-      allow create: if isOwner(userId) && request.resource.data.uid == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.uid == resource.data.uid;
-      allow delete: if isExistingOwner(userId);
+      allow get: if isSignedIn() && isOwner(userId);
+      allow list: if false;
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.uid == userId;
+      allow update: if isSignedIn() && isExistingOwner(userId) && request.resource.data.uid == resource.data.uid;
+      allow delete: if isSignedIn() && isExistingOwner(userId);
     }
 
     /**
-     * @description Secure webhook responses. Publicly readable, writeable only by a privileged process.
-     * @path /webhookResponses/{webhookResponseId}
-     * @allow (get, list) - Any user (signed in or not) can read/list webhook responses.
-     * @deny (create, update, delete) - No user can create/update/delete webhook responses through client-side rules.
-     * @principle Allows public read access for monitoring purposes; write access is restricted (TODO: Implement backend write access).
+     * @description Allows public read access to webhook responses and restricts write access to owners.
+     * @path /databases/{database}/documents/webhookResponses/{webhookResponseId}
+     * @allow (get, list) - Allows any user to read webhook responses.
+     * @deny (create, update, delete) - Write operations are disallowed (for now).
+     * @principle Allows public read access with restricted write access.
      */
     match /webhookResponses/{webhookResponseId} {
       allow get, list: if true;
-      allow create, update, delete: if false; // TODO: Add backend validation for secure creation and updates.
+      allow create, update, delete: if false;
     }
 
+    // --- Helper functions ---
+
+    /**
+     * @description Checks if the user is signed in.
+     * @return {boolean} True if the user is signed in, false otherwise.
+     */
     function isSignedIn() {
       return request.auth != null;
     }
 
+    /**
+     * @description Checks if the user is the owner of the resource.
+     * @param {string} userId - The user ID to check against.
+     * @return {boolean} True if the user is the owner, false otherwise.
+     */
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+      return request.auth.uid == userId;
     }
 
+    /**
+     * @description Checks if the user is the owner of the resource and the resource exists.
+     * @param {string} userId - The user ID to check against.
+     * @return {boolean} True if the user is the owner and the resource exists, false otherwise.
+     */
     function isExistingOwner(userId) {
       return isOwner(userId) && resource != null;
     }
