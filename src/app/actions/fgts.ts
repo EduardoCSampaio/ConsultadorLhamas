@@ -78,8 +78,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       },
       body: JSON.stringify({ 
         documentNumber, 
-        // Garantindo que o provedor seja enviado em maiúsculas
-        provider: provider.toUpperCase() 
+        provider // Enviando o provedor como recebido (minúsculas)
       }),
       // @ts-ignore
       duplex: 'half',

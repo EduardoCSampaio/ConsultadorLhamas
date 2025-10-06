@@ -149,7 +149,10 @@ export default function FgtsPage() {
     setIsLoading(true);
     setCurrentCpf(values.documentNumber);
     setShowStatus(true);
+    // Reset steps and clear old webhook response on new submission
     setStatusSteps(initialSteps);
+    manualForm.setValue("documentNumber", values.documentNumber); // Keep CPF in the field
+
 
     const updateStep = (index: number, status: StepStatus, message?: string) => {
         setStatusSteps(prev => {
@@ -309,5 +312,3 @@ export default function FgtsPage() {
     </div>
   );
 }
-
-    
