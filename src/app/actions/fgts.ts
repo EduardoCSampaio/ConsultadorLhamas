@@ -75,20 +75,24 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       },
       body: JSON.stringify({ 
         documentNumber, 
-        provider // Enviando em minúsculas, conforme confirmado pelo erro 400 anterior.
+        provider // Enviando em minúsculas
       }),
       // @ts-ignore - Propriedade necessária para alguns ambientes Node.js
       duplex: 'half',
     });
     
+    // A V8 API retorna 200 OK com corpo `null` para certas falhas lógicas,
+    // então precisamos ler o corpo para determinar o sucesso.
     const responseBody = await consultaResponse.text();
     let data = null;
 
+    // Tenta parsear o JSON. Se o corpo for vazio ou inválido, o catch lida com isso.
     try {
       if (responseBody) {
         data = JSON.parse(responseBody);
       }
     } catch (e) {
+      // Se não for um JSON, consideramos um erro, pois a V8 deveria retornar um.
       return { 
           status: 'error', 
           stepIndex: 1, 
@@ -96,6 +100,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       };
     }
       
+    // Verifica se a resposta foi um erro HTTP explícito (4xx, 5xx)
     if (!consultaResponse.ok) {
         let errorMessage = `Erro ao enviar consulta: ${consultaResponse.status} ${consultaResponse.statusText}.`;
         if (data && data.error) {
@@ -106,6 +111,8 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
         return { status: 'error', stepIndex: 1, message: errorMessage };
     }
    
+    // Tratamento crucial: A API da V8 pode retornar 200 OK com corpo nulo ou vazio
+    // se a consulta não puder ser iniciada. Tratamos isso como um erro.
     if (data === null || (typeof data === 'object' && Object.keys(data).length === 0 && responseBody.trim() !== '{}')) {
         return { 
             status: 'error', 
@@ -114,6 +121,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
         };
     }
     
+    // Se chegamos aqui, a requisição foi bem-sucedida e uma consulta foi iniciada.
     return { 
         status: 'success', 
         stepIndex: 1, 
@@ -121,6 +129,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
     };
 
   } catch (error) {
+    console.error("[V8 API] Erro de comunicação na consulta de saldo:", error);
     const message = error instanceof Error ? error.message : 'Ocorreu um erro de comunicação com a API.';
     return { status: 'error', stepIndex: 1, message };
   }

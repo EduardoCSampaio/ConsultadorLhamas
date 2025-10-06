@@ -136,7 +136,6 @@ export default function FgtsPage() {
   const { data: webhookResponse, isLoading: isWebhookLoading } = useDoc(docRef);
 
   useEffect(() => {
-    // Update step 3 to success when a webhook response is received
     if (webhookResponse && statusSteps[2].status === 'running') {
       setStatusSteps(prev => prev.map((step, index) => 
         index === 2 ? { ...step, status: 'success', message: 'Resposta recebida!' } : step
@@ -149,9 +148,8 @@ export default function FgtsPage() {
     setIsLoading(true);
     setCurrentCpf(values.documentNumber);
     setShowStatus(true);
-    // Reset steps and clear old webhook response on new submission
-    setStatusSteps(initialSteps);
-    manualForm.setValue("documentNumber", values.documentNumber); // Keep CPF in the field
+    setStatusSteps(initialSteps); // Reset steps
+    manualForm.setValue("documentNumber", values.documentNumber);
 
 
     const updateStep = (index: number, status: StepStatus, message?: string) => {
@@ -162,23 +160,29 @@ export default function FgtsPage() {
         });
     };
 
-    // Step 1: Authentication
+    // Step 0: Authentication
     updateStep(0, 'running');
     const result = await consultarSaldoFgts(values);
     
     if (result.status === 'error') {
         updateStep(result.stepIndex, 'error', result.message);
+        // Garante que passos anteriores ao erro sejam marcados como sucesso se aplicável
+        for (let i = 0; i < result.stepIndex; i++) {
+          updateStep(i, 'success');
+        }
         setIsLoading(false);
         return; // Stop execution if there was an error
     }
 
-    // Step 1 & 2 Success
+    // Step 0 & 1 Success
     updateStep(0, 'success');
-    updateStep(1, 'success');
+    updateStep(1, 'success', result.message);
     
-    // Step 3: Waiting for Webhook
+    // Step 2: Waiting for Webhook
     updateStep(2, 'running');
     
+    // Set isLoading to false as the server action is complete.
+    // The UI will now wait for the webhook response.
     setIsLoading(false); 
   }
 
@@ -214,7 +218,7 @@ export default function FgtsPage() {
                             <FormItem>
                               <FormLabel>CPF do Cliente</FormLabel>
                               <FormControl>
-                                <Input placeholder="Digite o CPF" {...field} disabled={isLoading || isWebhookLoading}/>
+                                <Input placeholder="Digite o CPF" {...field} disabled={isLoading || statusSteps[2].status === 'running'}/>
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -222,13 +226,13 @@ export default function FgtsPage() {
                         />
                         <ProviderSelector control={manualForm.control} />
                       </div>
-                      <Button type="submit" disabled={isLoading || (showStatus && !webhookResponse && statusSteps[2].status !== 'error') }>
-                        {isLoading || (statusSteps[2].status === 'running' && !webhookResponse) ? (
+                      <Button type="submit" disabled={isLoading || statusSteps[2].status === 'running'}>
+                        {isLoading || statusSteps[2].status === 'running' ? (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         ) : (
                             <Search className="mr-2 h-4 w-4" />
                         )}
-                        {statusSteps[2].status === 'running' && !webhookResponse ? 'Aguardando Resposta...' : 'Consultar Saldo'}
+                        {statusSteps[2].status === 'running' ? 'Aguardando Resposta...' : 'Consultar Saldo'}
                       </Button>
                     </form>
                   </Form>
