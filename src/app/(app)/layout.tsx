@@ -20,10 +20,8 @@ import { Logo } from "@/components/logo";
 import {
   Cog,
   Home,
-  Landmark,
   LogOut,
-  Users,
-  Wallet,
+  Search,
 } from "lucide-react";
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -34,9 +32,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 const menuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard", tooltip: "Dashboard" },
-  { href: "/credito", icon: Landmark, label: "Crédito", tooltip: "Análise de Crédito" },
-  { href: "/clientes", icon: Users, label: "Clientes", tooltip: "Clientes" },
-  { href: "/contas", icon: Wallet, label: "Contas", tooltip: "Contas a Pagar/Receber" },
+  { href: "/fgts", icon: Search, label: "Consulta FGTS", tooltip: "Consulta Saldo FGTS" },
   { href: "/configuracoes", icon: Cog, label: "Configurações", tooltip: "Configurações" },
 ];
 
@@ -47,7 +43,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   const handleLogout = async () => {
-    await signOut(auth);
+    if (auth) {
+      await signOut(auth);
+    }
     router.push('/');
   };
 
