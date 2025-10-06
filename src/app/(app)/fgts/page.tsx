@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { PageHeader } from "@/components/page-header";
@@ -72,46 +71,45 @@ const initialSteps: StatusStep[] = [
   { name: "Aguardando resposta do Webhook", status: "pending" },
 ];
 
-function ProviderSelector({ control, disabled }: { control: any, disabled?: boolean }) {
-  return (
-    <FormField
-      control={control}
-      name="provider"
-      render={({ field }) => (
-        <FormItem className="space-y-3">
-          <FormLabel>Selecione o Provedor</FormLabel>
-          <FormControl>
-            <RadioGroup
-              onValueChange={field.onChange}
-              defaultValue={field.value}
-              className="flex flex-col space-y-1"
-              disabled={disabled}
-            >
-              <FormItem className="flex items-center space-x-3 space-y-0">
-                <FormControl>
-                  <RadioGroupItem value="cartos" />
-                </FormControl>
-                <FormLabel className="font-normal">Cartos</FormLabel>
-              </FormItem>
-              <FormItem className="flex items-center space-x-3 space-y-0">
-                <FormControl>
-                  <RadioGroupItem value="bms" />
-                </FormControl>
-                <FormLabel className="font-normal">BMS</FormLabel>
-              </FormItem>
-              <FormItem className="flex items-center space-x-3 space-y-0">
-                <FormControl>
-                  <RadioGroupItem value="qi" />
-                </FormControl>
-                <FormLabel className="font-normal">QI Tech</FormLabel>
-              </FormItem>
-            </RadioGroup>
-          </FormControl>
-          <FormMessage />
-        </FormItem>
-      )}
-    />
-  );
+function ProviderSelector({ control, disabled }: { control: any; disabled?: boolean; }) {
+    return (
+        <FormField
+            control={control}
+            name="provider"
+            render={({ field }) => (
+                <FormItem className="space-y-3">
+                    <FormLabel>Selecione o Provedor</FormLabel>
+                    <FormControl>
+                        <RadioGroup
+                            onValueChange={field.onChange}
+                            defaultValue={field.value}
+                            className="flex flex-col space-y-1"
+                            disabled={disabled}
+                        >
+                            <FormItem className="flex items-center space-x-3 space-y-0">
+                                <FormControl>
+                                    <RadioGroupItem value="cartos" />
+                                </FormControl>
+                                <FormLabel className="font-normal">Cartos</FormLabel>
+                            </FormItem>
+                            <FormItem className="flex items-center space-x-3 space-y-0">
+                                <FormControl>
+                                    <RadioGroupItem value="bms" />
+                                </FormControl>
+                                <FormLabel className="font-normal">BMS</FormLabel>
+                            </FormItem>
+                            <FormItem className="flex items-center space-x-3 space-y-0">
+                                <FormControl>
+                                    <RadioGroupItem value="qi" />
+                                </FormControl>
+                                <FormLabel className="font-normal">QI Tech</FormLabel>
+                            </FormItem>
+                        </RadioGroup>
+                    </FormControl>
+                    <FormMessage />
+                </FormItem>
+            )} />
+    );
 }
 
 const StepIcon = ({ status }: { status: StepStatus }) => {
@@ -151,6 +149,8 @@ const formatDate = (dateString: string | undefined) => {
     }
 };
 
+const LOCAL_STORAGE_KEY = 'recentBatches';
+
 export default function FgtsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [currentCpf, setCurrentCpf] = useState<string | null>(null);
@@ -159,7 +159,7 @@ export default function FgtsPage() {
   
   const [file, setFile] = useState<File | null>(null);
   const [recentBatches, setRecentBatches] = useState<BatchJob[]>([]);
-  const [isProcessingBatch, setIsProcessingBatch] = useState(false);
+  const [isProcessingBatch, setIsProcessingBatch] = useState(isProcessingBatch);
   const [isGeneratingReport, setIsGeneratingReport] = useState<string | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -177,6 +177,19 @@ export default function FgtsPage() {
   const loteForm = useForm<z.infer<typeof loteFormSchema>>({
       resolver: zodResolver(loteFormSchema),
   });
+
+  // Load batches from localStorage on mount
+  useEffect(() => {
+    const storedBatches = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (storedBatches) {
+      setRecentBatches(JSON.parse(storedBatches));
+    }
+  }, []);
+
+  // Save batches to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(recentBatches));
+  }, [recentBatches]);
 
   const docRef = useMemoFirebase(() => {
     if (!firestore || !currentCpf) return null;
@@ -198,7 +211,17 @@ export default function FgtsPage() {
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0) {
-      setFile(files[0]);
+      const selectedFile = files[0];
+      if (selectedFile.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || selectedFile.type === 'application/vnd.ms-excel') {
+        setFile(selectedFile);
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Tipo de arquivo inválido",
+          description: "Por favor, selecione um arquivo .xlsx ou .xls",
+        });
+        setFile(null);
+      }
     }
   };
 
@@ -233,7 +256,6 @@ export default function FgtsPage() {
           cpfs: cpfs,
         };
 
-        // Add to the beginning of the list, keeping only the 5 most recent.
         setRecentBatches(prev => [newBatch, ...prev].slice(0, 5));
 
         const result = await processarLoteFgts({ cpfs, provider });
@@ -253,6 +275,7 @@ export default function FgtsPage() {
                 description: result.message,
             });
         }
+        setFile(null);
     };
     reader.readAsArrayBuffer(file);
   };
@@ -595,3 +618,5 @@ export default function FgtsPage() {
     </div>
   );
 }
+
+    
