@@ -56,28 +56,14 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
     // 2. Realizar a consulta de saldo FGTS usando o token
     const { documentNumber, provider } = validation.data;
     
-    // Mapeia o valor do formulário para o valor esperado pela API
-    const providerApiMap = {
-      cartos: "CARTOS",
-      bms: "BMS",
-      qi: "QI_TECH",
-    };
-
-    const providerForApi = providerApiMap[provider as keyof typeof providerApiMap];
-
-    if (!providerForApi) {
-        throw new Error(`Provedor inválido selecionado: ${provider}`);
-    }
-
     const API_URL_CONSULTA = 'https://bff.v8sistema.com/fgts/balance'; 
 
     const requestBody = {
       documentNumber: documentNumber,
-      provider: providerForApi,
+      provider: provider, // Usar o valor do provider diretamente (cartos, bms, qi)
     };
 
     console.log(`[V8 API] Consultando... Endpoint: ${API_URL_CONSULTA}, Corpo da Requisição: ${JSON.stringify(requestBody)}`);
-
 
     const consultaResponse = await fetch(API_URL_CONSULTA, {
       method: 'POST',
@@ -95,20 +81,8 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
         let errorMessage = `Erro na API de consulta: ${consultaResponse.status} ${consultaResponse.statusText}.`;
         try {
             const errorJson = JSON.parse(errorText);
-
-            if (errorJson.error === 'body/provider must be equal to one of the allowed values') {
-                throw new Error(
-                    `Erro Crítico: A API da V8 rejeitou o valor do provedor '${providerForApi}'. ` +
-                    `Verifique com a V8 quais são os valores exatos esperados para 'provider' (ex: 'BMS', 'CARTOS', 'QI_TECH') e ajuste o mapeamento no arquivo src/app/actions/fgts.ts.`
-                );
-            }
-
             errorMessage += ` Detalhes: ${errorJson.message || JSON.stringify(errorJson)}`;
         } catch(e) {
-            // Se o erro for o que lançamos, propaga ele. Senão, anexa o texto bruto.
-            if (e instanceof Error && e.message.startsWith('Erro Crítico')) {
-                throw e;
-            }
             errorMessage += ` Resposta: ${errorText}`;
         }
         throw new Error(errorMessage);
