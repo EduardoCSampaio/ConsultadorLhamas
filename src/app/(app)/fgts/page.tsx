@@ -19,7 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Loader2, Search, CheckCircle2, XCircle, Circle } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { consultarSaldoFgts } from "@/app/actions/fgts";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useDoc } from "@/firebase/firestore/use-doc";
@@ -112,7 +112,6 @@ const StepIcon = ({ status }: { status: StepStatus }) => {
 export default function FgtsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [currentCpf, setCurrentCpf] = useState<string | null>(null);
-  const [apiError, setApiError] = useState<string | null>(null);
   const [statusSteps, setStatusSteps] = useState<StatusStep[]>(initialSteps);
   const [showStatus, setShowStatus] = useState(false);
 
@@ -136,45 +135,47 @@ export default function FgtsPage() {
   
   const { data: webhookResponse, isLoading: isWebhookLoading } = useDoc(docRef);
 
-  // Update step 3 when webhook response is received
-  if (webhookResponse && statusSteps[2].status !== 'success') {
-    setStatusSteps(prev => prev.map((step, index) => 
-      index === 2 ? { ...step, status: 'success' } : step
-    ));
-  }
+  useEffect(() => {
+    // Update step 3 to success when a webhook response is received
+    if (webhookResponse && statusSteps[2].status === 'running') {
+      setStatusSteps(prev => prev.map((step, index) => 
+        index === 2 ? { ...step, status: 'success', message: 'Resposta recebida!' } : step
+      ));
+    }
+  }, [webhookResponse, statusSteps]);
+
 
   async function onManualSubmit(values: z.infer<typeof manualFormSchema>) {
     setIsLoading(true);
     setCurrentCpf(values.documentNumber);
-    setApiError(null);
     setShowStatus(true);
     setStatusSteps(initialSteps);
 
     const updateStep = (index: number, status: StepStatus, message?: string) => {
-        setStatusSteps(prev => prev.map((step, i) => 
-          i === index ? { ...step, status, message } : step
-        ));
+        setStatusSteps(prev => {
+            const newSteps = [...prev];
+            newSteps[index] = { ...newSteps[index], status, message };
+            return newSteps;
+        });
     };
 
-    // Step 1 & 2: Authentication and Request
+    // Step 1: Authentication
     updateStep(0, 'running');
     const result = await consultarSaldoFgts(values);
     
     if (result.status === 'error') {
         updateStep(result.stepIndex, 'error', result.message);
-        setApiError(result.message);
         setIsLoading(false);
         return; // Stop execution if there was an error
     }
 
-    // Mark previous steps as successful
+    // Step 1 & 2 Success
     updateStep(0, 'success');
     updateStep(1, 'success');
     
     // Step 3: Waiting for Webhook
     updateStep(2, 'running');
     
-    // isLoading will now be primarily controlled by the webhook loading state
     setIsLoading(false); 
   }
 
@@ -218,13 +219,13 @@ export default function FgtsPage() {
                         />
                         <ProviderSelector control={manualForm.control} />
                       </div>
-                      <Button type="submit" disabled={isLoading || isWebhookLoading}>
-                        {isLoading || isWebhookLoading ? (
+                      <Button type="submit" disabled={isLoading || (showStatus && !webhookResponse && statusSteps[2].status !== 'error') }>
+                        {isLoading || (statusSteps[2].status === 'running' && !webhookResponse) ? (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         ) : (
                             <Search className="mr-2 h-4 w-4" />
                         )}
-                        {isWebhookLoading ? 'Aguardando Resposta...' : 'Consultar Saldo'}
+                        {statusSteps[2].status === 'running' && !webhookResponse ? 'Aguardando Resposta...' : 'Consultar Saldo'}
                       </Button>
                     </form>
                   </Form>
@@ -242,7 +243,7 @@ export default function FgtsPage() {
                                         <div className="flex flex-col">
                                             <span className={cn(
                                                 "font-medium",
-                                                step.status === 'error' && 'text-red-500',
+                                                step.status === 'error' && 'text-destructive',
                                                 step.status === 'success' && 'text-green-500'
                                             )}>
                                                 {step.name}
@@ -260,21 +261,16 @@ export default function FgtsPage() {
 
                   {webhookResponse && (
                     <Alert className="mt-6" variant="default">
+                      <CheckCircle2 className="h-4 w-4" />
                       <AlertTitle>Resposta do Webhook Recebida!</AlertTitle>
                       <AlertDescription>
-                        <pre className="mt-2 rounded-md bg-muted p-4 overflow-auto">
+                        <pre className="mt-2 rounded-md bg-muted p-4 overflow-auto max-h-96">
                             {JSON.stringify(webhookResponse.responseBody || webhookResponse, null, 2)}
                         </pre>
                       </AlertDescription>
                     </Alert>
                   )}
                   
-                  {apiError && !showStatus && ( // This might be redundant now but safe to keep
-                    <Alert variant="destructive" className="mt-6">
-                      <AlertTitle>Erro na Consulta</AlertTitle>
-                      <AlertDescription>{apiError}</AlertDescription>
-                    </Alert>
-                  )}
                 </CardContent>
               </Card>
 
@@ -313,3 +309,5 @@ export default function FgtsPage() {
     </div>
   );
 }
+
+    
