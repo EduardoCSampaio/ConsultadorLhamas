@@ -1,11 +1,27 @@
 
-
 'use server';
 
 import { z } from 'zod';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
+
+export type ApiCredentials = {
+  v8_username?: string;
+  v8_password?: string;
+  v8_audience?: string;
+  v8_client_id?: string;
+};
+
+const updateApiCredentialsSchema = z.object({
+  uid: z.string().min(1),
+  credentials: z.object({
+    v8_username: z.string().optional(),
+    v8_password: z.string().optional(),
+    v8_audience: z.string().optional(),
+    v8_client_id: z.string().optional(),
+  }),
+});
 
 
 const updateUserStatusSchema = z.object({
@@ -24,14 +40,14 @@ export type UserProfile = {
     role: 'admin' | 'user';
     status: 'pending' | 'active' | 'rejected';
     createdAt: string; // Changed to string to be serializable
-};
+} & ApiCredentials;
 
 // Nova Server Action para buscar todos os usuários
 export async function getUsers(): Promise<{users: UserProfile[] | null, error?: string}> {
     try {
         initializeFirebaseAdmin();
         const firestore = getFirestore();
-        const usersSnapshot = await firestore.collection('users').get();
+        const usersSnapshot = await firestore.collection('users').orderBy('email').get();
         if (usersSnapshot.empty) {
             return { users: [] };
         }
@@ -54,6 +70,10 @@ export async function getUsers(): Promise<{users: UserProfile[] | null, error?: 
                 role: data.role,
                 status: data.status,
                 createdAt: serializableCreatedAt,
+                v8_username: data.v8_username,
+                v8_password: data.v8_password,
+                v8_audience: data.v8_audience,
+                v8_client_id: data.v8_client_id,
             } as UserProfile;
         });
 
@@ -106,4 +126,33 @@ export async function updateUserStatus(input: z.infer<typeof updateUserStatusSch
     const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido.";
     return { success: false, error: message };
   }
+}
+
+export async function updateApiCredentials(input: z.infer<typeof updateApiCredentialsSchema>): Promise<{success: boolean, error?: string}> {
+    const validation = updateApiCredentialsSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, error: "Dados de entrada inválidos." };
+    }
+
+    const { uid, credentials } = validation.data;
+
+    try {
+        initializeFirebaseAdmin();
+        const firestore = getFirestore();
+        const userRef = firestore.collection('users').doc(uid);
+        
+        // Use a transaction or a simple update to set the new credentials
+        await userRef.update({
+            v8_username: credentials.v8_username || null,
+            v8_password: credentials.v8_password || null,
+            v8_audience: credentials.v8_audience || null,
+            v8_client_id: credentials.v8_client_id || null,
+        });
+
+        return { success: true };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao salvar as credenciais.";
+        console.error("Erro ao salvar credenciais de API:", message);
+        return { success: false, error: message };
+    }
 }

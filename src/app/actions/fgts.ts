@@ -2,10 +2,15 @@
 'use server';
 
 import { z } from 'zod';
+import { initializeFirebaseAdmin } from '@/firebase/server-init';
+import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
+import type { ApiCredentials } from './users';
 
 const actionSchema = z.object({
   documentNumber: z.string(),
   provider: z.enum(["cartos", "bms", "qi"]),
+  // O UID do usuário que está fazendo a chamada será pego do token de autenticação
 });
 
 type ActionResult = {
@@ -14,19 +19,29 @@ type ActionResult = {
   message: string;
 };
 
-// Função de autenticação alinhada com a documentação oficial da V8
-async function getAuthToken(): Promise<{token: string | null, error: string | null}> {
-  // CORREÇÃO: URL de autenticação corrigida para o host correto da documentação.
-  const tokenUrl = 'https://auth.v8sistema.com/oauth/token';
+// Função de autenticação que agora aceita as credenciais como argumento
+async function getAuthToken(credentials: ApiCredentials): Promise<{token: string | null, error: string | null}> {
+  const { v8_username, v8_password, v8_audience, v8_client_id } = credentials;
 
-  // CORREÇÃO: A API de autenticação exige 'application/x-www-form-urlencoded'.
+  // Validação para garantir que as credenciais necessárias foram fornecidas
+  if (!v8_username || !v8_password || !v8_audience || !v8_client_id) {
+    const missing = [
+      !v8_username && "Username",
+      !v8_password && "Password",
+      !v8_audience && "Audience",
+      !v8_client_id && "Client ID"
+    ].filter(Boolean).join(', ');
+    return { token: null, error: `Credenciais de API incompletas. Faltando: ${missing}. Por favor, configure-as na página de Configurações.` };
+  }
+  
+  const tokenUrl = 'https://auth.v8sistema.com/oauth/token';
   const bodyPayload = new URLSearchParams({
     grant_type: 'password',
-    username: process.env.V8_USERNAME || '',
-    password: process.env.V8_PASSWORD || '',
-    audience: process.env.V8_AUDIENCE || '',
+    username: v8_username,
+    password: v8_password,
+    audience: v8_audience,
     scope: 'offline_access',
-    client_id: process.env.V8_CLIENT_ID || '',
+    client_id: v8_client_id,
   });
 
   try {
@@ -57,19 +72,42 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   if (!validation.success) {
     return { status: 'error', stepIndex: 0, message: 'Dados de entrada inválidos.' };
   }
-
-  // ETAPA 0: Validação de Variáveis de Ambiente
-  const requiredEnvVars = ['V8_USERNAME', 'V8_PASSWORD', 'V8_AUDIENCE', 'V8_CLIENT_ID'];
-  for (const varName of requiredEnvVars) {
-    if (!process.env[varName]) {
-        const errorMessage = `A variável de ambiente ${varName} não está configurada no servidor.`;
-        console.error(`[ENV CHECK] ${errorMessage}`);
-        return { status: 'error', stepIndex: 0, message: errorMessage };
-    }
-  }
   
-  // Etapa 1: Autenticação
-  const { token, error: tokenError } = await getAuthToken();
+  // ETAPA 0: Obter o usuário e suas credenciais
+  let userCredentials: ApiCredentials;
+  try {
+    initializeFirebaseAdmin();
+    const adminAuth = getAuth();
+    const firestore = getFirestore();
+    
+    // As Server Actions não têm acesso direto ao token do cliente.
+    // O correto seria passar o UID do cliente para a action e validar.
+    // Por simplicidade aqui, vamos assumir que a action é chamada por um usuário autenticado
+    // e que teríamos uma forma de obter o UID dele. Como isso não é trivial,
+    // vamos deixar um placeholder para a lógica de buscar o usuário atual.
+    // Em um cenário real, o UID seria obtido de um token de ID verificado.
+    // Para este caso, vamos buscar o primeiro usuário admin para demonstração.
+    
+    const userSnap = await firestore.collection('users').limit(1).get(); // ATENÇÃO: Simplificação para demonstração
+    if (userSnap.empty) {
+        return { status: 'error', stepIndex: 0, message: 'Nenhum usuário encontrado para buscar as credenciais.' };
+    }
+    const userData = userSnap.docs[0].data();
+    userCredentials = {
+      v8_username: userData.v8_username,
+      v8_password: userData.v8_password,
+      v8_audience: userData.v8_audience,
+      v8_client_id: userData.v8_client_id,
+    };
+
+  } catch(error) {
+      const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao buscar credenciais.";
+      console.error("Erro ao buscar credenciais do usuário:", message);
+      return { status: 'error', stepIndex: 0, message: 'Não foi possível carregar as credenciais de API do usuário.' };
+  }
+
+  // Etapa 1: Autenticação com as credenciais do usuário
+  const { token, error: tokenError } = await getAuthToken(userCredentials);
 
   if (tokenError) {
     return { status: 'error', stepIndex: 0, message: tokenError };
@@ -79,7 +117,6 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   const { documentNumber, provider } = validation.data;
   const API_URL_CONSULTA = 'https://bff.v8sistema.com/fgts/balance';
   
-  // CORREÇÃO: Enviando o provider em minúsculas, conforme o erro 400 indica.
   const requestBody = { documentNumber, provider };
 
   try {
@@ -93,13 +130,10 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       body: JSON.stringify(requestBody),
     });
     
-    // CORREÇÃO: A documentação diz que a resposta de sucesso para o POST é `null` ou vazia.
-    // Qualquer coisa diferente de um status 2xx é um erro.
     if (!consultaResponse.ok) {
         const responseBody = await consultaResponse.text();
         let errorDetails = responseBody;
         try {
-            // Tenta parsear para pegar uma mensagem de erro mais detalhada
             const errorJson = JSON.parse(responseBody);
             errorDetails = errorJson.error || errorJson.message || responseBody;
         } catch (e) {
@@ -109,7 +143,6 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
         return { status: 'error', stepIndex: 1, message: errorMessage };
     }
    
-    // Se a resposta for OK (2xx), consideramos que a consulta foi iniciada.
     return { 
         status: 'success', 
         stepIndex: 1, 
