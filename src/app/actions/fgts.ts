@@ -19,11 +19,11 @@ async function getAuthToken(): Promise<{token: string | null, error: string | nu
   const tokenUrl = 'https://auth.v8sistema.com/oauth/token';
   const bodyPayload = {
     grant_type: 'password',
-    username: process.env.V8_USERNAME!,
-    password: process.env.V8_PASSWORD!,
-    audience: process.env.V8_AUDIENCE!,
+    username: process.env.V8_USERNAME,
+    password: process.env.V8_PASSWORD,
+    audience: process.env.V8_AUDIENCE,
     scope: 'offline_access',
-    client_id: process.env.V8_CLIENT_ID!,
+    client_id: process.env.V8_CLIENT_ID,
   };
 
   try {
@@ -54,15 +54,25 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   if (!validation.success) {
     return { status: 'error', stepIndex: 0, message: 'Dados de entrada inválidos.' };
   }
+
+  // ETAPA 0: Validação de Variáveis de Ambiente
+  const requiredEnvVars = ['V8_USERNAME', 'V8_PASSWORD', 'V8_AUDIENCE', 'V8_CLIENT_ID'];
+  for (const varName of requiredEnvVars) {
+    if (!process.env[varName]) {
+        const errorMessage = `A variável de ambiente ${varName} não está configurada no servidor.`;
+        console.error(`[ENV CHECK] ${errorMessage}`);
+        return { status: 'error', stepIndex: 0, message: errorMessage };
+    }
+  }
   
-  // Etapa 0: Autenticação
+  // Etapa 1: Autenticação
   const { token, error: tokenError } = await getAuthToken();
 
   if (tokenError) {
     return { status: 'error', stepIndex: 0, message: tokenError };
   }
 
-  // Etapa 1: Iniciar a consulta de saldo
+  // Etapa 2: Iniciar a consulta de saldo
   const { documentNumber, provider } = validation.data;
   const API_URL_CONSULTA = 'https://bff.v8sistema.com/fgts/balance';
 
@@ -75,7 +85,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       },
       body: JSON.stringify({ 
         documentNumber, 
-        provider // Enviando em minúsculas
+        provider
       }),
     });
     
