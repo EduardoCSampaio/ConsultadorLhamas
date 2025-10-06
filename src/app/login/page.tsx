@@ -14,8 +14,8 @@ export default function LoginPage() {
         </div>
         <Card>
           <CardHeader className="text-center">
-            <CardTitle className="font-headline text-2xl">Bem-vinda de volta!</CardTitle>
-            <CardDescription>Acesse sua conta para gerenciar seu negócio.</CardDescription>
+            <CardTitle className="font-headline text-2xl font-semibold">Bem-vindo de volta!</CardTitle>
+            <CardDescription>Acesse sua conta para gerenciar suas finanças.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">

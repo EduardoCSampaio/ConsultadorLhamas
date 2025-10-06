@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
-import { CalendarCheck, Palette, Sparkles, Users } from "lucide-react";
+import { DollarSign, FileText, LineChart } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { Logo } from "@/components/logo";
@@ -11,21 +11,21 @@ export default function Home() {
 
   const featureCards = [
     {
-      icon: <CalendarCheck className="h-8 w-8 text-primary" />,
-      title: "Agendamento Inteligente",
-      description: "Organize sua agenda com facilidade, evite conflitos e otimize seu tempo.",
+      icon: <DollarSign className="h-8 w-8 text-primary" />,
+      title: "Análise de Crédito",
+      description: "Avalie propostas de crédito com agilidade e segurança, usando dados inteligentes.",
       image: PlaceHolderImages.find(p => p.id === "feature-1"),
     },
     {
-      icon: <Users className="h-8 w-8 text-primary" />,
-      title: "Gestão de Clientes",
-      description: "Mantenha um histórico completo de seus clientes, preferências e serviços.",
+      icon: <FileText className="h-8 w-8 text-primary" />,
+      title: "Gestão de Contas",
+      description: "Acompanhe contas a pagar e receber, fluxo de caixa e organize suas finanças.",
       image: PlaceHolderImages.find(p => p.id === "feature-2"),
     },
     {
-      icon: <Palette className="h-8 w-8 text-primary" />,
-      title: "Catálogo de Serviços",
-      description: "Apresente seus serviços de forma profissional e atraente para seus clientes.",
+      icon: <LineChart className="h-8 w-8 text-primary" />,
+      title: "Relatórios Detalhados",
+      description: "Gere relatórios completos e visualize o desempenho do seu negócio.",
       image: PlaceHolderImages.find(p => p.id === "feature-3"),
     },
   ];
@@ -61,11 +61,11 @@ export default function Home() {
           <div className="relative z-10 flex h-full flex-col items-center justify-center text-center text-foreground">
             <div className="container">
               <h1 className="font-headline text-4xl font-bold tracking-tight md:text-6xl lg:text-7xl">
-                A beleza do seu negócio,{" "}
-                <span className="text-primary">integrada</span>.
+                O futuro do seu crédito,{" "}
+                <span className="text-primary">descomplicado</span>.
               </h1>
               <p className="mt-4 max-w-2xl mx-auto text-lg text-foreground/80 md:text-xl">
-                Simplifique a gestão do seu salão ou estúdio. Agendamentos, clientes e finanças em um só lugar.
+                Simplifique a gestão de crédito e finanças. Análises, contas e relatórios em um só lugar.
               </p>
               <div className="mt-8 flex justify-center gap-4">
                 <Button size="lg" asChild>
@@ -80,10 +80,10 @@ export default function Home() {
           <div className="container">
             <div className="text-center">
               <h2 className="font-headline text-3xl font-bold tracking-tight sm:text-4xl">
-                Tudo que você precisa para brilhar
+                Ferramentas para o seu sucesso financeiro
               </h2>
               <p className="mt-4 text-lg text-foreground/70">
-                Funcionalidades pensadas para impulsionar o seu negócio de beleza e bem-estar.
+                Funcionalidades pensadas para impulsionar a gestão do seu negócio.
               </p>
             </div>
             <div className="mt-12 grid gap-8 md:grid-cols-2 lg:grid-cols-3">
@@ -119,7 +119,7 @@ export default function Home() {
         <div className="container flex flex-col items-center justify-between gap-4 sm:flex-row">
           <Logo />
           <p className="text-sm text-foreground/60">
-            © {new Date().getFullYear()} Beleza Integrada. Todos os direitos reservados.
+            © {new Date().getFullYear()} Lhamascred. Todos os direitos reservados.
           </p>
         </div>
       </footer>

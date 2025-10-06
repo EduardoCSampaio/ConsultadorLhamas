@@ -8,7 +8,7 @@ export default function ClientesPage() {
     <div className="flex flex-col gap-6">
       <PageHeader 
         title="Clientes"
-        description="Visualize e gerencie as informações dos seus clientes."
+        description="Visualize e gerencie as informações e o histórico dos seus clientes."
       >
         <Button>
           <PlusCircle className="mr-2 h-4 w-4" />
@@ -19,10 +19,10 @@ export default function ClientesPage() {
         <CardContent className="pt-6">
           <div className="flex flex-col items-center justify-center gap-4 text-center h-96 border-2 border-dashed rounded-lg">
               <h3 className="text-2xl font-bold tracking-tight">
-                  Lista de clientes
+                  Lista de Clientes
               </h3>
               <p className="text-sm text-muted-foreground">
-                  A tabela com a lista de clientes será implementada aqui.
+                  A tabela com a lista de clientes e seus históricos será implementada aqui.
               </p>
           </div>
         </CardContent>

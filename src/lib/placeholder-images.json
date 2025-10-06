@@ -2,33 +2,33 @@
   "placeholderImages": [
     {
       "id": "hero-image",
-      "description": "A stylish and modern salon interior.",
-      "imageUrl": "https://images.unsplash.com/photo-1626383137804-ff908d2753a2?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwyfHxzYWxvbiUyMGludGVyaW9yfGVufDB8fHx8MTc1OTY4OTMwN3ww&ixlib=rb-4.1.0&q=80&w=1080",
-      "imageHint": "salon interior"
+      "description": "A modern office setting with people collaborating.",
+      "imageUrl": "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwyfHxmaW5hbmNlJTIwdGVhbXxlbnwwfHx8fDE3NTk4NDAwOTh8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "finance team"
     },
     {
       "id": "feature-1",
-      "description": "An open appointment book on a desk.",
-      "imageUrl": "https://images.unsplash.com/photo-1646764578980-65dbce171e7b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw2fHxwbGFubmVyJTIwZGVza3xlbnwwfHx8fDE3NTk3NTk2NDV8MA&ixlib=rb-4.1.0&q=80&w=1080",
-      "imageHint": "planner desk"
+      "description": "A person analyzing financial charts on a computer.",
+      "imageUrl": "https://images.unsplash.com/photo-1642792951733-40844739501c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHxmaW5hbmNpYWwlMjBhbmFseXNpc3xlbnwwfHx8fDE3NTk4NDAwOTh8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "financial analysis"
     },
     {
       "id": "feature-2",
-      "description": "A diverse group of smiling people.",
-      "imageUrl": "https://images.unsplash.com/photo-1625283518288-00362afc8663?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxoYXBweSUyMHBlb3BsZXxlbnwwfHx8fDE3NTk3NTk2NDV8MA&ixlib=rb-4.1.0&q=80&w=1080",
-      "imageHint": "happy people"
+      "description": "Documents and a calculator on a desk.",
+      "imageUrl": "https://images.unsplash.com/photo-1554224155-1696413565d3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw0fHxhY2NvdW50aW5nfGVufDB8fHx8MTc1OTg0MDA5OHww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "accounting desk"
     },
     {
       "id": "feature-3",
-      "description": "Various beauty products neatly arranged.",
-      "imageUrl": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw0fHxiZWF1dHklMjBwcm9kdWN0c3xlbnwwfHx8fDE3NTk2NzQ0MzF8MA&ixlib=rb-4.1.0&q=80&w=1080",
-      "imageHint": "beauty products"
+      "description": "A business dashboard showing graphs and charts.",
+      "imageUrl": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxkYXNoYm9hcmQlMjBjaGFydHN8ZW58MHx8fHwxNzU5ODQwMDk4fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "dashboard charts"
     },
     {
       "id": "user-avatar",
-      "description": "A portrait of a smiling woman.",
+      "description": "A portrait of a smiling person in a business setting.",
       "imageUrl": "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw3fHx3b21hbiUyMHBvcnRyYWl0fGVufDB8fHx8MTc1OTcxODAxNHww&ixlib=rb-4.1.0&q=80&w=1080",
-      "imageHint": "woman portrait"
+      "imageHint": "professional portrait"
     }
   ]
 }

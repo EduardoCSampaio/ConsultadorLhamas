@@ -19,21 +19,21 @@ import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 import {
-  CalendarCheck,
   Cog,
   Home,
+  Landmark,
   LogOut,
-  Palette,
   Users,
+  Wallet,
 } from "lucide-react";
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 
 const menuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard", tooltip: "Dashboard" },
-  { href: "/agendamentos", icon: CalendarCheck, label: "Agendamentos", tooltip: "Agendamentos" },
+  { href: "/credito", icon: Landmark, label: "Crédito", tooltip: "Análise de Crédito" },
   { href: "/clientes", icon: Users, label: "Clientes", tooltip: "Clientes" },
-  { href: "/servicos", icon: Palette, label: "Serviços", tooltip: "Serviços" },
+  { href: "/contas", icon: Wallet, label: "Contas", tooltip: "Contas a Pagar/Receber" },
   { href: "/configuracoes", icon: Cog, label: "Configurações", tooltip: "Configurações" },
 ];
 
@@ -53,7 +53,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <SidebarMenuItem key={item.href}>
                 <SidebarMenuButton
                   asChild
-                  isActive={pathname === item.href}
+                  isActive={pathname.startsWith(item.href)}
                   tooltip={item.tooltip}
                 >
                   <Link href={item.href}>

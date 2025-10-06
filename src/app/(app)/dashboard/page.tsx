@@ -5,16 +5,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
-import { ArrowUpRight, DollarSign, Users, Calendar } from "lucide-react";
+import { ArrowUpRight, DollarSign, Users, Landmark } from "lucide-react";
 import Link from "next/link";
 
 const chartData = [
-  { month: "Janeiro", total: Math.floor(Math.random() * 5000) + 1000 },
-  { month: "Fevereiro", total: Math.floor(Math.random() * 5000) + 1000 },
-  { month: "Março", total: Math.floor(Math.random() * 5000) + 1000 },
-  { month: "Abril", total: Math.floor(Math.random() * 5000) + 1000 },
-  { month: "Maio", total: Math.floor(Math.random() * 5000) + 1000 },
-  { month: "Junho", total: Math.floor(Math.random() * 5000) + 1000 },
+  { month: "Janeiro", total: Math.floor(Math.random() * 20000) + 5000 },
+  { month: "Fevereiro", total: Math.floor(Math.random() * 20000) + 5000 },
+  { month: "Março", total: Math.floor(Math.random() * 20000) + 5000 },
+  { month: "Abril", total: Math.floor(Math.random() * 20000) + 5000 },
+  { month: "Maio", total: Math.floor(Math.random() * 20000) + 5000 },
+  { month: "Junho", total: Math.floor(Math.random() * 20000) + 5000 },
 ];
 
 const chartConfig = {
@@ -24,11 +24,11 @@ const chartConfig = {
   },
 };
 
-const appointments = [
-    { id: '1', client: 'Camila Silva', service: 'Corte e Escova', time: '10:00', status: 'Confirmado' },
-    { id: '2', client: 'Juliana Costa', service: 'Manicure', time: '11:30', status: 'Confirmado' },
-    { id: '3', client: 'Fernanda Lima', service: 'Coloração', time: '14:00', status: 'Pendente' },
-    { id: '4', client: 'Beatriz Almeida', service: 'Pedicure', time: '16:00', status: 'Cancelado' },
+const recentProposals = [
+    { id: '1', client: 'Carlos Pereira', value: 'R$ 5.000,00', status: 'Aprovado' },
+    { id: '2', client: 'Mariana Oliveira', value: 'R$ 12.000,00', status: 'Aprovado' },
+    { id: '3', client: 'Rafael Santos', value: 'R$ 7.500,00', status: 'Em Análise' },
+    { id: '4', client: 'Lucia Fernandes', value: 'R$ 3.000,00', status: 'Recusado' },
 ];
 
 export default function DashboardPage() {
@@ -36,9 +36,9 @@ export default function DashboardPage() {
     <div className="flex flex-col gap-6">
       <PageHeader 
         title="Dashboard" 
-        description="Bem-vinda! Aqui está um resumo do seu negócio."
+        description="Olá! Aqui está um resumo financeiro do seu negócio."
       >
-        <Button>Novo Agendamento</Button>
+        <Button>Nova Proposta</Button>
       </PageHeader>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -48,8 +48,8 @@ export default function DashboardPage() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">R$ 45.231,89</div>
-            <p className="text-xs text-muted-foreground">+20.1% em relação ao mês passado</p>
+            <div className="text-2xl font-bold">R$ 145.231,89</div>
+            <p className="text-xs text-muted-foreground">+15.3% em relação ao mês passado</p>
           </CardContent>
         </Card>
         <Card>
@@ -58,18 +58,18 @@ export default function DashboardPage() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">+23</div>
-            <p className="text-xs text-muted-foreground">+12.2% em relação ao mês passado</p>
+            <div className="text-2xl font-bold">+42</div>
+            <p className="text-xs text-muted-foreground">+8.1% em relação ao mês passado</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Agendamentos (Hoje)</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Crédito Aprovado (Mês)</CardTitle>
+            <Landmark className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">12</div>
-            <p className="text-xs text-muted-foreground">4 confirmados, 1 pendente</p>
+            <div className="text-2xl font-bold">R$ 78.500,00</div>
+            <p className="text-xs text-muted-foreground">12 propostas aprovadas</p>
           </CardContent>
         </Card>
       </div>
@@ -108,9 +108,9 @@ export default function DashboardPage() {
 
         <Card className="lg:col-span-3">
           <CardHeader>
-            <CardTitle>Agendamentos Recentes</CardTitle>
+            <CardTitle>Propostas Recentes</CardTitle>
              <p className="text-sm text-muted-foreground">
-              Você tem {appointments.length} agendamentos hoje.
+              As últimas 4 propostas de crédito recebidas.
             </p>
           </CardHeader>
           <CardContent>
@@ -118,24 +118,23 @@ export default function DashboardPage() {
                 <TableHeader>
                     <TableRow>
                         <TableHead>Cliente</TableHead>
-                        <TableHead>Serviço</TableHead>
+                        <TableHead>Valor</TableHead>
                         <TableHead className="text-right">Status</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {appointments.slice(0,4).map((appt) => (
-                        <TableRow key={appt.id}>
+                    {recentProposals.map((proposal) => (
+                        <TableRow key={proposal.id}>
                             <TableCell>
-                                <div className="font-medium">{appt.client}</div>
-                                <div className="text-sm text-muted-foreground">{appt.time}</div>
+                                <div className="font-medium">{proposal.client}</div>
                             </TableCell>
-                            <TableCell>{appt.service}</TableCell>
+                            <TableCell>{proposal.value}</TableCell>
                             <TableCell className="text-right">
                                 <Badge variant={
-                                    appt.status === 'Confirmado' ? 'default' :
-                                    appt.status === 'Pendente' ? 'secondary' :
+                                    proposal.status === 'Aprovado' ? 'default' :
+                                    proposal.status === 'Em Análise' ? 'secondary' :
                                     'destructive'
-                                } className="capitalize">{appt.status}</Badge>
+                                } className="capitalize">{proposal.status}</Badge>
                             </TableCell>
                         </TableRow>
                     ))}
