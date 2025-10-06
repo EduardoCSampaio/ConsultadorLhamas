@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { PageHeader } from "@/components/page-header";
@@ -148,42 +149,41 @@ export default function FgtsPage() {
     setIsLoading(true);
     setCurrentCpf(values.documentNumber);
     setShowStatus(true);
-    setStatusSteps(initialSteps); // Reset steps
-    manualForm.setValue("documentNumber", values.documentNumber);
+    setStatusSteps(initialSteps);
 
-
+    // Function to update a specific step
     const updateStep = (index: number, status: StepStatus, message?: string) => {
-        setStatusSteps(prev => {
-            const newSteps = [...prev];
-            newSteps[index] = { ...newSteps[index], status, message };
-            return newSteps;
-        });
+      setStatusSteps(prev => {
+        const newSteps = [...prev];
+        newSteps[index] = { ...newSteps[index], status, message };
+        return newSteps;
+      });
     };
-
-    // Step 0: Authentication
+  
+    // Start step 0 (Authentication)
     updateStep(0, 'running');
     const result = await consultarSaldoFgts(values);
-    
+  
+    // Check for errors at any step
     if (result.status === 'error') {
-        updateStep(result.stepIndex, 'error', result.message);
-        // Garante que passos anteriores ao erro sejam marcados como sucesso se aplicável
-        for (let i = 0; i < result.stepIndex; i++) {
-          updateStep(i, 'success');
-        }
-        setIsLoading(false);
-        return; // Stop execution if there was an error
+      // Mark previous steps as success if the error is not in the first step
+      for (let i = 0; i < result.stepIndex; i++) {
+        updateStep(i, 'success');
+      }
+      // Mark the failing step as error
+      updateStep(result.stepIndex, 'error', result.message);
+      setIsLoading(false); // Stop loading
+      return; // IMPORTANT: Stop execution
     }
-
-    // Step 0 & 1 Success
+  
+    // If we reach here, steps 0 and 1 were successful
     updateStep(0, 'success');
     updateStep(1, 'success', result.message);
-    
-    // Step 2: Waiting for Webhook
+  
+    // Start step 2 (Waiting for Webhook)
     updateStep(2, 'running');
-    
-    // Set isLoading to false as the server action is complete.
-    // The UI will now wait for the webhook response.
-    setIsLoading(false); 
+  
+    setIsLoading(false);
   }
 
   return (
