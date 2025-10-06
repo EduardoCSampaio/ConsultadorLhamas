@@ -10,21 +10,23 @@ import { Badge } from "@/components/ui/badge";
 import { Users, UserCheck, UserPlus, ArrowRight } from "lucide-react";
 import React, { useMemo } from "react";
 import { useCollection, useFirestore, useMemoFirebase, useUser } from "@/firebase";
-import { collection } from "firebase/firestore";
+import { collection, doc } from "firebase/firestore";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { UserProfile } from "@/app/actions/users";
 import { useDoc } from "@/firebase/firestore/use-doc";
-import { doc } from "firebase/firestore";
 
-function AdminDashboard() {
+
+function AdminDashboard({ userProfile }: { userProfile: UserProfile }) {
   const firestore = useFirestore();
-  const usersCollectionRef = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return collection(firestore, 'users');
-  }, [firestore]);
 
-  const { data: users, isLoading } = useCollection<UserProfile>(usersCollectionRef);
+  // Atrasar a criação da referência da coleção até termos certeza de que é um admin
+  const usersCollectionRef = useMemoFirebase(() => {
+    if (!firestore || userProfile.role !== 'admin') return null;
+    return collection(firestore, 'users');
+  }, [firestore, userProfile]);
+
+  const { data: users, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersCollectionRef);
 
   const pendingUsers = useMemo(() => users?.filter(u => u.status === 'pending') || [], [users]);
   const activeUsers = useMemo(() => users?.filter(u => u.status === 'active') || [], [users]);
@@ -47,6 +49,8 @@ function AdminDashboard() {
         default: return status;
     }
   };
+  
+  const isLoading = isLoadingUsers || !users;
 
   return (
     <div className="flex flex-col gap-6">
@@ -197,7 +201,7 @@ export default function DashboardPage() {
   }
 
   if (userProfile?.role === 'admin') {
-    return <AdminDashboard />;
+    return <AdminDashboard userProfile={userProfile} />;
   }
 
   return <UserDashboardPlaceholder />;
