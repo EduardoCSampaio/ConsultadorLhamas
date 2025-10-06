@@ -31,20 +31,33 @@ export async function POST(request: NextRequest) {
     
     const docRef = db.collection('webhookResponses').doc(docId.toString());
 
-    // Check for error messages within the payload
-    const errorMessage = payload.error || payload.errorMessage || payload.message;
-    // An error is only considered a definitive failure if there is an error message AND no balance.
-    const isError = !!errorMessage && payload.balance === undefined;
+    // Check for explicit error messages within the payload
+    const errorMessage = payload.errorMessage || payload.error || payload.message;
+    // An error is when there is a specific error message OR when there's no balance (and it's not a success response)
+    const isError = !!errorMessage;
+    const isSuccess = payload.balance !== undefined && payload.balance !== null;
+
+    let status: 'received' | 'error' | 'success' = 'received';
+    let statusMessage: string = 'Webhook payload successfully stored in Firestore via Admin SDK.';
+
+    if (isError) {
+        status = 'error';
+        statusMessage = `Webhook received with error: ${errorMessage}`;
+    } else if (isSuccess) {
+        status = 'success';
+        statusMessage = 'Webhook payload with balance successfully stored.';
+    }
+
 
     await docRef.set({
       responseBody: payload,
       createdAt: serverTimestamp(),
-      status: isError ? 'error' : 'received',
-      message: isError ? `Webhook received with error: ${errorMessage}` : 'Webhook payload successfully stored in Firestore via Admin SDK.',
+      status: status,
+      message: statusMessage,
       id: docId.toString(),
     }, { merge: true });
 
-    console.log(`Payload stored in Firestore with ID: ${docId}. Status: ${isError ? 'error' : 'received'}`);
+    console.log(`Payload stored in Firestore with ID: ${docId}. Status: ${status}`);
 
     return NextResponse.json({ 
         status: 'success', 

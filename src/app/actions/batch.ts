@@ -99,23 +99,25 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                 const data = docSnap.data();
                 const responseBody = data?.responseBody;
                 
-                if (responseBody && responseBody.balance !== undefined && responseBody.balance !== null) {
-                    // Success case
+                // Case 1: Success - We have a balance.
+                if (data?.status === 'success' && responseBody && responseBody.balance !== undefined && responseBody.balance !== null) {
                     results.push({
                         CPF: cpf,
                         Saldo: parseFloat(responseBody.balance),
                         Mensagem: 'Sucesso',
                     });
-                } else if (responseBody) {
-                    // Error case: response exists but no balance
-                    const errorMessage = responseBody.error || responseBody.errorMessage || responseBody.message || "Resposta inválida do webhook";
+                } 
+                // Case 2: Error - The webhook explicitly marked it as an error.
+                else if (data?.status === 'error' && responseBody) {
+                    const errorMessage = responseBody.errorMessage || responseBody.error || data.message || "Erro retornado pelo webhook.";
                     results.push({
                         CPF: cpf,
                         Saldo: 'N/A',
                         Mensagem: `Erro: ${errorMessage}`,
                     });
-                } else {
-                    // Still waiting case
+                }
+                // Case 3: Fallback for other non-success/non-error states, or invalid data.
+                else {
                     results.push({
                         CPF: cpf,
                         Saldo: 'N/A',
@@ -123,7 +125,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                     });
                 }
             } else {
-                // Document not even created case
+                // Case 4: Document not created yet.
                 results.push({
                     CPF: cpf,
                     Saldo: 'N/A',
