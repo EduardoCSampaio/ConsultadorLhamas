@@ -64,6 +64,7 @@ type BatchJob = {
   totalCpfs: number;
   processedCpfs: number;
   cpfs: string[];
+  createdAt: string; // Add timestamp for consistent naming
 };
 
 
@@ -152,6 +153,13 @@ const formatDate = (dateString: string | undefined) => {
     }
 };
 
+const formatBatchName = (fileName: string, isoDate: string) => {
+    const date = new Date(isoDate);
+    const formattedDate = date.toLocaleDateString('pt-BR').replace(/\//g, '-');
+    const formattedTime = date.toTimeString().split(' ')[0].replace(/:/g, '-');
+    return `HIGIENIZACAO_${fileName}_${formattedDate}_${formattedTime}`;
+};
+
 const LOCAL_STORAGE_KEY = 'recentBatches';
 const ITEMS_PER_PAGE = 5;
 
@@ -171,7 +179,6 @@ export default function FgtsPage() {
   const firestore = useFirestore();
 
   const [recentBatches, setRecentBatches] = useState<BatchJob[]>(() => {
-    // Initialize state from localStorage synchronously
     if (typeof window === 'undefined') {
         return [];
     }
@@ -191,12 +198,13 @@ export default function FgtsPage() {
     currentPage * ITEMS_PER_PAGE
   );
 
-  // Save batches to localStorage whenever they change
   useEffect(() => {
-    try {
-      window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(recentBatches));
-    } catch (error) {
-      console.error("Failed to save recent batches to localStorage", error);
+    if (typeof window !== 'undefined') {
+        try {
+            window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(recentBatches));
+        } catch (error) {
+            console.error("Failed to save recent batches to localStorage", error);
+        }
     }
   }, [recentBatches]);
 
@@ -274,6 +282,7 @@ export default function FgtsPage() {
           totalCpfs: cpfs.length,
           processedCpfs: 0,
           cpfs: cpfs,
+          createdAt: new Date().toISOString(),
         };
 
         setRecentBatches(prev => [newBatch, ...prev]);
@@ -305,7 +314,11 @@ export default function FgtsPage() {
   
   const handleGenerateReport = async (batch: BatchJob) => {
     setIsGeneratingReport(batch.id);
-    const result = await gerarRelatorioLote({ cpfs: batch.cpfs, provider: batch.provider });
+    const result = await gerarRelatorioLote({ 
+        cpfs: batch.cpfs, 
+        fileName: batch.fileName,
+        createdAt: batch.createdAt,
+    });
     setIsGeneratingReport(null);
 
     if (result.status === 'success') {
@@ -611,7 +624,7 @@ export default function FgtsPage() {
                                         {paginatedBatches.map((batch) => (
                                             <TableRow key={batch.id}>
                                                 <TableCell>
-                                                    <div className="font-medium">HIGIENIZACAO_{batch.fileName}_{new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}</div>
+                                                    <div className="font-medium">{formatBatchName(batch.fileName, batch.createdAt)}</div>
                                                     <div className="text-sm text-muted-foreground">{batch.totalCpfs} CPFs</div>
                                                 </TableCell>
                                                 <TableCell>

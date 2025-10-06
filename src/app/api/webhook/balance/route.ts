@@ -33,7 +33,8 @@ export async function POST(request: NextRequest) {
 
     // Check for error messages within the payload
     const errorMessage = payload.error || payload.errorMessage || payload.message;
-    const isError = !!errorMessage;
+    // An error is only considered a definitive failure if there is an error message AND no balance.
+    const isError = !!errorMessage && payload.balance === undefined;
 
     await docRef.set({
       responseBody: payload,

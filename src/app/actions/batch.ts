@@ -15,7 +15,8 @@ const processActionSchema = z.object({
 
 const reportActionSchema = z.object({
   cpfs: z.array(z.string()),
-  provider: z.string(), // Provider is just for filename, not used in logic
+  fileName: z.string(),
+  createdAt: z.string(),
 });
 
 
@@ -84,7 +85,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         };
     }
 
-    const { cpfs } = validation.data;
+    const { cpfs, fileName: originalFileName, createdAt } = validation.data;
     initializeFirebaseAdmin();
     const firestore = getFirestore();
     
@@ -102,7 +103,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                 // Check for a specific error message in the response body first
                 const errorMessage = responseBody?.error || responseBody?.errorMessage || responseBody?.message;
 
-                if (responseBody && errorMessage && typeof errorMessage === 'string') {
+                if (responseBody && errorMessage && typeof errorMessage === 'string' && responseBody.balance === undefined) {
                     results.push({
                         CPF: cpf,
                         Saldo: 'N/A',
@@ -159,7 +160,11 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
     const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
     const base64String = buffer.toString('base64');
     
-    const fileName = `Resultados_Lote_${new Date().toISOString().split('T')[0]}.xlsx`;
+    const date = new Date(createdAt);
+    const formattedDate = date.toLocaleDateString('pt-BR').replace(/\//g, '-');
+    const formattedTime = date.toTimeString().split(' ')[0].replace(/:/g, '-');
+    const fileName = `HIGIENIZACAO_${originalFileName}_${formattedDate}_${formattedTime}.xlsx`;
+
     const fileContent = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64String}`;
 
     return {
