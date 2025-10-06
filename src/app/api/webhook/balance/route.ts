@@ -31,15 +31,19 @@ export async function POST(request: NextRequest) {
     
     const docRef = db.collection('webhookResponses').doc(docId.toString());
 
+    // Check for error messages within the payload
+    const errorMessage = payload.error || payload.errorMessage || payload.message;
+    const isError = !!errorMessage;
+
     await docRef.set({
       responseBody: payload,
       createdAt: serverTimestamp(),
-      status: 'received',
-      message: 'Webhook payload successfully stored in Firestore via Admin SDK.',
+      status: isError ? 'error' : 'received',
+      message: isError ? `Webhook received with error: ${errorMessage}` : 'Webhook payload successfully stored in Firestore via Admin SDK.',
       id: docId.toString(),
     }, { merge: true });
 
-    console.log(`Payload stored in Firestore with ID: ${docId}`);
+    console.log(`Payload stored in Firestore with ID: ${docId}. Status: ${isError ? 'error' : 'received'}`);
 
     return NextResponse.json({ 
         status: 'success', 

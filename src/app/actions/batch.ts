@@ -96,24 +96,29 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
             const docSnap = await docRef.get();
 
             if (docSnap.exists) {
-                const data = docSnap.data()?.responseBody;
-                if (data.balance !== undefined && data.balance !== null) {
+                const data = docSnap.data();
+                const responseBody = data?.responseBody;
+                
+                // Check for a specific error message in the response body first
+                const errorMessage = responseBody?.error || responseBody?.errorMessage || responseBody?.message;
+
+                if (responseBody && errorMessage && typeof errorMessage === 'string') {
                     results.push({
                         CPF: cpf,
-                        Saldo: parseFloat(data.balance),
-                        Mensagem: 'Sucesso',
-                    });
-                } else if (data.errorMessage) {
-                     results.push({
-                        CPF: cpf,
                         Saldo: 'N/A',
-                        Mensagem: data.errorMessage,
+                        Mensagem: `Erro: ${errorMessage}`,
+                    });
+                } else if (responseBody && responseBody.balance !== undefined && responseBody.balance !== null) {
+                    results.push({
+                        CPF: cpf,
+                        Saldo: parseFloat(responseBody.balance),
+                        Mensagem: 'Sucesso',
                     });
                 } else {
                     results.push({
                         CPF: cpf,
                         Saldo: 'N/A',
-                        Mensagem: 'Resposta do webhook sem saldo ou erro.',
+                        Mensagem: 'Resposta do webhook recebida, mas sem saldo ou formato de erro conhecido.',
                     });
                 }
             } else {
@@ -143,7 +148,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
     // Format Saldo column as currency
     results.forEach((_, index) => {
         const cellRef = XLSX.utils.encode_cell({c: 1, r: index + 1});
-        if (worksheet[cellRef]) {
+        if (worksheet[cellRef] && typeof worksheet[cellRef].v === 'number') {
             worksheet[cellRef].z = '"R$"#,##0.00';
         }
     });
