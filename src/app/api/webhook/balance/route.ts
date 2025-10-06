@@ -3,15 +3,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
 
-// Initialize Firebase using the server-specific method
-const { firestore: db } = initializeFirebaseAdmin();
-
 /**
  * Handles POST requests from the V8 API balance webhook.
  * V8 may send a request to validate the URL and then to send results.
  */
 export async function POST(request: NextRequest) {
   try {
+    // Initialize Firebase within the request handler for serverless environments.
+    const { firestore: db } = initializeFirebaseAdmin();
+    
     const payload = await request.json();
 
     console.log("--- Balance Webhook Received ---");
