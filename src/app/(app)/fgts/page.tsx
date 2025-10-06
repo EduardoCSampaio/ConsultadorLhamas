@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Loader2, Search, CheckCircle2, XCircle, Circle, User, Briefcase, Landmark, Calendar, Banknote, Upload, FileText, Download, RefreshCw } from "lucide-react";
+import { Loader2, Search, CheckCircle2, XCircle, Circle, User, Briefcase, Landmark, Calendar, Banknote, Upload, FileText, Download } from "lucide-react";
 import { useState, useEffect, useRef, ChangeEvent } from "react";
 import { consultarSaldoFgts } from "@/app/actions/fgts";
 import { useDoc } from "@/firebase/firestore/use-doc";
@@ -31,6 +31,7 @@ import { Separator } from "@/components/ui/separator";
 import * as XLSX from 'xlsx';
 import { processarLoteFgts, gerarRelatorioLote } from "@/app/actions/batch";
 import { useToast } from "@/hooks/use-toast";
+import { Progress } from "@/components/ui/progress";
 
 const manualFormSchema = z.object({
   documentNumber: z.string().min(11, {
@@ -53,6 +54,17 @@ type StatusStep = {
   status: StepStatus;
   message?: string;
 };
+
+type BatchJob = {
+  id: string;
+  fileName: string;
+  provider: string;
+  status: 'processing' | 'completed' | 'error';
+  totalCpfs: number;
+  processedCpfs: number;
+  cpfs: string[];
+};
+
 
 const initialSteps: StatusStep[] = [
   { name: "Autenticando com a API V8", status: "pending" },
@@ -146,11 +158,9 @@ export default function FgtsPage() {
   const [showStatus, setShowStatus] = useState(false);
   
   const [file, setFile] = useState<File | null>(null);
-  const [lastProcessedCpfs, setLastProcessedCpfs] = useState<string[]>([]);
-  const [lastProcessedProvider, setLastProcessedProvider] = useState<string | null>(null);
+  const [recentBatches, setRecentBatches] = useState<BatchJob[]>([]);
   const [isProcessingBatch, setIsProcessingBatch] = useState(false);
-  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
-  const [batchStarted, setBatchStarted] = useState(false);
+  const [isGeneratingReport, setIsGeneratingReport] = useState<string | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -189,9 +199,6 @@ export default function FgtsPage() {
     const files = event.target.files;
     if (files && files.length > 0) {
       setFile(files[0]);
-      setBatchStarted(false);
-      setLastProcessedCpfs([]);
-      setLastProcessedProvider(null);
     }
   };
 
@@ -205,7 +212,6 @@ export default function FgtsPage() {
     }
 
     setIsProcessingBatch(true);
-    setBatchStarted(false);
 
     const reader = new FileReader();
     reader.onload = async (e) => {
@@ -217,19 +223,30 @@ export default function FgtsPage() {
         
         const cpfs = json.slice(1).map(row => String((row as any)[0])).filter(cpf => cpf && cpf.length >= 11);
         
-        setLastProcessedCpfs(cpfs);
-        setLastProcessedProvider(provider);
+        const newBatch: BatchJob = {
+          id: `batch-${Date.now()}`,
+          fileName: file.name,
+          provider: provider,
+          status: 'processing',
+          totalCpfs: cpfs.length,
+          processedCpfs: 0,
+          cpfs: cpfs,
+        };
+
+        // Add to the beginning of the list, keeping only the 5 most recent.
+        setRecentBatches(prev => [newBatch, ...prev].slice(0, 5));
 
         const result = await processarLoteFgts({ cpfs, provider });
         
         setIsProcessingBatch(false);
         if (result.status === 'success') {
-            setBatchStarted(true);
+            setRecentBatches(prev => prev.map(b => b.id === newBatch.id ? {...b, status: 'completed'} : b));
             toast({
                 title: "Lote enviado para processamento!",
                 description: `${result.count} consultas foram iniciadas em segundo plano.`,
             });
         } else {
+            setRecentBatches(prev => prev.map(b => b.id === newBatch.id ? {...b, status: 'error'} : b));
             toast({
                 variant: "destructive",
                 title: "Erro ao processar lote",
@@ -240,18 +257,10 @@ export default function FgtsPage() {
     reader.readAsArrayBuffer(file);
   };
   
-  const handleGenerateReport = async () => {
-    if (lastProcessedCpfs.length === 0 || !lastProcessedProvider) {
-        toast({
-            variant: "destructive",
-            title: "Nenhum lote processado",
-            description: "Inicie o processamento de um lote antes de gerar um relatório."
-        });
-        return;
-    }
-    setIsGeneratingReport(true);
-    const result = await gerarRelatorioLote({ cpfs: lastProcessedCpfs, provider: lastProcessedProvider });
-    setIsGeneratingReport(false);
+  const handleGenerateReport = async (batch: BatchJob) => {
+    setIsGeneratingReport(batch.id);
+    const result = await gerarRelatorioLote({ cpfs: batch.cpfs, provider: batch.provider });
+    setIsGeneratingReport(null);
 
     if (result.status === 'success') {
         const link = document.createElement('a');
@@ -307,6 +316,19 @@ export default function FgtsPage() {
     updateStep(2, 'running');
   
     setIsLoading(false);
+  }
+
+  const getBatchProgress = (batch: BatchJob) => {
+    if (batch.status === 'processing') return 50; // In-progress state
+    if (batch.status === 'completed' || batch.status === 'error') return 100;
+    return 0;
+  }
+  
+  const getBatchProgressText = (batch: BatchJob) => {
+    if (batch.status === 'processing') return "Em andamento...";
+    if (batch.status === 'completed') return "Pronto para download";
+    if (batch.status === 'error') return "Falha ao enviar";
+    return "Pendente";
   }
 
   return (
@@ -458,14 +480,14 @@ export default function FgtsPage() {
                  <CardHeader>
                   <CardTitle>Consulta de FGTS em Lote</CardTitle>
                   <CardDescription>
-                    Faça o upload de um arquivo XLSX com os CPFs na primeira coluna para consultar múltiplos clientes. O processo é assíncrono.
+                    Faça o upload de um arquivo XLSX com os CPFs na primeira coluna para consultar múltiplos clientes de forma assíncrona.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Form {...loteForm}>
                         <form onSubmit={(e) => e.preventDefault()} className="space-y-8">
                           <div className="grid md:grid-cols-2 gap-8 items-start">
-                            <ProviderSelector control={loteForm.control} disabled={isProcessingBatch || isGeneratingReport} />
+                            <ProviderSelector control={loteForm.control} disabled={isProcessingBatch} />
                             
                             <div className="space-y-4">
                                 <FormLabel>Arquivo de CPFs (.xlsx)</FormLabel>
@@ -475,14 +497,14 @@ export default function FgtsPage() {
                                     onChange={handleFileChange} 
                                     accept=".xlsx, .xls"
                                     className="hidden" 
-                                    disabled={isProcessingBatch || isGeneratingReport}
+                                    disabled={isProcessingBatch}
                                 />
                                 <div 
                                     className={cn(
                                         "flex flex-col items-center justify-center gap-2 text-center h-48 border-2 border-dashed rounded-lg",
-                                        !isProcessingBatch && !isGeneratingReport && "cursor-pointer hover:border-primary"
+                                        !isProcessingBatch && "cursor-pointer hover:border-primary"
                                     )}
-                                    onClick={() => !isProcessingBatch && !isGeneratingReport && fileInputRef.current?.click()}
+                                    onClick={() => !isProcessingBatch && fileInputRef.current?.click()}
                                 >
                                     <Upload className="h-8 w-8 text-muted-foreground" />
                                     {file ? (
@@ -504,48 +526,63 @@ export default function FgtsPage() {
                             </div>
                           </div>
                            <div className="flex gap-4">
-                                <Button type="button" onClick={handleProcessBatch} disabled={!file || isProcessingBatch || isGeneratingReport}>
+                                <Button type="button" onClick={handleProcessBatch} disabled={!file || isProcessingBatch}>
                                     {isProcessingBatch ? (
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                     ) : (
                                         <Search className="mr-2 h-4 w-4" />
                                     )}
-                                    {isProcessingBatch ? 'Enviando...' : '1. Enviar Lote para Fila'}
-                                </Button>
-                                <Button 
-                                    type="button" 
-                                    variant="secondary"
-                                    onClick={handleGenerateReport} 
-                                    disabled={!batchStarted || isGeneratingReport || isProcessingBatch}
-                                >
-                                    {isGeneratingReport ? (
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    ) : (
-                                        <Download className="mr-2 h-4 w-4" />
-                                    )}
-                                    {isGeneratingReport ? 'Gerando...' : '2. Baixar Relatório de Saldo'}
+                                    {isProcessingBatch ? 'Enviando Lote...' : 'Enviar Lote para Fila'}
                                 </Button>
                            </div>
                         </form>
                     </Form>
-                    {batchStarted && (
-                        <Card className="mt-6">
+                    {recentBatches.length > 0 && (
+                        <Card className="mt-8">
                             <CardHeader>
-                                <CardTitle>Processamento em Andamento</CardTitle>
-                                <CardDescription>O lote foi enviado para a fila de processamento. As consultas estão sendo realizadas em segundo plano. Você pode gerar o relatório a qualquer momento para obter os resultados já disponíveis.</CardDescription>
+                                <CardTitle>Histórico de Lotes Recentes</CardTitle>
+                                <CardDescription>Os resultados ficam disponíveis para download assim que o processamento é concluído.</CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <div className="flex items-center gap-4 p-4 border rounded-lg bg-blue-50 dark:bg-blue-900/10">
-                                    <RefreshCw className="h-8 w-8 text-blue-600 animate-spin" />
-                                    <div className="flex-grow">
-                                        <h4 className="font-semibold">Lote em Processamento!</h4>
-                                        <p className="text-sm text-muted-foreground">
-                                            Aguarde alguns minutos e depois clique em "Baixar Relatório de Saldo". 
-                                            <br/>
-                                            {lastProcessedCpfs.length} CPFs estão na fila.
-                                        </p>
-                                    </div>
-                                </div>
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Lote</TableHead>
+                                            <TableHead className="w-[200px]">Progresso</TableHead>
+                                            <TableHead className="text-right w-[150px]">Ação</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {recentBatches.map((batch) => (
+                                            <TableRow key={batch.id}>
+                                                <TableCell>
+                                                    <div className="font-medium">HIGIENIZACAO_{batch.fileName}_{new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}</div>
+                                                    <div className="text-sm text-muted-foreground">{batch.totalCpfs} CPFs</div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex flex-col gap-2">
+                                                        <Progress value={getBatchProgress(batch)} className="h-2" />
+                                                        <span className="text-xs text-muted-foreground">{getBatchProgressText(batch)}</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <Button 
+                                                        size="sm"
+                                                        onClick={() => handleGenerateReport(batch)}
+                                                        disabled={batch.status !== 'completed' || isGeneratingReport === batch.id}
+                                                    >
+                                                        {isGeneratingReport === batch.id ? (
+                                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                            <Download className="mr-2 h-4 w-4" />
+                                                        )}
+                                                        Baixar
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
                             </CardContent>
                         </Card>
                     )}
@@ -558,5 +595,3 @@ export default function FgtsPage() {
     </div>
   );
 }
-
-    
