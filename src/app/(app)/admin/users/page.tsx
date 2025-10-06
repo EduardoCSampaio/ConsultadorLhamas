@@ -6,33 +6,49 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useCollection, useFirestore, useMemoFirebase } from "@/firebase";
-import { collection } from "firebase/firestore";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
-import { updateUserStatus } from "@/app/actions/users";
+import { updateUserStatus, getUsers } from "@/app/actions/users";
 import { useToast } from "@/hooks/use-toast";
 import { Check, X } from "lucide-react";
 import type { UserProfile } from "@/app/actions/users";
+import { useEffect, useState } from "react";
 
 export default function AdminUsersPage() {
-    const firestore = useFirestore();
     const { toast } = useToast();
+    const [users, setUsers] = useState<UserProfile[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-    const usersCollectionRef = useMemoFirebase(() => {
-        if (!firestore) return null;
-        return collection(firestore, 'users');
-    }, [firestore]);
+    const fetchUsers = async () => {
+        setIsLoading(true);
+        const { users: fetchedUsers, error } = await getUsers();
+        if (error) {
+            toast({
+                variant: "destructive",
+                title: "Erro ao carregar usuários",
+                description: error,
+            });
+            setUsers([]);
+        } else {
+            setUsers(fetchedUsers);
+        }
+        setIsLoading(false);
+    };
 
-    const { data: users, isLoading } = useCollection<UserProfile>(usersCollectionRef);
+    useEffect(() => {
+        fetchUsers();
+    }, []);
 
     const handleStatusChange = async (uid: string, newStatus: 'active' | 'rejected') => {
+        setUpdatingId(uid);
         const result = await updateUserStatus({ uid, status: newStatus });
         if (result.success) {
             toast({
                 title: "Status do usuário atualizado!",
                 description: `O usuário foi ${newStatus === 'active' ? 'aprovado' : 'rejeitado'}.`,
             });
+            // Re-fetch users to show the change
+            await fetchUsers();
         } else {
             toast({
                 variant: "destructive",
@@ -40,6 +56,7 @@ export default function AdminUsersPage() {
                 description: result.error,
             });
         }
+        setUpdatingId(null);
     };
 
     const getStatusVariant = (status: string) => {
@@ -115,11 +132,21 @@ export default function AdminUsersPage() {
                                             <TableCell className="text-right">
                                                 {user.status === 'pending' ? (
                                                     <div className="flex gap-2 justify-end">
-                                                        <Button variant="outline" size="sm" onClick={() => handleStatusChange(user.uid, 'active')}>
+                                                        <Button 
+                                                            variant="outline" 
+                                                            size="sm" 
+                                                            onClick={() => handleStatusChange(user.uid, 'active')}
+                                                            disabled={updatingId === user.uid}
+                                                        >
                                                             <Check className="mr-2 h-4 w-4"/>
                                                             Aprovar
                                                         </Button>
-                                                        <Button variant="destructive" size="sm" onClick={() => handleStatusChange(user.uid, 'rejected')}>
+                                                        <Button 
+                                                            variant="destructive" 
+                                                            size="sm" 
+                                                            onClick={() => handleStatusChange(user.uid, 'rejected')}
+                                                            disabled={updatingId === user.uid}
+                                                        >
                                                             <X className="mr-2 h-4 w-4"/>
                                                             Rejeitar
                                                         </Button>

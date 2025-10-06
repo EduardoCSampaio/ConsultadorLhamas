@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import { PageHeader } from "@/components/page-header";
@@ -8,25 +7,36 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Users, UserCheck, UserPlus, ArrowRight } from "lucide-react";
-import React, { useMemo } from "react";
-import { useCollection, useFirestore, useMemoFirebase, useUser } from "@/firebase";
-import { collection, doc } from "firebase/firestore";
+import React, { useMemo, useEffect, useState } from "react";
+import { useFirestore, useMemoFirebase, useUser } from "@/firebase";
+import { doc } from "firebase/firestore";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { UserProfile } from "@/app/actions/users";
+import { getUsers } from "@/app/actions/users";
 import { useDoc } from "@/firebase/firestore/use-doc";
 
 
 function AdminDashboard({ userProfile }: { userProfile: UserProfile }) {
-  const firestore = useFirestore();
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Atrasar a criação da referência da coleção até termos certeza de que é um admin
-  const usersCollectionRef = useMemoFirebase(() => {
-    if (!firestore || userProfile.role !== 'admin') return null;
-    return collection(firestore, 'users');
-  }, [firestore, userProfile]);
+  useEffect(() => {
+    async function fetchUsers() {
+      // Somente busca os usuários se o perfil for de admin
+      if (userProfile.role === 'admin') {
+        setIsLoading(true);
+        const { users: fetchedUsers, error } = await getUsers();
+        if (error) {
+          console.error("Failed to fetch users:", error);
+        }
+        setUsers(fetchedUsers);
+        setIsLoading(false);
+      }
+    }
+    fetchUsers();
+  }, [userProfile]);
 
-  const { data: users, isLoading: isLoadingUsers } = useCollection<UserProfile>(usersCollectionRef);
 
   const pendingUsers = useMemo(() => users?.filter(u => u.status === 'pending') || [], [users]);
   const activeUsers = useMemo(() => users?.filter(u => u.status === 'active') || [], [users]);
@@ -49,8 +59,6 @@ function AdminDashboard({ userProfile }: { userProfile: UserProfile }) {
         default: return status;
     }
   };
-  
-  const isLoading = isLoadingUsers || !users;
 
   return (
     <div className="flex flex-col gap-6">

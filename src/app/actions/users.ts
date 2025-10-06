@@ -24,6 +24,25 @@ export type UserProfile = {
     status: 'pending' | 'active' | 'rejected';
 };
 
+// Nova Server Action para buscar todos os usuários
+export async function getUsers(): Promise<{users: UserProfile[], error?: string}> {
+    try {
+        initializeFirebaseAdmin();
+        const firestore = getFirestore();
+        const usersSnapshot = await firestore.collection('users').get();
+        if (usersSnapshot.empty) {
+            return { users: [] };
+        }
+        const users = usersSnapshot.docs.map(doc => doc.data() as UserProfile);
+        return { users };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao buscar usuários.";
+        console.error("Erro ao buscar usuários:", message);
+        return { users: [], error: message };
+    }
+}
+
+
 export async function setAdminClaim(input: z.infer<typeof setAdminClaimSchema>): Promise<{success: boolean, error?: string}> {
   const validation = setAdminClaimSchema.safeParse(input);
   if (!validation.success) {
@@ -65,4 +84,3 @@ export async function updateUserStatus(input: z.infer<typeof updateUserStatusSch
     return { success: false, error: message };
   }
 }
-
