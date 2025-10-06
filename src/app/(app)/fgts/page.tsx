@@ -18,14 +18,13 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Loader2, Search, Send } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 import { useState } from "react";
-import { consultarSaldoFgts, simularWebhookAction } from "@/app/actions/fgts";
+import { consultarSaldoFgts } from "@/app/actions/fgts";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useDoc } from "@/firebase/firestore/use-doc";
 import { useFirestore, useMemoFirebase } from "@/firebase";
 import { doc } from "firebase/firestore";
-import { Textarea } from "@/components/ui/textarea";
 
 const manualFormSchema = z.object({
   documentNumber: z.string().min(11, {
@@ -87,7 +86,6 @@ export default function FgtsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [currentCpf, setCurrentCpf] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
-  const [simulationPayload, setSimulationPayload] = useState('{\n  "documentNumber": "37227404870",\n  "balance": 1234.56\n}');
   
   const firestore = useFirestore();
 
@@ -113,7 +111,6 @@ export default function FgtsPage() {
     setIsLoading(true);
     setCurrentCpf(values.documentNumber);
     setApiError(null);
-    setSimulationPayload(`{\n  "documentNumber": "${values.documentNumber}",\n  "balance": 1234.56\n}`);
 
     try {
       await consultarSaldoFgts(values);
@@ -126,25 +123,6 @@ export default function FgtsPage() {
         setCurrentCpf(null);
     } finally {
       setIsLoading(false);
-    }
-  }
-
-  async function handleSimulation() {
-    setApiError(null);
-    try {
-      const payload = JSON.parse(simulationPayload);
-      if (!payload.documentNumber) {
-        throw new Error("O payload de simulação precisa ter a propriedade 'documentNumber'.");
-      }
-      setCurrentCpf(payload.documentNumber);
-      // Chama a Server Action diretamente
-      await simularWebhookAction(payload);
-    } catch (error) {
-       if (error instanceof Error) {
-            setApiError(error.message);
-        } else {
-            setApiError("Ocorreu um erro inesperado na simulação.");
-        }
     }
   }
 
@@ -228,27 +206,6 @@ export default function FgtsPage() {
                 </CardContent>
               </Card>
 
-              <Card className="mt-6">
-                <CardHeader>
-                  <CardTitle>Simulador de Webhook</CardTitle>
-                   <CardDescription>
-                    Use esta ferramenta para testar o recebimento de dados sem precisar de um deploy. 
-                    Cole o JSON que a V8 enviaria e clique em simular.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Textarea
-                    placeholder="Cole o JSON de resposta do webhook aqui"
-                    value={simulationPayload}
-                    onChange={(e) => setSimulationPayload(e.target.value)}
-                    rows={5}
-                  />
-                  <Button onClick={handleSimulation}>
-                    <Send className="mr-2 h-4 w-4" />
-                    Simular Resposta do Webhook
-                  </Button>
-                </CardContent>
-              </Card>
             </TabsContent>
             <TabsContent value="lote">
                <Card className="mt-4">
@@ -284,5 +241,3 @@ export default function FgtsPage() {
     </div>
   );
 }
-
-    
