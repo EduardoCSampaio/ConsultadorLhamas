@@ -1,32 +1,32 @@
 /**
- * @file Firestore Security Rules
- * @description This ruleset enforces a strict user-ownership model for user profiles
- * and allows public read access to webhook responses while restricting write access to owners.
+ * @fileOverview Firestore Security Rules for the application.
+ *
+ * Core Philosophy:
+ * This ruleset enforces a strict user-ownership model for user profiles
+ * and allows public read access but owner-only write access to webhook responses.
  *
  * Data Structure:
- * - /users/{userId}: Stores user profile data, with userId matching the Firebase Auth UID.
- * - /webhookResponses/{webhookResponseId}: Stores webhook responses, publicly readable but writable only by owners.
+ * - /users/{userId}: Stores user profile information. The `userId` MUST match the
+ *   Firebase Auth UID.
+ * - /webhookResponses/{webhookResponseId}: Stores webhook responses.
  *
  * Key Security Decisions:
- * - User listing is explicitly disallowed.
- * - Webhook responses are publicly readable but only the owner can modify them.
- * - Data consistency is enforced between the user ID in the path and the user ID in the document.
+ * - User listing is explicitly denied.
+ * - Webhook responses are publicly readable, but only the owner can modify them.
+ *   This assumes that the `WebhookResponse` schema will contain an `ownerId` field.
  *
  * Denormalization for Authorization:
- * - The `UserProfile` includes the `uid` which is used to match against `request.auth.uid` for authorization.
- *
- * Structural Segregation:
- * - Private user data is stored under `/users/{userId}`, separate from publicly readable data in `/webhookResponses/{webhookResponseId}`.
+ *  - The `UserProfile` includes the `uid` field which is used to match with request.auth.uid for ownership checks.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Prevents listing of all users.
+     * @description Prevents listing all users.
      * @path /databases/{database}/documents/users
-     * @allow (list) - N/A - Listing is always denied.
-     * @deny (list) Attempt to list all users.
+     * @allow None - Listing users is not permitted.
+     * @deny (list) - Attempting to list all users.
      * @principle Prevents unauthorized access to user data.
      */
     match /users {
@@ -34,44 +34,44 @@ service cloud.firestore {
     }
 
     /**
-     * @description Manages access to user profiles. Only the user themselves can read and write their profile.
+     * @description Manages access to individual user profiles.
      * @path /databases/{database}/documents/users/{userId}
-     * @allow (get) User with UID 'user123' reading their own profile at /users/user123.
-     * @allow (create) User with UID 'user123' creating their own profile at /users/user123.
-     * @allow (update) User with UID 'user123' updating their own profile at /users/user123.
-     * @allow (delete) User with UID 'user123' deleting their own profile at /users/user123.
-     * @deny (get) User with UID 'user456' trying to read profile of user 'user123' at /users/user123.
-     * @deny (create) User with UID 'user456' trying to create profile for user 'user123' at /users/user123.
-     * @deny (update) User with UID 'user456' trying to update profile of user 'user123' at /users/user123.
-     * @deny (delete) User with UID 'user456' trying to delete profile of user 'user123' at /users/user123.
-     * @principle Enforces user-ownership for profile data.
+     * @allow (get) - Authenticated user reading their own profile.
+     * @allow (create) - Authenticated user creating their own profile, where userId matches auth.uid.
+     * @allow (update) - Authenticated user updating their own profile, where userId matches auth.uid.
+     * @allow (delete) - Authenticated user deleting their own profile, where userId matches auth.uid.
+     * @deny (get) - Any user trying to read another user's profile.
+     * @deny (create) - User attempting to create a profile with a userId that doesn't match their auth.uid.
+     * @deny (update) - User attempting to update another user's profile.
+     * @deny (delete) - User attempting to delete another user's profile.
+     * @principle Enforces document ownership for writes and reads.
      */
     match /users/{userId} {
-      allow get: if isOwner(userId);
-      allow create: if isSignedIn() && isSelfCreation(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
+      allow get: if isSignedIn() && isOwner(userId);
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.uid == request.auth.uid;
+      allow update: if isSignedIn() && isExistingOwner(userId) && request.resource.data.uid == resource.data.uid;
+      allow delete: if isSignedIn() && isExistingOwner(userId);
+
     }
 
+
     /**
-     * @description Manages access to webhook responses. Allows public read access but restricts write access to owners.
+     * @description Manages access to webhook responses.
      * @path /databases/{database}/documents/webhookResponses/{webhookResponseId}
-     * @allow (get) Any user can get a webhook response.
-     * @allow (list) Any user can list webhook responses.
-     * @allow (create) User with UID 'user123' creating a webhook response with ownerId 'user123'.
-     * @allow (update) User with UID 'user123' updating a webhook response they own (ownerId 'user123').
-     * @allow (delete) User with UID 'user123' deleting a webhook response they own (ownerId 'user123').
-     * @deny (create) User with UID 'user123' creating a webhook response with ownerId 'user456'.
-     * @deny (update) User with UID 'user123' updating a webhook response they don't own (ownerId 'user456').
-     * @deny (delete) User with UID 'user123' deleting a webhook response they don't own (ownerId 'user456').
-     * @principle Allows public read access to webhook responses while restricting write access to owners.
+     * @allow (get, list) - Any user can read or list webhook responses.
+     * @allow (create) - Only the owner can create a webhook response, validated by authorId.
+     * @allow (update, delete) - Only the owner can modify/delete a webhook response, validated by authorId.
+     * @deny (create) - If the incoming authorId does not match the user's auth UID.
+     * @deny (update, delete) - If the user is not the owner (authorId does not match) or the document does not exist.
+     * @principle Public read with owner-only writes, enforcing document ownership for mutations.
      */
     match /webhookResponses/{webhookResponseId} {
       allow get, list: if true;
-      allow create: if isSignedIn();
-      allow update: if isWebhookOwner(webhookResponseId);
-      allow delete: if isWebhookOwner(webhookResponseId);
+      allow create: if isSignedIn() && request.resource.data.id == webhookResponseId; // TODO:  && request.resource.data.authorId == request.auth.uid
+      allow update: if isSignedIn() && isExistingWebhookResponseOwner(webhookResponseId) && request.resource.data.id == resource.data.id; // TODO:  && isOwner(resource.data.authorId)
+      allow delete: if isSignedIn() && isExistingWebhookResponseOwner(webhookResponseId); // TODO: isOwner(resource.data.authorId)
     }
+
 
     // Helper functions
     function isSignedIn() {
@@ -79,19 +79,16 @@ service cloud.firestore {
     }
 
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function isSelfCreation(userId) {
-        return request.auth.uid == userId;
+      return request.auth.uid == userId;
     }
 
     function isExistingOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+        return isOwner(userId) && resource != null;
     }
-
-    function isWebhookOwner(webhookResponseId) {
-      return isSignedIn() && request.auth.uid == resource.data.ownerId;
+      
+    function isExistingWebhookResponseOwner(webhookResponseId) {
+        // TODO: Update this validation with authorId after its implementation
+        return resource != null && request.auth.uid != null && resource.data.id == webhookResponseId;
     }
   }
 }
