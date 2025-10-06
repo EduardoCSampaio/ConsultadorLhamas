@@ -104,7 +104,7 @@ function ProviderSelector({ control, disabled }: { control: any; disabled?: bool
                                     <RadioGroupItem value="qi" />
                                
                                 </FormControl>
-                                <FormLabel className="font-normal">QI Tech</FormLabel>
+                                <FormLabel className="font-normal">QI</FormLabel>
                             </FormItem>
                         </RadioGroup>
                     </FormControl>
