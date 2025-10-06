@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import { PageHeader } from "@/components/page-header";
@@ -8,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Users, UserCheck, UserPlus, ArrowRight } from "lucide-react";
-import React, { useMemo } from "react";
+import React from "react";
 import { useFirestore, useMemoFirebase, useUser } from "@/firebase";
 import { doc } from "firebase/firestore";
 import Link from "next/link";
@@ -165,7 +164,6 @@ function UserDashboardPlaceholder() {
     </div>
   );
 }
-
 
 export default function DashboardPage() {
   const { user, isUserLoading } = useUser();
