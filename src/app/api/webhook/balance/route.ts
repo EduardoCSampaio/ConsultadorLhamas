@@ -1,12 +1,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { firebaseConfig } from '@/firebase/config';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { initializeFirebase } from '@/firebase';
 
-// Initialize Firebase Admin
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// Initialize Firebase using the standard method
+const { firestore: db } = initializeFirebase();
 
 /**
  * Handles POST requests from the V8 API balance webhook.
@@ -20,21 +18,28 @@ export async function POST(request: NextRequest) {
     console.log("Headers:", Object.fromEntries(request.headers));
     console.log("Body (Payload):", JSON.stringify(payload, null, 2));
 
-    // For now, we assume the payload contains a unique identifier 
-    // that we can use as the document ID. Let's assume it's `payload.id`
-    // or a transaction ID. If not available, we might need to generate one
-    // or use the documentNumber (CPF) if it's unique per user request.
-    const docId = payload.id || payload.documentNumber || new Date().getTime().toString();
+    // The most reliable identifier is the documentNumber (CPF) from the payload.
+    // Let's ensure we use that as the document ID.
+    const docId = payload.documentNumber || payload.id;
+
+    if (!docId) {
+      console.error("Error: Webhook payload is missing 'documentNumber' or 'id'. Cannot create document.");
+      return NextResponse.json({
+        status: 'error',
+        message: 'Payload missing required identifier (documentNumber or id).',
+      }, { status: 400 });
+    }
 
     // Create a reference to the document in the 'webhookResponses' collection.
-    const docRef = doc(db, 'webhookResponses', docId);
+    const docRef = doc(db, 'webhookResponses', docId.toString());
 
     // Save the webhook payload to Firestore.
     await setDoc(docRef, {
       responseBody: payload,
       createdAt: serverTimestamp(),
       status: 'received',
-      message: 'Webhook payload successfully stored in Firestore.'
+      message: 'Webhook payload successfully stored in Firestore.',
+      id: docId.toString(), // Also save the ID inside the document for reference
     }, { merge: true });
 
     console.log(`Payload stored in Firestore with ID: ${docId}`);
