@@ -18,13 +18,14 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Loader2, Search } from "lucide-react";
+import { Loader2, Search, CheckCircle2, XCircle, Circle } from "lucide-react";
 import { useState } from "react";
 import { consultarSaldoFgts } from "@/app/actions/fgts";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useDoc } from "@/firebase/firestore/use-doc";
 import { useFirestore, useMemoFirebase } from "@/firebase";
 import { doc } from "firebase/firestore";
+import { cn } from "@/lib/utils";
 
 const manualFormSchema = z.object({
   documentNumber: z.string().min(11, {
@@ -40,6 +41,19 @@ const loteFormSchema = z.object({
         required_error: "Você precisa selecionar um provedor.",
     }),
 });
+
+type StepStatus = "pending" | "running" | "success" | "error";
+type StatusStep = {
+  name: string;
+  status: StepStatus;
+  message?: string;
+};
+
+const initialSteps: StatusStep[] = [
+  { name: "Autenticando com a API V8", status: "pending" },
+  { name: "Enviando solicitação de consulta", status: "pending" },
+  { name: "Aguardando resposta do Webhook", status: "pending" },
+];
 
 function ProviderSelector({ control }: { control: any }) {
   return (
@@ -82,11 +96,26 @@ function ProviderSelector({ control }: { control: any }) {
   );
 }
 
+const StepIcon = ({ status }: { status: StepStatus }) => {
+    switch (status) {
+      case "running":
+        return <Loader2 className="h-5 w-5 animate-spin text-blue-500" />;
+      case "success":
+        return <CheckCircle2 className="h-5 w-5 text-green-500" />;
+      case "error":
+        return <XCircle className="h-5 w-5 text-red-500" />;
+      default:
+        return <Circle className="h-5 w-5 text-muted-foreground" />;
+    }
+  };
+
 export default function FgtsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [currentCpf, setCurrentCpf] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
-  
+  const [statusSteps, setStatusSteps] = useState<StatusStep[]>(initialSteps);
+  const [showStatus, setShowStatus] = useState(false);
+
   const firestore = useFirestore();
 
   const manualForm = useForm<z.infer<typeof manualFormSchema>>({
@@ -107,23 +136,46 @@ export default function FgtsPage() {
   
   const { data: webhookResponse, isLoading: isWebhookLoading } = useDoc(docRef);
 
+  // Update step 3 when webhook response is received
+  if (webhookResponse && statusSteps[2].status !== 'success') {
+    setStatusSteps(prev => prev.map((step, index) => 
+      index === 2 ? { ...step, status: 'success' } : step
+    ));
+  }
+
   async function onManualSubmit(values: z.infer<typeof manualFormSchema>) {
     setIsLoading(true);
     setCurrentCpf(values.documentNumber);
     setApiError(null);
+    setShowStatus(true);
+    setStatusSteps(initialSteps);
 
-    try {
-      await consultarSaldoFgts(values);
-    } catch (error) {
-        if (error instanceof Error) {
-            setApiError(error.message);
-        } else {
-            setApiError("Ocorreu um erro inesperado.");
-        }
-        setCurrentCpf(null);
-    } finally {
-      setIsLoading(false);
+    const updateStep = (index: number, status: StepStatus, message?: string) => {
+        setStatusSteps(prev => prev.map((step, i) => 
+          i === index ? { ...step, status, message } : step
+        ));
+    };
+
+    // Step 1: Authentication
+    updateStep(0, 'running');
+    const result = await consultarSaldoFgts(values);
+    
+    if (result.status === 'error') {
+        updateStep(result.stepIndex, 'error', result.message);
+        setApiError(result.message);
+        setIsLoading(false);
+        return;
     }
+
+    // Step 2: Request Sent
+    updateStep(0, 'success');
+    updateStep(1, 'success');
+    
+    // Step 3: Waiting for Webhook
+    updateStep(2, 'running');
+    
+    // isLoading will be controlled by webhook loading state
+    setIsLoading(false); 
   }
 
   return (
@@ -158,7 +210,7 @@ export default function FgtsPage() {
                             <FormItem>
                               <FormLabel>CPF do Cliente</FormLabel>
                               <FormControl>
-                                <Input placeholder="Digite o CPF" {...field} disabled={isLoading}/>
+                                <Input placeholder="Digite o CPF" {...field} disabled={isLoading || isWebhookLoading}/>
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -166,7 +218,7 @@ export default function FgtsPage() {
                         />
                         <ProviderSelector control={manualForm.control} />
                       </div>
-                      <Button type="submit" disabled={isLoading}>
+                      <Button type="submit" disabled={isLoading || isWebhookLoading}>
                         {isLoading || isWebhookLoading ? (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         ) : (
@@ -176,20 +228,39 @@ export default function FgtsPage() {
                       </Button>
                     </form>
                   </Form>
-                  {currentCpf && !webhookResponse && !apiError && !isLoading && (
-                    <Alert className="mt-6">
-                      <AlertTitle>Consulta Iniciada!</AlertTitle>
-                      <AlertDescription>
-                        <div className="flex items-center gap-2">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span>Aguardando a resposta do webhook para o CPF: {currentCpf}. A resposta aparecerá aqui automaticamente.</span>
-                        </div>
-                      </AlertDescription>
-                    </Alert>
+                  
+                  {showStatus && (
+                     <Card className="mt-6">
+                        <CardHeader>
+                            <CardTitle>Status da Consulta</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <ul className="space-y-4">
+                                {statusSteps.map((step, index) => (
+                                    <li key={index} className="flex items-start gap-4">
+                                        <StepIcon status={step.status} />
+                                        <div className="flex flex-col">
+                                            <span className={cn(
+                                                "font-medium",
+                                                step.status === 'error' && 'text-red-500',
+                                                step.status === 'success' && 'text-green-500'
+                                            )}>
+                                                {step.name}
+                                            </span>
+                                            {step.message && (
+                                                <span className="text-sm text-muted-foreground">{step.message}</span>
+                                            )}
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        </CardContent>
+                    </Card>
                   )}
+
                   {webhookResponse && (
                     <Alert className="mt-6" variant="default">
-                      <AlertTitle>Resposta Recebida!</AlertTitle>
+                      <AlertTitle>Resposta do Webhook Recebida!</AlertTitle>
                       <AlertDescription>
                         <pre className="mt-2 rounded-md bg-muted p-4 overflow-auto">
                             {JSON.stringify(webhookResponse.responseBody || webhookResponse, null, 2)}
@@ -197,7 +268,8 @@ export default function FgtsPage() {
                       </AlertDescription>
                     </Alert>
                   )}
-                  {apiError && (
+                  
+                  {apiError && !showStatus && (
                     <Alert variant="destructive" className="mt-6">
                       <AlertTitle>Erro na Consulta</AlertTitle>
                       <AlertDescription>{apiError}</AlertDescription>
@@ -241,3 +313,4 @@ export default function FgtsPage() {
     </div>
   );
 }
+

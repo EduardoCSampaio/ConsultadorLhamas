@@ -3,17 +3,18 @@
 
 import { z } from 'zod';
 
-// Schema para validação dos dados de entrada da action
 const actionSchema = z.object({
   documentNumber: z.string(),
   provider: z.enum(["cartos", "bms", "qi"]),
 });
 
-/**
- * Obtém o token de autenticação da API da V8.
- * @returns O token de acesso.
- */
-async function getAuthToken() {
+type ActionResult = {
+  status: 'success' | 'error';
+  stepIndex: number;
+  message: string;
+};
+
+async function getAuthToken(): Promise<{token: string | null, error: string | null}> {
   const tokenUrl = 'https://auth.v8sistema.com/oauth/token';
 
   const params = new URLSearchParams();
@@ -24,105 +25,95 @@ async function getAuthToken() {
   params.append('scope', 'offline_access');
   params.append('client_id', process.env.V8_CLIENT_ID!);
 
-  const response = await fetch(tokenUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: params.toString(),
-  });
+  try {
+    const response = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('Erro de autenticação V8:', errorText);
-    throw new Error(`Falha na autenticação com a V8: ${response.status} ${response.statusText}. Resposta: ${errorText}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Erro de autenticação V8:', errorText);
+      return { token: null, error: `Falha na autenticação com a V8: ${response.status} ${response.statusText}. Detalhes: ${errorText}` };
+    }
+
+    const data = await response.json();
+    return { token: data.access_token, error: null };
+  } catch (error) {
+    console.error('Erro de rede ao obter token V8:', error);
+    return { token: null, error: 'Erro de comunicação ao tentar autenticar com a API parceira.' };
   }
-
-  const data = await response.json();
-  return data.access_token;
 }
 
-/**
- * Inicia uma consulta de saldo FGTS. A resposta será enviada para o webhook configurado.
- * @param input Objeto contendo documentNumber e provider.
- * @returns A resposta da API de início de consulta.
- */
-export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
+export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): Promise<ActionResult> {
   const validation = actionSchema.safeParse(input);
 
   if (!validation.success) {
-    throw new Error('Dados de entrada inválidos.');
+    return { status: 'error', stepIndex: 0, message: 'Dados de entrada inválidos.' };
+  }
+  
+  // Etapa 1: Autenticação
+  const { token, error: tokenError } = await getAuthToken();
+
+  if (tokenError) {
+    return { status: 'error', stepIndex: 0, message: tokenError };
   }
 
+  // Etapa 2: Iniciar a consulta de saldo
+  const { documentNumber, provider } = validation.data;
+  const API_URL_CONSULTA = 'https://bff.v8sistema.com/fgts/balance';
+
   try {
-    // 1. Obter o token de autenticação
-    const authToken = await getAuthToken();
-
-    // 2. Iniciar a consulta de saldo FGTS
-    const { documentNumber, provider } = validation.data;
-    
-    const API_URL_CONSULTA = 'https://bff.v8sistema.com/fgts/balance'; 
-
-    console.log(`[V8 API] Iniciando consulta... Endpoint: ${API_URL_CONSULTA}, Corpo: ${JSON.stringify({ documentNumber, provider })}`);
-
     const consultaResponse = await fetch(API_URL_CONSULTA, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authToken}`, 
+        'Authorization': `Bearer ${token}`, 
       },
-      body: JSON.stringify({
-        documentNumber: documentNumber,
-        provider: provider,
-      }),
-      // @ts-ignore - Required for some environments to handle POST requests correctly
+      body: JSON.stringify({ documentNumber, provider }),
+      // @ts-ignore
       duplex: 'half',
     });
-
-    // A resposta pode não ter corpo, mas o status HTTP é crucial.
+    
+    // Resposta bem-sucedida, mesmo que vazia (202 Accepted)
     if (consultaResponse.status === 202 || consultaResponse.status === 200) {
-        let data;
-        try {
-            data = await consultaResponse.json();
-        } catch (e) {
-            // Se não houver corpo JSON (ex: resposta 202 Accepted vazia), consideramos sucesso.
-            console.log("[V8 API] Consulta aceita com sucesso (resposta sem corpo JSON).");
-            return {
-                status: "pending",
-                message: "Consulta de saldo iniciada. O resultado será enviado para o webhook.",
-                initialResponse: {},
+      // Tentamos ler o corpo, mas não é crucial se estiver vazio
+      try {
+        const data = await consultaResponse.json();
+         // Algumas APIs retornam 200/202 mas com um corpo nulo ou vazio indicando falha no processamento
+        if (data === null || (typeof data === 'object' && Object.keys(data).length === 0)) {
+           return { 
+                status: 'error', 
+                stepIndex: 1, 
+                message: "A API parceira aceitou a requisição, mas não iniciou a consulta (resposta vazia). Verifique as credenciais ou contate o suporte da V8." 
             };
         }
-
-        // Se houver corpo, mas for nulo/vazio, lançamos um erro claro.
-        if (!data || (typeof data === 'object' && Object.keys(data).length === 0)) {
-            throw new Error("A API parceira (V8) não iniciou a consulta. A resposta foi vazia. Por favor, contate o suporte da V8.");
-        }
-        
-        console.log("[V8 API] Consulta iniciada com sucesso, resposta:", data);
-        return {
-          status: "pending",
-          message: "Consulta de saldo iniciada. O resultado será enviado para o webhook.",
-          initialResponse: data,
-        };
+      } catch (e) {
+        // Ignora o erro se o corpo JSON não puder ser analisado (ex: resposta 202 vazia)
+        console.log("Resposta 202 aceita sem corpo JSON, o que é esperado.");
+      }
+      
+      return { 
+          status: 'success', 
+          stepIndex: 1, 
+          message: 'Consulta de saldo iniciada. Aguardando o resultado via webhook.' 
+      };
     } else {
-        // Tratar erros HTTP
-        let errorMessage = `Erro ao iniciar consulta: ${consultaResponse.status} ${consultaResponse.statusText}.`;
-        try {
-            const errorData = await consultaResponse.json();
-            console.error("[V8 API] Detalhes do erro JSON:", errorData); 
-            errorMessage += ` Detalhes: ${errorData.message || JSON.stringify(errorData)}`;
-        } catch(e) {
-            errorMessage += ` Resposta: ${await consultaResponse.text()}`;
-        }
-        throw new Error(errorMessage);
+      // Tratar erros HTTP
+      let errorMessage = `Erro ao enviar consulta: ${consultaResponse.status} ${consultaResponse.statusText}.`;
+      try {
+          const errorData = await consultaResponse.json();
+          errorMessage += ` Detalhes: ${errorData.message || JSON.stringify(errorData)}`;
+      } catch(e) {
+          errorMessage += ` Resposta: ${await consultaResponse.text()}`;
+      }
+      return { status: 'error', stepIndex: 1, message: errorMessage };
     }
 
   } catch (error) {
-    console.error('Erro ao chamar a API de consulta FGTS:', error);
-    if (error instanceof Error) {
-        throw new Error(error.message);
-    }
-    throw new Error('Ocorreu um erro de comunicação com a API.');
+    console.error('Erro de comunicação ao chamar a API de consulta FGTS:', error);
+    const message = error instanceof Error ? error.message : 'Ocorreu um erro de comunicação com a API.';
+    return { status: 'error', stepIndex: 1, message };
   }
 }
