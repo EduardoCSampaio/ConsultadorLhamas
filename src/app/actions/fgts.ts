@@ -42,6 +42,11 @@ async function getAuthToken() {
   return data.access_token;
 }
 
+/**
+ * Inicia uma consulta de saldo FGTS. A resposta será enviada para o webhook configurado.
+ * @param input Objeto contendo documentNumber e provider.
+ * @returns A resposta da API de início de consulta.
+ */
 export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
   const validation = actionSchema.safeParse(input);
 
@@ -53,17 +58,17 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
     // 1. Obter o token de autenticação
     const authToken = await getAuthToken();
 
-    // 2. Realizar a consulta de saldo FGTS usando o token
+    // 2. Iniciar a consulta de saldo FGTS
     const { documentNumber, provider } = validation.data;
     
     const API_URL_CONSULTA = 'https://bff.v8sistema.com/fgts/balance'; 
 
     const requestBody = {
       documentNumber: documentNumber,
-      provider: provider, // Usar o valor do provider diretamente (cartos, bms, qi)
+      provider: provider,
     };
-
-    console.log(`[V8 API] Consultando... Endpoint: ${API_URL_CONSULTA}, Corpo da Requisição: ${JSON.stringify(requestBody)}`);
+    
+    console.log(`[V8 API] Iniciando consulta... Endpoint: ${API_URL_CONSULTA}, Corpo: ${JSON.stringify(requestBody)}`);
 
     const consultaResponse = await fetch(API_URL_CONSULTA, {
       method: 'POST',
@@ -78,9 +83,14 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
         const errorText = await consultaResponse.text();
         console.error("Erro na API de consulta:", errorText);
 
-        let errorMessage = `Erro na API de consulta: ${consultaResponse.status} ${consultaResponse.statusText}.`;
+        let errorMessage = `Erro ao iniciar consulta: ${consultaResponse.status} ${consultaResponse.statusText}.`;
         try {
             const errorJson = JSON.parse(errorText);
+
+            if (errorJson.error === "body/provider must be equal to one of the allowed values") {
+                 throw new Error(`Erro Crítico: A API da V8 rejeitou o valor do provedor '${requestBody.provider}'. Verifique com a V8 quais são os valores exatos esperados para 'provider' (ex: 'bms', 'cartos', 'qi') e ajuste o mapeamento no arquivo src/app/actions/fgts.ts.`);
+            }
+
             errorMessage += ` Detalhes: ${errorJson.message || JSON.stringify(errorJson)}`;
         } catch(e) {
             errorMessage += ` Resposta: ${errorText}`;
@@ -89,8 +99,15 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
     }
 
     const data = await consultaResponse.json();
-    
-    return data;
+    console.log("[V8 API] Resposta de início de consulta:", data);
+
+    // Agora, a resposta final virá pelo webhook. 
+    // A resposta imediata provavelmente é um status de que a consulta foi iniciada.
+    return {
+      status: "pending",
+      message: "Consulta de saldo iniciada. O resultado será enviado para o webhook.",
+      initialResponse: data,
+    };
 
   } catch (error) {
     console.error('Erro ao chamar a API de consulta FGTS:', error);
