@@ -14,23 +14,26 @@ type ActionResult = {
   message: string;
 };
 
-// Função de autenticação aprimorada com tratamento de erro robusto e corpo JSON
+// Função de autenticação alinhada com a documentação oficial da V8
 async function getAuthToken(): Promise<{token: string | null, error: string | null}> {
-  const tokenUrl = 'https://auth.v8sistema.com/oauth/token';
-  const bodyPayload = {
+  // CORREÇÃO: URL de autenticação corrigida para o host correto.
+  const tokenUrl = 'https://api.v8digital.com/oauth/token';
+
+  // CORREÇÃO: A API de autenticação exige 'application/x-www-form-urlencoded'.
+  const bodyPayload = new URLSearchParams({
     grant_type: 'password',
-    username: process.env.V8_USERNAME,
-    password: process.env.V8_PASSWORD,
-    audience: process.env.V8_AUDIENCE,
+    username: process.env.V8_USERNAME || '',
+    password: process.env.V8_PASSWORD || '',
+    audience: process.env.V8_AUDIENCE || '',
     scope: 'offline_access',
-    client_id: process.env.V8_CLIENT_ID,
-  };
+    client_id: process.env.V8_CLIENT_ID || '',
+  });
 
   try {
     const response = await fetch(tokenUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bodyPayload),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: bodyPayload.toString(),
     });
 
     const data = await response.json();
@@ -75,8 +78,9 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   // Etapa 2: Iniciar a consulta de saldo
   const { documentNumber, provider } = validation.data;
   const API_URL_CONSULTA = 'https://bff.v8sistema.com/fgts/balance';
-  const requestBody = { documentNumber, provider };
-  const requestBodyString = JSON.stringify(requestBody);
+  
+  // CORREÇÃO: Enviando o provider em maiúsculas, como no exemplo da documentação.
+  const requestBody = { documentNumber, provider: provider.toUpperCase() };
 
   try {
     const consultaResponse = await fetch(API_URL_CONSULTA, {
@@ -84,52 +88,31 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
-        'Content-Length': Buffer.byteLength(requestBodyString).toString(),
       },
-      body: requestBodyString,
+      body: JSON.stringify(requestBody),
     });
     
-    const responseBody = await consultaResponse.text();
-    let data = null;
-
-    try {
-      if (responseBody) {
-        data = JSON.parse(responseBody);
-      }
-    } catch (e) {
-      // Se a resposta não for um JSON válido, consideramos um erro.
-      return { 
-          status: 'error', 
-          stepIndex: 1, 
-          message: `A API parceira retornou uma resposta inesperada (não-JSON). Resposta: ${responseBody}` 
-      };
-    }
-      
-    // A API da V8 retorna 200 OK com corpo `null` ou `{}` em caso de falha lógica.
-    // Portanto, não podemos confiar em `consultaResponse.ok`.
-    // Verificamos se a resposta é nula ou um objeto vazio.
-    if (data === null || (typeof data === 'object' && Object.keys(data).length === 0)) {
-        return { 
-            status: 'error', 
-            stepIndex: 1, 
-            message: "A API parceira aceitou a requisição, mas não iniciou a consulta (resposta vazia). Verifique as credenciais ou contate o suporte da V8." 
-        };
-    }
-
-    // Se a resposta tem conteúdo, mas o status não é 2xx (ex: erro 400 com JSON)
+    // CORREÇÃO: A documentação diz que a resposta de sucesso para o POST é `null` ou vazia.
+    // Qualquer coisa diferente de um status 2xx é um erro.
     if (!consultaResponse.ok) {
-        let errorMessage = `Erro ao enviar consulta: ${consultaResponse.status} ${consultaResponse.statusText}.`;
-        if (data && (data.error || data.message)) {
-            errorMessage += ` Detalhes: ${JSON.stringify(data)}`;
+        const responseBody = await consultaResponse.text();
+        let errorDetails = responseBody;
+        try {
+            // Tenta parsear para pegar uma mensagem de erro mais detalhada
+            const errorJson = JSON.parse(responseBody);
+            errorDetails = errorJson.error || errorJson.message || responseBody;
+        } catch (e) {
+            // ignora se não for JSON
         }
+        const errorMessage = `Erro ao enviar consulta: ${consultaResponse.status} ${consultaResponse.statusText}. Detalhes: ${errorDetails}`;
         return { status: 'error', stepIndex: 1, message: errorMessage };
     }
    
-    // Se tudo deu certo, a resposta deve conter algum dado.
+    // Se a resposta for OK (2xx), consideramos que a consulta foi iniciada.
     return { 
         status: 'success', 
         stepIndex: 1, 
-        message: 'Consulta de saldo iniciada. Aguardando o resultado via webhook.' 
+        message: 'Consulta de saldo iniciada com sucesso. Aguardando o resultado via webhook.' 
     };
 
   } catch (error) {
