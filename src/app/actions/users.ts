@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -25,7 +26,7 @@ export type UserProfile = {
 };
 
 // Nova Server Action para buscar todos os usuários
-export async function getUsers(): Promise<{users: UserProfile[], error?: string}> {
+export async function getUsers(): Promise<{users: UserProfile[] | null, error?: string}> {
     try {
         initializeFirebaseAdmin();
         const firestore = getFirestore();
@@ -38,7 +39,7 @@ export async function getUsers(): Promise<{users: UserProfile[], error?: string}
     } catch (error) {
         const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao buscar usuários.";
         console.error("Erro ao buscar usuários:", message);
-        return { users: [], error: message };
+        return { users: null, error: message };
     }
 }
 

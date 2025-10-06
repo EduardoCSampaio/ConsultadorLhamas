@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { PageHeader } from "@/components/page-header";
@@ -30,7 +31,7 @@ export default function AdminUsersPage() {
             });
             setUsers([]);
         } else {
-            setUsers(fetchedUsers);
+            setUsers(fetchedUsers || []);
         }
         setIsLoading(false);
     };

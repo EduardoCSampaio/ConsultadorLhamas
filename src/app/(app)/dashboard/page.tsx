@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { PageHeader } from "@/components/page-header";
@@ -15,32 +16,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { UserProfile } from "@/app/actions/users";
 import { getUsers } from "@/app/actions/users";
 import { useDoc } from "@/firebase/firestore/use-doc";
+import { useToast } from "@/hooks/use-toast";
 
 
-function AdminDashboard({ userProfile }: { userProfile: UserProfile }) {
-  const [users, setUsers] = useState<UserProfile[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    async function fetchUsers() {
-      // Somente busca os usuários se o perfil for de admin
-      if (userProfile.role === 'admin') {
-        setIsLoading(true);
-        const { users: fetchedUsers, error } = await getUsers();
-        if (error) {
-          console.error("Failed to fetch users:", error);
-        }
-        setUsers(fetchedUsers);
-        setIsLoading(false);
-      }
-    }
-    fetchUsers();
-  }, [userProfile]);
-
-
-  const pendingUsers = useMemo(() => users?.filter(u => u.status === 'pending') || [], [users]);
-  const activeUsers = useMemo(() => users?.filter(u => u.status === 'active') || [], [users]);
-  const recentUsers = useMemo(() => users?.slice(0, 5) || [], [users]);
+async function AdminDashboard({ userProfile }: { userProfile: UserProfile }) {
+  const { users, error } = await getUsers();
+  
+  const pendingUsers = users?.filter(u => u.status === 'pending') || [];
+  const activeUsers = users?.filter(u => u.status === 'active') || [];
+  const recentUsers = users?.slice(0, 5) || [];
   
   const getStatusVariant = (status: string) => {
     switch (status) {
@@ -59,6 +43,22 @@ function AdminDashboard({ userProfile }: { userProfile: UserProfile }) {
         default: return status;
     }
   };
+
+  if (error) {
+    return (
+        <div className="flex flex-col gap-6">
+            <PageHeader
+                title="Dashboard do Administrador"
+                description="Ocorreu um erro ao carregar os dados."
+            />
+            <Card>
+                <CardContent className="pt-6">
+                    <div className="text-red-500">{error}</div>
+                </CardContent>
+            </Card>
+        </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -80,7 +80,7 @@ function AdminDashboard({ userProfile }: { userProfile: UserProfile }) {
             <UserPlus className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {isLoading ? <Skeleton className="h-8 w-1/4" /> : <div className="text-2xl font-bold">{pendingUsers.length}</div>}
+            <div className="text-2xl font-bold">{pendingUsers.length}</div>
             <p className="text-xs text-muted-foreground">Aguardando aprovação</p>
           </CardContent>
         </Card>
@@ -90,7 +90,7 @@ function AdminDashboard({ userProfile }: { userProfile: UserProfile }) {
             <UserCheck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-             {isLoading ? <Skeleton className="h-8 w-1/4" /> : <div className="text-2xl font-bold">{activeUsers.length}</div>}
+            <div className="text-2xl font-bold">{activeUsers.length}</div>
             <p className="text-xs text-muted-foreground">Usuários com acesso liberado</p>
           </CardContent>
         </Card>
@@ -100,7 +100,7 @@ function AdminDashboard({ userProfile }: { userProfile: UserProfile }) {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {isLoading ? <Skeleton className="h-8 w-1/4" /> : <div className="text-2xl font-bold">{users?.length || 0}</div>}
+            <div className="text-2xl font-bold">{users?.length || 0}</div>
             <p className="text-xs text-muted-foreground">Total de contas registradas</p>
           </CardContent>
         </Card>
@@ -120,29 +120,20 @@ function AdminDashboard({ userProfile }: { userProfile: UserProfile }) {
                       </TableRow>
                   </TableHeader>
                   <TableBody>
-                      {isLoading ? (
-                          Array.from({ length: 5 }).map((_, i) => (
-                              <TableRow key={i}>
-                                  <TableCell><Skeleton className="h-5 w-48" /></TableCell>
-                                  <TableCell className="text-right"><Skeleton className="h-5 w-20 ml-auto" /></TableCell>
-                              </TableRow>
-                          ))
-                      ) : (
-                          recentUsers.map((user) => (
-                              <TableRow key={user.uid}>
-                                  <TableCell>
-                                      <div className="font-medium">{user.email}</div>
-                                  </TableCell>
-                                  <TableCell className="text-right">
-                                      <Badge variant={getStatusVariant(user.status)} className="capitalize">{getStatusText(user.status)}</Badge>
-                                  </TableCell>
-                              </TableRow>
-                          ))
-                      )}
+                      {recentUsers.map((user) => (
+                          <TableRow key={user.uid}>
+                              <TableCell>
+                                  <div className="font-medium">{user.email}</div>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                  <Badge variant={getStatusVariant(user.status)} className="capitalize">{getStatusText(user.status)}</Badge>
+                              </TableCell>
+                          </TableRow>
+                      ))}
                   </TableBody>
               </Table>
             </div>
-             {recentUsers?.length === 0 && !isLoading && (
+             {recentUsers?.length === 0 && (
               <div className="text-center p-8 text-muted-foreground">
                 Nenhum usuário registrado ainda.
               </div>

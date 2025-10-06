@@ -1,4 +1,5 @@
 
+
 import { initializeApp, getApps, App, cert, ServiceAccount } from 'firebase-admin/app';
 
 // This will hold the initialized app instance.
@@ -39,7 +40,7 @@ export function initializeFirebaseAdmin(): App {
   // If other apps were somehow initialized, use the first one.
   if (getApps().length > 0) {
     adminApp = getApps()[0];
-    return adminApp;
+    if (adminApp) return adminApp;
   }
 
   // Get the credentials from environment variables.
