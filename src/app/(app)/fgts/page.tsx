@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { PageHeader } from "@/components/page-header";
@@ -101,6 +102,7 @@ function ProviderSelector({ control, disabled }: { control: any; disabled?: bool
                             <FormItem className="flex items-center space-x-3 space-y-0">
                                 <FormControl>
                                     <RadioGroupItem value="qi" />
+                               
                                 </FormControl>
                                 <FormLabel className="font-normal">QI Tech</FormLabel>
                             </FormItem>
@@ -159,7 +161,7 @@ export default function FgtsPage() {
   
   const [file, setFile] = useState<File | null>(null);
   const [recentBatches, setRecentBatches] = useState<BatchJob[]>([]);
-  const [isProcessingBatch, setIsProcessingBatch] = useState(isProcessingBatch);
+  const [isProcessingBatch, setIsProcessingBatch] = useState(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState<string | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -618,5 +620,3 @@ export default function FgtsPage() {
     </div>
   );
 }
-
-    
