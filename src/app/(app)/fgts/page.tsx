@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { PageHeader } from "@/components/page-header";
@@ -19,16 +18,17 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Loader2, Search, CheckCircle2, XCircle, Circle, User, Briefcase, Landmark, Calendar, Banknote } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Loader2, Search, CheckCircle2, XCircle, Circle, User, Briefcase, Landmark, Calendar, Banknote, Upload, FileText } from "lucide-react";
+import { useState, useEffect, useRef, ChangeEvent } from "react";
 import { consultarSaldoFgts } from "@/app/actions/fgts";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useDoc } from "@/firebase/firestore/use-doc";
 import { useFirestore, useMemoFirebase } from "@/firebase";
 import { doc } from "firebase/firestore";
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
+import * as XLSX from 'xlsx';
+import { Badge } from "@/components/ui/badge";
 
 const manualFormSchema = z.object({
   documentNumber: z.string().min(11, {
@@ -58,7 +58,13 @@ const initialSteps: StatusStep[] = [
   { name: "Aguardando resposta do Webhook", status: "pending" },
 ];
 
-function ProviderSelector({ control }: { control: any }) {
+type BatchStatus = {
+    cpf: string;
+    status: 'pending' | 'loading' | 'success' | 'error';
+    message?: string;
+};
+
+function ProviderSelector({ control, disabled }: { control: any, disabled?: boolean }) {
   return (
     <FormField
       control={control}
@@ -71,6 +77,7 @@ function ProviderSelector({ control }: { control: any }) {
               onValueChange={field.onChange}
               defaultValue={field.value}
               className="flex flex-col space-y-1"
+              disabled={disabled}
             >
               <FormItem className="flex items-center space-x-3 space-y-0">
                 <FormControl>
@@ -135,6 +142,11 @@ export default function FgtsPage() {
   const [currentCpf, setCurrentCpf] = useState<string | null>(null);
   const [statusSteps, setStatusSteps] = useState<StatusStep[]>(initialSteps);
   const [showStatus, setShowStatus] = useState(false);
+  
+  const [file, setFile] = useState<File | null>(null);
+  const [batchStatus, setBatchStatus] = useState<BatchStatus[]>([]);
+  const [isProcessingBatch, setIsProcessingBatch] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const firestore = useFirestore();
 
@@ -154,7 +166,7 @@ export default function FgtsPage() {
     return doc(firestore, "webhookResponses", currentCpf);
   }, [firestore, currentCpf]);
   
-  const { data: webhookResponse, isLoading: isWebhookLoading } = useDoc(docRef);
+  const { data: webhookResponse } = useDoc(docRef);
 
   const webhookData = webhookResponse?.responseBody;
 
@@ -166,21 +178,71 @@ export default function FgtsPage() {
     }
   }, [webhookData, statusSteps]);
 
+  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      setFile(files[0]);
+      setBatchStatus([]);
+    }
+  };
+
+  const handleProcessBatch = async () => {
+    if (!file) return;
+
+    const provider = loteForm.getValues("provider");
+    if (!provider) {
+        loteForm.setError("provider", { type: "manual", message: "Selecione um provedor antes de processar." });
+        return;
+    }
+
+    setIsProcessingBatch(true);
+    
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        const cpfs = json.map(row => String((row as any)[0])).filter(cpf => cpf && cpf.length >= 11);
+        const initialBatchStatus = cpfs.map(cpf => ({ cpf, status: 'pending' as const }));
+        setBatchStatus(initialBatchStatus);
+
+        for (let i = 0; i < cpfs.length; i++) {
+            const cpf = cpfs[i];
+            
+            setBatchStatus(prev => prev.map(item => item.cpf === cpf ? { ...item, status: 'loading' } : item));
+
+            const result = await consultarSaldoFgts({ documentNumber: cpf, provider });
+
+            setBatchStatus(prev => prev.map(item => 
+                item.cpf === cpf ? { 
+                    ...item, 
+                    status: result.status === 'success' ? 'success' : 'error',
+                    message: result.message
+                } : item
+            ));
+        }
+        setIsProcessingBatch(false);
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
 
   async function onManualSubmit(values: z.infer<typeof manualFormSchema>) {
     setIsLoading(true);
     setCurrentCpf(values.documentNumber);
     setShowStatus(true);
-    setStatusSteps(initialSteps);
+    setStatusSteps(initialSteps.map(s => ({...s, status: 'pending', message: undefined})));
 
     const updateStep = (index: number, status: StepStatus, message?: string) => {
       setStatusSteps(prev => {
         const newSteps = [...prev];
         newSteps[index] = { ...newSteps[index], status, message };
-        // If a step fails, ensure subsequent steps are not marked as running
         if (status === 'error') {
           for (let i = index + 1; i < newSteps.length; i++) {
-            newSteps[i] = { ...newSteps[i], status: 'pending', message: undefined };
+            newSteps[i] = { ...newSteps[i], status: 'pending' };
           }
         }
         return newSteps;
@@ -191,9 +253,6 @@ export default function FgtsPage() {
     const result = await consultarSaldoFgts(values);
   
     if (result.status === 'error') {
-      for (let i = 0; i < result.stepIndex; i++) {
-        updateStep(i, 'success');
-      }
       updateStep(result.stepIndex, 'error', result.message);
       setIsLoading(false);
       return; 
@@ -244,7 +303,7 @@ export default function FgtsPage() {
                             </FormItem>
                           )}
                         />
-                        <ProviderSelector control={manualForm.control} />
+                        <ProviderSelector control={manualForm.control} disabled={isLoading || statusSteps[2].status === 'running'} />
                       </div>
                       <Button type="submit" disabled={isLoading || statusSteps[2].status === 'running'}>
                         {isLoading || statusSteps[2].status === 'running' ? (
@@ -355,26 +414,97 @@ export default function FgtsPage() {
                  <CardHeader>
                   <CardTitle>Consulta de FGTS em Lote</CardTitle>
                   <CardDescription>
-                    Faça o upload de um arquivo para consultar múltiplos clientes de uma vez.
+                    Faça o upload de um arquivo XLSX com os CPFs na primeira coluna para consultar múltiplos clientes.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Form {...loteForm}>
-                        <form className="space-y-8">
+                        <form onSubmit={(e) => e.preventDefault()} className="space-y-8">
                           <div className="grid md:grid-cols-2 gap-8">
-                            <ProviderSelector control={loteForm.control} />
-                            <div className="flex flex-col items-center justify-center gap-4 text-center h-48 border-2 border-dashed rounded-lg">
-                                <h3 className="text-2xl font-bold tracking-tight">
-                                    Upload de Arquivo
-                                </h3>
-                                <p className="text-sm text-muted-foreground">
-                                    A funcionalidade de upload será implementada aqui.
-                                </p>
-                                <Button variant="outline">Selecionar Arquivo</Button>
+                            <ProviderSelector control={loteForm.control} disabled={isProcessingBatch} />
+                            
+                            <div className="space-y-4">
+                                <FormLabel>Arquivo de CPFs</FormLabel>
+                                <Input 
+                                    type="file" 
+                                    ref={fileInputRef} 
+                                    onChange={handleFileChange} 
+                                    accept=".xlsx, .xls"
+                                    className="hidden" 
+                                    disabled={isProcessingBatch}
+                                />
+                                <div 
+                                    className="flex flex-col items-center justify-center gap-2 text-center h-48 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary"
+                                    onClick={() => fileInputRef.current?.click()}
+                                >
+                                    <Upload className="h-8 w-8 text-muted-foreground" />
+                                    {file ? (
+                                        <div className="flex items-center gap-2">
+                                            <FileText className="h-5 w-5 text-primary" />
+                                            <span className="text-sm font-medium text-primary">{file.name}</span>
+                                        </div>
+                                    ) : (
+                                      <>
+                                        <h3 className="text-lg font-bold tracking-tight">
+                                            Selecionar Arquivo
+                                        </h3>
+                                        <p className="text-sm text-muted-foreground">
+                                            Arraste ou clique para fazer o upload.
+                                        </p>
+                                      </>
+                                    )}
+                                </div>
                             </div>
                           </div>
+                           <Button type="button" onClick={handleProcessBatch} disabled={!file || isProcessingBatch}>
+                                {isProcessingBatch ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Search className="mr-2 h-4 w-4" />
+                                )}
+                                {isProcessingBatch ? 'Processando...' : 'Iniciar Processamento em Lote'}
+                           </Button>
                         </form>
                     </Form>
+                    {batchStatus.length > 0 && (
+                        <Card className="mt-6">
+                            <CardHeader>
+                                <CardTitle>Resultados do Processamento em Lote</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>CPF</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead>Mensagem</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {batchStatus.map(({ cpf, status, message }) => (
+                                            <TableRow key={cpf}>
+                                                <TableCell className="font-mono">{cpf}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant={
+                                                        status === 'success' ? 'default' :
+                                                        status === 'pending' ? 'secondary' :
+                                                        status === 'loading' ? 'outline' :
+                                                        'destructive'
+                                                    } className="capitalize">
+                                                        {status === 'loading' && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
+                                                        {status === 'pending' ? 'Pendente' : 
+                                                         status === 'loading' ? 'Processando' :
+                                                         status === 'success' ? 'Iniciado' : 'Erro'}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-sm text-muted-foreground">{message}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </CardContent>
+                        </Card>
+                    )}
                 </CardContent>
               </Card>
             </TabsContent>
