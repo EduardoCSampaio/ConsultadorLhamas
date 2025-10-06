@@ -56,9 +56,22 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
     // 2. Realizar a consulta de saldo FGTS usando o token
     const { documentNumber, provider } = validation.data;
     
+    // Mapeia o valor do formulário para o valor esperado pela API
+    const providerApiMap = {
+      cartos: "CARTOS",
+      bms: "BMS",
+      qi: "QI", // Supondo que "qi" seja "QI", ajuste se necessário
+    };
+
+    const providerForApi = providerApiMap[provider];
+
+    if (!providerForApi) {
+        throw new Error(`Provedor inválido selecionado: ${provider}`);
+    }
+
     const API_URL_CONSULTA = 'https://bff.v8sistema.com/fgts/balance'; 
 
-    console.log(`Consultando CPF: ${documentNumber} no provedor: ${provider.toUpperCase()}`);
+    console.log(`Consultando CPF: ${documentNumber} no provedor: ${providerForApi}`);
 
     const consultaResponse = await fetch(API_URL_CONSULTA, {
       method: 'POST',
@@ -68,7 +81,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
       },
       body: JSON.stringify({
         documentNumber: documentNumber,
-        provider: provider.toUpperCase(), // Enviando o nome do provider em maiúsculas
+        provider: providerForApi,
       }),
     });
 
