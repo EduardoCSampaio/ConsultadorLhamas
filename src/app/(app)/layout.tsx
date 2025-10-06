@@ -32,6 +32,7 @@ import { signOut, getIdTokenResult } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Skeleton } from '@/components/ui/skeleton';
 import { doc } from 'firebase/firestore';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 const baseMenuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard", tooltip: "Dashboard" },
@@ -178,6 +179,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="flex-1">
             {/* We can add breadcrumbs here */}
           </div>
+          <ThemeToggle />
         </header>
         <main className="flex-1 p-4 md:p-6">{children}</main>
       </SidebarInset>
