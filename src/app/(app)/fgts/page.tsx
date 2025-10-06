@@ -272,7 +272,7 @@ export default function FgtsPage() {
                   <CardDescription>
                     Faça o upload de um arquivo para consultar múltiplos clientes de uma vez.
                   </CardDescription>
-                </Header>
+                </CardHeader>
                 <CardContent>
                     <Form {...loteForm}>
                         <form className="space-y-8">
@@ -299,3 +299,5 @@ export default function FgtsPage() {
     </div>
   );
 }
+
+    
