@@ -160,7 +160,6 @@ export default function FgtsPage() {
   const [showStatus, setShowStatus] = useState(false);
   
   const [file, setFile] = useState<File | null>(null);
-  const [recentBatches, setRecentBatches] = useState<BatchJob[]>([]);
   const [isProcessingBatch, setIsProcessingBatch] = useState(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState<string | null>(null);
   
@@ -168,6 +167,30 @@ export default function FgtsPage() {
   const { toast } = useToast();
 
   const firestore = useFirestore();
+
+  const [recentBatches, setRecentBatches] = useState<BatchJob[]>(() => {
+    // Initialize state from localStorage synchronously
+    if (typeof window === 'undefined') {
+        return [];
+    }
+    try {
+        const storedBatches = window.localStorage.getItem(LOCAL_STORAGE_KEY);
+        return storedBatches ? JSON.parse(storedBatches) : [];
+    } catch (error) {
+        console.error("Failed to parse recent batches from localStorage", error);
+        return [];
+    }
+  });
+
+
+  // Save batches to localStorage whenever they change
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(recentBatches));
+    } catch (error) {
+      console.error("Failed to save recent batches to localStorage", error);
+    }
+  }, [recentBatches]);
 
   const manualForm = useForm<z.infer<typeof manualFormSchema>>({
     resolver: zodResolver(manualFormSchema),
@@ -179,19 +202,6 @@ export default function FgtsPage() {
   const loteForm = useForm<z.infer<typeof loteFormSchema>>({
       resolver: zodResolver(loteFormSchema),
   });
-
-  // Load batches from localStorage on mount
-  useEffect(() => {
-    const storedBatches = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (storedBatches) {
-      setRecentBatches(JSON.parse(storedBatches));
-    }
-  }, []);
-
-  // Save batches to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(recentBatches));
-  }, [recentBatches]);
 
   const docRef = useMemoFirebase(() => {
     if (!firestore || !currentCpf) return null;
@@ -258,7 +268,7 @@ export default function FgtsPage() {
           cpfs: cpfs,
         };
 
-        setRecentBatches(prev => [newBatch, ...prev].slice(0, 5));
+        setRecentBatches(prev => [newBatch, ...prev]);
 
         const result = await processarLoteFgts({ cpfs, provider });
         
