@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Loader2, Search, Send } from "lucide-react";
 import { useState } from "react";
-import { consultarSaldoFgts } from "@/app/actions/fgts";
+import { consultarSaldoFgts, simularWebhookAction } from "@/app/actions/fgts";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useDoc } from "@/firebase/firestore/use-doc";
 import { useFirestore, useMemoFirebase } from "@/firebase";
@@ -41,22 +41,6 @@ const loteFormSchema = z.object({
         required_error: "Você precisa selecionar um provedor.",
     }),
 });
-
-// Helper function to simulate a webhook call
-async function simulateWebhook(payload: any) {
-  const response = await fetch('/api/webhook/balance', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(`Simulação de Webhook falhou: ${errorData.message || 'Erro desconhecido'}`);
-  }
-  return response.json();
-}
 
 function ProviderSelector({ control }: { control: any }) {
   return (
@@ -153,7 +137,8 @@ export default function FgtsPage() {
         throw new Error("O payload de simulação precisa ter a propriedade 'documentNumber'.");
       }
       setCurrentCpf(payload.documentNumber);
-      await simulateWebhook(payload);
+      // Chama a Server Action diretamente
+      await simularWebhookAction(payload);
     } catch (error) {
        if (error instanceof Error) {
             setApiError(error.message);

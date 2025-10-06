@@ -2,6 +2,8 @@
 'use server';
 
 import { z } from 'zod';
+import { initializeFirebase } from '@/firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 // Schema para validação dos dados de entrada da action
 const actionSchema = z.object({
@@ -117,3 +119,45 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
     throw new Error('Ocorreu um erro de comunicação com a API.');
   }
 }
+
+/**
+ * Server Action para simular o recebimento de um webhook e salvar no Firestore.
+ * @param payload O corpo (JSON) que seria enviado pelo webhook.
+ */
+export async function simularWebhookAction(payload: any) {
+  try {
+    const { firestore: db } = initializeFirebase();
+
+    const docId = payload.documentNumber || payload.id;
+    
+    if (!docId) {
+      throw new Error("Payload da simulação precisa ter 'documentNumber' ou 'id'.");
+    }
+
+    const docRef = doc(db, 'webhookResponses', docId.toString());
+
+    await setDoc(docRef, {
+      responseBody: payload,
+      createdAt: serverTimestamp(),
+      status: 'received_simulation',
+      message: 'Payload da simulação armazenado no Firestore.',
+      id: docId.toString(),
+    }, { merge: true });
+
+    return { 
+        status: 'success', 
+        message: 'Simulação de Webhook processada com sucesso.' 
+    };
+
+  } catch (error) {
+    console.error("Erro ao simular o webhook:", error);
+    let errorMessage = "Erro desconhecido na simulação";
+    if (error instanceof Error) {
+        errorMessage = error.message;
+    }
+    // Lança um erro para que o frontend possa capturá-lo
+    throw new Error(errorMessage);
+  }
+}
+
+    
