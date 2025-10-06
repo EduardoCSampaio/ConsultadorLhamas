@@ -54,10 +54,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
     // 2. Realizar a consulta de saldo FGTS usando o token
     const { documentNumber, provider } = validation.data;
     
-    // =================================================================
-    // AQUI VOCÊ DEVE INSERIR A URL DA SUA API DE CONSULTA DE SALDO
-    // =================================================================
-    const API_URL_CONSULTA = 'https://bff.v8sistema.com/seu/endpoint/de/consulta'; // <-- SUBSTITUA AQUI
+    const API_URL_CONSULTA = 'https://bff.v8sistema.com/fgts/balance'; 
 
     console.log(`Consultando CPF: ${documentNumber} no provedor: ${provider}`);
 
@@ -69,13 +66,13 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
       },
       body: JSON.stringify({
         cpf: documentNumber,
-        provedor: provider, // ou como a API de consulta espera o provedor
+        provedor: provider, 
       }),
     });
 
     if (!consultaResponse.ok) {
       const errorBody = await consultaResponse.json().catch(() => ({ message: 'Não foi possível obter detalhes do erro.' }));
-      throw new Error(`Erro na API de consulta: ${consultaResponse.status} ${consultaResponse.statusText}. Detalhes: ${errorBody.message}`);
+      throw new Error(`Erro na API de consulta: ${consultaResponse.status} ${consultaResponse.statusText}. Detalhes: ${errorBody.message || 'Erro desconhecido'}`);
     }
 
     const data = await consultaResponse.json();
