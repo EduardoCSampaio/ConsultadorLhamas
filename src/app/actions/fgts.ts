@@ -75,18 +75,18 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   // Etapa 2: Iniciar a consulta de saldo
   const { documentNumber, provider } = validation.data;
   const API_URL_CONSULTA = 'https://bff.v8sistema.com/fgts/balance';
+  const requestBody = { documentNumber, provider };
+  const requestBodyString = JSON.stringify(requestBody);
 
   try {
     const consultaResponse = await fetch(API_URL_CONSULTA, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`, 
+        'Authorization': `Bearer ${token}`,
+        'Content-Length': Buffer.byteLength(requestBodyString).toString(),
       },
-      body: JSON.stringify({ 
-        documentNumber, 
-        provider
-      }),
+      body: requestBodyString,
     });
     
     const responseBody = await consultaResponse.text();
