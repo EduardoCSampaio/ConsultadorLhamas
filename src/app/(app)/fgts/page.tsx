@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Loader2, Search, CheckCircle2, XCircle, Circle } from "lucide-react";
+import { Loader2, Search, CheckCircle2, XCircle, Circle, User, Briefcase, Landmark, Calendar, Banknote } from "lucide-react";
 import { useState, useEffect } from "react";
 import { consultarSaldoFgts } from "@/app/actions/fgts";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -27,6 +27,8 @@ import { useDoc } from "@/firebase/firestore/use-doc";
 import { useFirestore, useMemoFirebase } from "@/firebase";
 import { doc } from "firebase/firestore";
 import { cn } from "@/lib/utils";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Separator } from "@/components/ui/separator";
 
 const manualFormSchema = z.object({
   documentNumber: z.string().min(11, {
@@ -110,6 +112,24 @@ const StepIcon = ({ status }: { status: StepStatus }) => {
     }
   };
 
+const formatCurrency = (value: string | number | undefined) => {
+    if (value === undefined) return 'N/A';
+    const numberValue = typeof value === 'string' ? parseFloat(value) : value;
+    return new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+    }).format(numberValue);
+};
+
+const formatDate = (dateString: string | undefined) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('pt-BR', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+    });
+};
+
 export default function FgtsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [currentCpf, setCurrentCpf] = useState<string | null>(null);
@@ -136,13 +156,15 @@ export default function FgtsPage() {
   
   const { data: webhookResponse, isLoading: isWebhookLoading } = useDoc(docRef);
 
+  const webhookData = webhookResponse?.responseBody;
+
   useEffect(() => {
-    if (webhookResponse && statusSteps[2].status === 'running') {
+    if (webhookData && statusSteps[2].status === 'running') {
       setStatusSteps(prev => prev.map((step, index) => 
         index === 2 ? { ...step, status: 'success', message: 'Resposta recebida!' } : step
       ));
     }
-  }, [webhookResponse, statusSteps]);
+  }, [webhookData, statusSteps]);
 
 
   async function onManualSubmit(values: z.infer<typeof manualFormSchema>) {
@@ -151,39 +173,36 @@ export default function FgtsPage() {
     setShowStatus(true);
     setStatusSteps(initialSteps);
 
-    // Function to update a specific step
     const updateStep = (index: number, status: StepStatus, message?: string) => {
       setStatusSteps(prev => {
         const newSteps = [...prev];
         newSteps[index] = { ...newSteps[index], status, message };
+        // If a step fails, ensure subsequent steps are not marked as running
+        if (status === 'error') {
+          for (let i = index + 1; i < newSteps.length; i++) {
+            newSteps[i] = { ...newSteps[i], status: 'pending', message: undefined };
+          }
+        }
         return newSteps;
       });
     };
   
-    // Start step 0 (Authentication)
     updateStep(0, 'running');
     const result = await consultarSaldoFgts(values);
   
-    // Check for errors at any step
     if (result.status === 'error') {
-      // Mark previous steps as success if the error is not in the first step
       for (let i = 0; i < result.stepIndex; i++) {
         updateStep(i, 'success');
       }
-      // Mark the failing step as error
       updateStep(result.stepIndex, 'error', result.message);
-      setIsLoading(false); // Stop loading
-      return; // IMPORTANT: Stop execution
+      setIsLoading(false);
+      return; 
     }
   
-    // If we reach here, steps 0 and 1 were successful
     updateStep(0, 'success');
     updateStep(1, 'success', result.message);
-  
-    // Start step 2 (Waiting for Webhook)
     updateStep(2, 'running');
   
-    // isLoading is set to false to re-enable the button, but we show a different text
     setIsLoading(false);
   }
 
@@ -267,16 +286,64 @@ export default function FgtsPage() {
                     </Card>
                   )}
 
-                  {webhookResponse && (
-                    <Alert className="mt-6" variant="default">
-                      <CheckCircle2 className="h-4 w-4" />
-                      <AlertTitle>Resposta do Webhook Recebida!</AlertTitle>
-                      <AlertDescription>
-                        <pre className="mt-2 rounded-md bg-muted p-4 overflow-auto max-h-96">
-                            {JSON.stringify(webhookResponse.responseBody || webhookResponse, null, 2)}
-                        </pre>
-                      </AlertDescription>
-                    </Alert>
+                  {webhookData && (
+                     <Card className="mt-6">
+                        <CardHeader>
+                            <CardTitle>Resultado da Consulta</CardTitle>
+                            <CardDescription>
+                                O saldo e as parcelas disponíveis para o CPF consultado foram recebidos.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid gap-6">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="flex items-center gap-4 rounded-lg border p-4">
+                                        <Landmark className="h-8 w-8 text-primary" />
+                                        <div>
+                                            <p className="text-sm text-muted-foreground">Saldo Total</p>
+                                            <p className="text-2xl font-bold">{formatCurrency(webhookData.balance)}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-4 rounded-lg border p-4">
+                                        <User className="h-8 w-8 text-primary" />
+                                        <div>
+                                            <p className="text-sm text-muted-foreground">CPF</p>
+                                            <p className="text-lg font-semibold">{webhookData.documentNumber}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-4 rounded-lg border p-4">
+                                        <Briefcase className="h-8 w-8 text-primary" />
+                                        <div>
+                                            <p className="text-sm text-muted-foreground">Provedor</p>
+                                            <p className="text-lg font-semibold capitalize">{webhookData.provider}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <Separator />
+                                <div>
+                                    <h4 className="text-lg font-medium mb-4">Parcelas Disponíveis</h4>
+                                    <div className="rounded-md border">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead><Calendar className="inline-block mr-2 h-4 w-4" />Data de Vencimento</TableHead>
+                                                    <TableHead className="text-right"><Banknote className="inline-block mr-2 h-4 w-4" />Valor da Parcela</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {webhookData.installments?.map((item: any, index: number) => (
+                                                    <TableRow key={index}>
+                                                        <TableCell className="font-medium">{formatDate(item.dueDate)}</TableCell>
+                                                        <TableCell className="text-right">{formatCurrency(item.amount)}</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
                   )}
                   
                 </CardContent>
