@@ -14,16 +14,17 @@ type ActionResult = {
   message: string;
 };
 
+// Função de autenticação aprimorada com tratamento de erro robusto
 async function getAuthToken(): Promise<{token: string | null, error: string | null}> {
   const tokenUrl = 'https://auth.v8sistema.com/oauth/token';
-
-  const params = new URLSearchParams();
-  params.append('grant_type', 'password');
-  params.append('username', process.env.V8_USERNAME!);
-  params.append('password', process.env.V8_PASSWORD!);
-  params.append('audience', process.env.V8_AUDIENCE!);
-  params.append('scope', 'offline_access');
-  params.append('client_id', process.env.V8_CLIENT_ID!);
+  const params = new URLSearchParams({
+    grant_type: 'password',
+    username: process.env.V8_USERNAME!,
+    password: process.env.V8_PASSWORD!,
+    audience: process.env.V8_AUDIENCE!,
+    scope: 'offline_access',
+    client_id: process.env.V8_CLIENT_ID!,
+  });
 
   try {
     const response = await fetch(tokenUrl, {
@@ -32,17 +33,22 @@ async function getAuthToken(): Promise<{token: string | null, error: string | nu
       body: params.toString(),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      return { token: null, error: `Falha na autenticação com a V8: ${response.status} ${response.statusText}. Detalhes: ${errorText}` };
+    const data = await response.json();
+
+    // Validação explícita do access_token na resposta
+    if (!response.ok || !data.access_token) {
+      const errorMessage = data.error_description || data.error || JSON.stringify(data);
+      console.error(`[V8 AUTH] Falha na autenticação: ${errorMessage}`);
+      return { token: null, error: `Falha na autenticação com a V8: ${errorMessage}` };
     }
 
-    const data = await response.json();
     return { token: data.access_token, error: null };
   } catch (error) {
-    return { token: null, error: 'Erro de comunicação ao tentar autenticar com a API parceira.' };
+    console.error('[V8 AUTH] Erro de comunicação ao tentar autenticar:', error);
+    return { token: null, error: 'Erro de rede ao tentar autenticar com a API parceira.' };
   }
 }
+
 
 export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): Promise<ActionResult> {
   const validation = actionSchema.safeParse(input);
@@ -55,6 +61,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   const { token, error: tokenError } = await getAuthToken();
 
   if (tokenError) {
+    // Retorna o erro vindo diretamente da função de autenticação
     return { status: 'error', stepIndex: 0, message: tokenError };
   }
 
@@ -69,31 +76,30 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`, 
       },
-      body: JSON.stringify({ documentNumber, provider }),
+      body: JSON.stringify({ 
+        documentNumber, 
+        // Garantindo que o provedor seja enviado em maiúsculas
+        provider: provider.toUpperCase() 
+      }),
       // @ts-ignore
       duplex: 'half',
     });
     
-    // Resposta bem-sucedida, mas precisamos verificar o corpo
-    if (consultaResponse.ok) { // Usa .ok para abranger status 200-299
-      
-      const textBody = await consultaResponse.text();
+    if (consultaResponse.ok) {
+      const responseBody = await consultaResponse.text();
       let data = null;
       try {
-        if (textBody) {
-          data = JSON.parse(textBody);
-        }
+        if (responseBody) data = JSON.parse(responseBody);
       } catch (e) {
-        // Corpo não é JSON, o que pode ser um problema
          return { 
             status: 'error', 
             stepIndex: 1, 
-            message: `A API parceira retornou uma resposta inesperada (não-JSON). Resposta: ${textBody}` 
+            message: `A API parceira retornou uma resposta inesperada (não-JSON). Resposta: ${responseBody}` 
         };
       }
       
-      // Se a resposta for vazia ou nula, tratamos como erro de processamento na V8
-      if (data === null || (typeof data === 'object' && Object.keys(data).length === 0 && textBody.trim() !== '{}')) {
+      // A V8 pode retornar 200 OK com corpo vazio ou nulo se não processar.
+      if (data === null || (typeof data === 'object' && Object.keys(data).length === 0 && responseBody.trim() !== '{}')) {
          return { 
               status: 'error', 
               stepIndex: 1, 
@@ -101,7 +107,6 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
           };
       }
       
-      // Sucesso, a consulta foi iniciada
       return { 
           status: 'success', 
           stepIndex: 1, 
@@ -109,7 +114,6 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       };
 
     } else {
-      // Tratar erros HTTP
       let errorMessage = `Erro ao enviar consulta: ${consultaResponse.status} ${consultaResponse.statusText}.`;
       try {
           const errorData = await consultaResponse.json();
