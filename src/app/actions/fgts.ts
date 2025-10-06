@@ -14,28 +14,27 @@ type ActionResult = {
   message: string;
 };
 
-// Função de autenticação aprimorada com tratamento de erro robusto
+// Função de autenticação aprimorada com tratamento de erro robusto e corpo JSON
 async function getAuthToken(): Promise<{token: string | null, error: string | null}> {
   const tokenUrl = 'https://auth.v8sistema.com/oauth/token';
-  const params = new URLSearchParams({
+  const bodyPayload = {
     grant_type: 'password',
     username: process.env.V8_USERNAME!,
     password: process.env.V8_PASSWORD!,
     audience: process.env.V8_AUDIENCE!,
     scope: 'offline_access',
     client_id: process.env.V8_CLIENT_ID!,
-  });
+  };
 
   try {
     const response = await fetch(tokenUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: params.toString(),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bodyPayload),
     });
 
     const data = await response.json();
 
-    // Validação explícita do access_token na resposta
     if (!response.ok || !data.access_token) {
       const errorMessage = data.error_description || data.error || JSON.stringify(data);
       console.error(`[V8 AUTH] Falha na autenticação: ${errorMessage}`);
@@ -49,7 +48,6 @@ async function getAuthToken(): Promise<{token: string | null, error: string | nu
   }
 }
 
-
 export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): Promise<ActionResult> {
   const validation = actionSchema.safeParse(input);
 
@@ -61,7 +59,6 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   const { token, error: tokenError } = await getAuthToken();
 
   if (tokenError) {
-    // Retorna o erro vindo diretamente da função de autenticação
     return { status: 'error', stepIndex: 0, message: tokenError };
   }
 
@@ -78,24 +75,20 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       },
       body: JSON.stringify({ 
         documentNumber, 
-        provider // Enviando o provedor como recebido (minúsculas)
+        provider // Enviando em minúsculas, conforme confirmado pelo erro 400 anterior.
       }),
       // @ts-ignore - Propriedade necessária para alguns ambientes Node.js
       duplex: 'half',
     });
     
-    // A API V8 pode retornar 200 OK com corpo vazio ou nulo mesmo em caso de erro lógico.
-    // Portanto, não podemos confiar apenas em `consultaResponse.ok`.
     const responseBody = await consultaResponse.text();
     let data = null;
 
     try {
-      // Tenta parsear o JSON apenas se o corpo não for vazio.
       if (responseBody) {
         data = JSON.parse(responseBody);
       }
     } catch (e) {
-      // Se a resposta não for um JSON válido, é um erro.
       return { 
           status: 'error', 
           stepIndex: 1, 
@@ -103,23 +96,17 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       };
     }
       
-    // Se, após o parse, `data` for nulo ou um objeto vazio, consideramos um erro,
-    // pois a V8 não iniciou a consulta.
-    if (data === null || (typeof data === 'object' && Object.keys(data).length === 0 && responseBody.trim() !== '{}')) {
-        // Se a resposta HTTP não foi OK, usamos o status para montar a mensagem.
-        if (!consultaResponse.ok) {
-             let errorMessage = `Erro ao enviar consulta: ${consultaResponse.status} ${consultaResponse.statusText}.`;
-             try {
-                 // Tenta obter mais detalhes do corpo, se houver
-                 const errorData = JSON.parse(responseBody);
-                 errorMessage += ` Detalhes: ${errorData.message || JSON.stringify(errorData)}`;
-             } catch(e) {
-                 errorMessage += ` Resposta: ${responseBody}`;
-             }
-             return { status: 'error', stepIndex: 1, message: errorMessage };
+    if (!consultaResponse.ok) {
+        let errorMessage = `Erro ao enviar consulta: ${consultaResponse.status} ${consultaResponse.statusText}.`;
+        if (data && data.error) {
+            errorMessage += ` Detalhes: ${JSON.stringify(data)}`;
+        } else if(responseBody) {
+            errorMessage += ` Resposta: ${responseBody}`;
         }
-       
-        // Se a resposta HTTP foi OK, mas o corpo é nulo/vazio.
+        return { status: 'error', stepIndex: 1, message: errorMessage };
+    }
+   
+    if (data === null || (typeof data === 'object' && Object.keys(data).length === 0 && responseBody.trim() !== '{}')) {
         return { 
             status: 'error', 
             stepIndex: 1, 
@@ -127,7 +114,6 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
         };
     }
     
-    // Se chegamos aqui, a resposta é um JSON válido e não vazio.
     return { 
         status: 'success', 
         stepIndex: 1, 
@@ -139,4 +125,3 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
     return { status: 'error', stepIndex: 1, message };
   }
 }
-
