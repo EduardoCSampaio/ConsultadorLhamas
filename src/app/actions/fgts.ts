@@ -79,34 +79,44 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
       duplex: 'half',
     });
 
-    const data = await consultaResponse.json();
+    // A resposta pode não ter corpo, mas o status HTTP é crucial.
+    if (consultaResponse.status === 202 || consultaResponse.status === 200) {
+        let data;
+        try {
+            data = await consultaResponse.json();
+        } catch (e) {
+            // Se não houver corpo JSON (ex: resposta 202 Accepted vazia), consideramos sucesso.
+            console.log("[V8 API] Consulta aceita com sucesso (resposta sem corpo JSON).");
+            return {
+                status: "pending",
+                message: "Consulta de saldo iniciada. O resultado será enviado para o webhook.",
+                initialResponse: {},
+            };
+        }
 
-    if (!consultaResponse.ok) {
-        console.error("Erro na API de consulta:", data);
-
+        // Se houver corpo, mas for nulo/vazio, lançamos um erro claro.
+        if (!data || (typeof data === 'object' && Object.keys(data).length === 0)) {
+            throw new Error("A API parceira (V8) não iniciou a consulta. A resposta foi vazia. Por favor, contate o suporte da V8.");
+        }
+        
+        console.log("[V8 API] Consulta iniciada com sucesso, resposta:", data);
+        return {
+          status: "pending",
+          message: "Consulta de saldo iniciada. O resultado será enviado para o webhook.",
+          initialResponse: data,
+        };
+    } else {
+        // Tratar erros HTTP
         let errorMessage = `Erro ao iniciar consulta: ${consultaResponse.status} ${consultaResponse.statusText}.`;
         try {
-            console.error("[V8 API] Detalhes do erro JSON:", data); 
-            errorMessage += ` Detalhes: ${data.message || JSON.stringify(data)}`;
+            const errorData = await consultaResponse.json();
+            console.error("[V8 API] Detalhes do erro JSON:", errorData); 
+            errorMessage += ` Detalhes: ${errorData.message || JSON.stringify(errorData)}`;
         } catch(e) {
             errorMessage += ` Resposta: ${await consultaResponse.text()}`;
         }
         throw new Error(errorMessage);
     }
-    
-    // Validar se a resposta da V8 é válida para iniciar o processo de webhook.
-    if (!data || (typeof data === 'object' && Object.keys(data).length === 0 && data.constructor === Object) || data === null) {
-      console.error("[V8 API] Resposta de início de consulta inesperada (vazia ou nula):", data);
-      throw new Error("A API parceira retornou uma resposta inesperada (vazia ou nula). A consulta não pôde ser iniciada. Verifique os logs da Vercel para mais detalhes.");
-    }
-
-    // Agora, a resposta final virá pelo webhook. 
-    // A resposta imediata provavelmente é um status de que a consulta foi iniciada.
-    return {
-      status: "pending",
-      message: "Consulta de saldo iniciada. O resultado será enviado para o webhook.",
-      initialResponse: data,
-    };
 
   } catch (error) {
     console.error('Erro ao chamar a API de consulta FGTS:', error);
