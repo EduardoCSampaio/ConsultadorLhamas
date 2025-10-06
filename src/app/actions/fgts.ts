@@ -34,14 +34,12 @@ async function getAuthToken(): Promise<{token: string | null, error: string | nu
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Erro de autenticação V8:', errorText);
       return { token: null, error: `Falha na autenticação com a V8: ${response.status} ${response.statusText}. Detalhes: ${errorText}` };
     }
 
     const data = await response.json();
     return { token: data.access_token, error: null };
   } catch (error) {
-    console.error('Erro de rede ao obter token V8:', error);
     return { token: null, error: 'Erro de comunicação ao tentar autenticar com a API parceira.' };
   }
 }
@@ -76,29 +74,40 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       duplex: 'half',
     });
     
-    // Resposta bem-sucedida, mesmo que vazia (202 Accepted)
-    if (consultaResponse.status === 202 || consultaResponse.status === 200) {
-      // Tentamos ler o corpo, mas não é crucial se estiver vazio
+    // Resposta bem-sucedida, mas precisamos verificar o corpo
+    if (consultaResponse.ok) { // Usa .ok para abranger status 200-299
+      
+      const textBody = await consultaResponse.text();
+      let data = null;
       try {
-        const data = await consultaResponse.json();
-         // Algumas APIs retornam 200/202 mas com um corpo nulo ou vazio indicando falha no processamento
-        if (data === null || (typeof data === 'object' && Object.keys(data).length === 0)) {
-           return { 
-                status: 'error', 
-                stepIndex: 1, 
-                message: "A API parceira aceitou a requisição, mas não iniciou a consulta (resposta vazia). Verifique as credenciais ou contate o suporte da V8." 
-            };
+        if (textBody) {
+          data = JSON.parse(textBody);
         }
       } catch (e) {
-        // Ignora o erro se o corpo JSON não puder ser analisado (ex: resposta 202 vazia)
-        console.log("Resposta 202 aceita sem corpo JSON, o que é esperado.");
+        // Corpo não é JSON, o que pode ser um problema
+         return { 
+            status: 'error', 
+            stepIndex: 1, 
+            message: `A API parceira retornou uma resposta inesperada (não-JSON). Resposta: ${textBody}` 
+        };
       }
       
+      // Se a resposta for vazia ou nula, tratamos como erro de processamento na V8
+      if (data === null || (typeof data === 'object' && Object.keys(data).length === 0 && textBody.trim() !== '{}')) {
+         return { 
+              status: 'error', 
+              stepIndex: 1, 
+              message: "A API parceira aceitou a requisição, mas não iniciou a consulta (resposta vazia). Verifique as credenciais ou contate o suporte da V8." 
+          };
+      }
+      
+      // Sucesso, a consulta foi iniciada
       return { 
           status: 'success', 
           stepIndex: 1, 
           message: 'Consulta de saldo iniciada. Aguardando o resultado via webhook.' 
       };
+
     } else {
       // Tratar erros HTTP
       let errorMessage = `Erro ao enviar consulta: ${consultaResponse.status} ${consultaResponse.statusText}.`;
@@ -112,7 +121,6 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
     }
 
   } catch (error) {
-    console.error('Erro de comunicação ao chamar a API de consulta FGTS:', error);
     const message = error instanceof Error ? error.message : 'Ocorreu um erro de comunicação com a API.';
     return { status: 'error', stepIndex: 1, message };
   }

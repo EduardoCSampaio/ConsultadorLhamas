@@ -156,7 +156,7 @@ export default function FgtsPage() {
         ));
     };
 
-    // Step 1: Authentication
+    // Step 1 & 2: Authentication and Request
     updateStep(0, 'running');
     const result = await consultarSaldoFgts(values);
     
@@ -164,17 +164,17 @@ export default function FgtsPage() {
         updateStep(result.stepIndex, 'error', result.message);
         setApiError(result.message);
         setIsLoading(false);
-        return;
+        return; // Stop execution if there was an error
     }
 
-    // Step 2: Request Sent
+    // Mark previous steps as successful
     updateStep(0, 'success');
     updateStep(1, 'success');
     
     // Step 3: Waiting for Webhook
     updateStep(2, 'running');
     
-    // isLoading will be controlled by webhook loading state
+    // isLoading will now be primarily controlled by the webhook loading state
     setIsLoading(false); 
   }
 
@@ -269,7 +269,7 @@ export default function FgtsPage() {
                     </Alert>
                   )}
                   
-                  {apiError && !showStatus && (
+                  {apiError && !showStatus && ( // This might be redundant now but safe to keep
                     <Alert variant="destructive" className="mt-6">
                       <AlertTitle>Erro na Consulta</AlertTitle>
                       <AlertDescription>{apiError}</AlertDescription>
@@ -313,4 +313,3 @@ export default function FgtsPage() {
     </div>
   );
 }
-
