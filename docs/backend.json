@@ -1,0 +1,178 @@
+{
+  "entities": {
+    "UserProfile": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "UserProfile",
+      "type": "object",
+      "description": "Represents a user profile within the Beleza Integrada system.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the UserProfile entity."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the user.",
+          "format": "email"
+        },
+        "firstName": {
+          "type": "string",
+          "description": "First name of the user."
+        },
+        "lastName": {
+          "type": "string",
+          "description": "Last name of the user."
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "firstName",
+        "lastName"
+      ]
+    },
+    "UIPreferences": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "UIPreferences",
+      "type": "object",
+      "description": "Stores user-specific UI preferences for the Beleza Integrada system.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the UIPreferences entity."
+        },
+        "userProfileId": {
+          "type": "string",
+          "description": "Reference to UserProfile. (Relationship: UserProfile 1:1 UIPreferences)"
+        },
+        "primaryColor": {
+          "type": "string",
+          "description": "The user's preferred primary color for the UI (e.g., Soft Lavender #E6E6FA)."
+        },
+        "backgroundColor": {
+          "type": "string",
+          "description": "The user's preferred background color for the UI (e.g., Very light lavender #F5F5FF)."
+        },
+        "accentColor": {
+          "type": "string",
+          "description": "The user's preferred accent color for the UI (e.g., Pale rose #FFBBDD)."
+        },
+        "fontFamily": {
+          "type": "string",
+          "description": "The user's preferred font family for the UI (e.g., 'Alegreya')."
+        }
+      },
+      "required": [
+        "id",
+        "userProfileId",
+        "primaryColor",
+        "backgroundColor",
+        "accentColor",
+        "fontFamily"
+      ]
+    },
+    "ApiIntegration": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ApiIntegration",
+      "type": "object",
+      "description": "Stores configuration data for external API integrations used by the Beleza Integrada system.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the ApiIntegration entity."
+        },
+        "userProfileId": {
+          "type": "string",
+          "description": "Reference to UserProfile. (Relationship: UserProfile 1:N ApiIntegration)"
+        },
+        "apiName": {
+          "type": "string",
+          "description": "The name of the integrated API (e.g., 'PaymentGateway', 'SocialMedia')."
+        },
+        "apiKey": {
+          "type": "string",
+          "description": "The API key used for authentication with the external API."
+        },
+        "apiUrl": {
+          "type": "string",
+          "description": "The base URL of the external API.",
+          "format": "uri"
+        }
+      },
+      "required": [
+        "id",
+        "userProfileId",
+        "apiName",
+        "apiKey",
+        "apiUrl"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "UserProfile",
+          "schema": {
+            "$ref": "#/backend/entities/UserProfile"
+          },
+          "description": "Stores user profile information. The `userId` parameter corresponds to the Firebase Auth UID. This path provides the root for user-specific data.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The Firebase Auth UID of the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/ui_preferences/{uiPreferencesId}",
+        "definition": {
+          "entityName": "UIPreferences",
+          "schema": {
+            "$ref": "#/backend/entities/UIPreferences"
+          },
+          "description": "Stores UI preferences for a specific user. Located under the user's profile to ensure proper ownership and access control. Path-based ownership ensures only the user can access this data.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The Firebase Auth UID of the user."
+            },
+            {
+              "name": "uiPreferencesId",
+              "description": "The unique ID of the UI preferences document."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/api_integrations/{apiIntegrationId}",
+        "definition": {
+          "entityName": "ApiIntegration",
+          "schema": {
+            "$ref": "#/backend/entities/ApiIntegration"
+          },
+          "description": "Stores API integration configurations for a specific user. Located under the user's profile to ensure proper ownership and access control. Path-based ownership ensures only the user can access this data.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The Firebase Auth UID of the user."
+            },
+            {
+              "name": "apiIntegrationId",
+              "description": "The unique ID of the API integration document."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore data structure is designed to ensure Authorization Independence, clarity, and scalability. User profiles, UI preferences, and API integrations are stored in separate collections with clear ownership established through hierarchical paths. \n\n**Authorization Independence:** The structure is designed to avoid using `get()` calls in security rules by denormalizing authorization data. For example, while `UIPreferences` and `ApiIntegration` are related to `UserProfile`, their paths are nested under `/users/{userId}`, ensuring that access control can be enforced based on the `userId` without needing to read the `UserProfile` document.\n\n**Structural Segregation:** Each entity type is stored in its own collection, maintaining a homogeneous security posture. User-owned data is placed under `/users/{userId}`, separating concerns and simplifying rules.\n\n**Access Modeling:** Path-based ownership (`/users/{userId}/ui_preferences/{uiPreferencesId}`) is used for `UIPreferences` and `ApiIntegration`, making authorization straightforward. This pattern supports the QAPs by allowing secure `list` operations within a user's data.\n\n**Data Clarity:** The structure uses explicit naming conventions (e.g., `userProfileId` for relationships) and avoids dynamic keys."
+  }
+}
