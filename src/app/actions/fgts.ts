@@ -16,19 +16,20 @@ const actionSchema = z.object({
 async function getAuthToken() {
   const tokenUrl = 'https://auth.v8sistema.com/oauth/token';
 
+  const params = new URLSearchParams();
+  params.append('grant_type', 'password');
+  params.append('username', process.env.V8_USERNAME!);
+  params.append('password', process.env.V8_PASSWORD!);
+  params.append('audience', process.env.V8_AUDIENCE!);
+  params.append('scope', 'offline_access');
+  params.append('client_id', process.env.V8_CLIENT_ID!);
+
   const response = await fetch(tokenUrl, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
     },
-    body: JSON.stringify({
-      grant_type: 'password',
-      username: process.env.V8_USERNAME,
-      password: process.env.V8_PASSWORD,
-      audience: process.env.V8_AUDIENCE,
-      scope: 'offline_access',
-      client_id: process.env.V8_CLIENT_ID,
-    }),
+    body: params.toString(),
   });
 
   if (!response.ok) {
@@ -57,7 +58,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
     
     const API_URL_CONSULTA = 'https://bff.v8sistema.com/fgts/balance'; 
 
-    console.log(`Consultando CPF: ${documentNumber} no provedor: ${provider}`);
+    console.log(`Consultando CPF: ${documentNumber} no provedor: ${provider.toUpperCase()}`);
 
     const consultaResponse = await fetch(API_URL_CONSULTA, {
       method: 'POST',
@@ -66,8 +67,8 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>) {
         'Authorization': `Bearer ${authToken}`, 
       },
       body: JSON.stringify({
-        cpf: documentNumber,
-        provedor: provider, 
+        documentNumber: documentNumber,
+        provider: provider.toUpperCase(), // Enviando o nome do provider em maiúsculas
       }),
     });
 
