@@ -23,7 +23,7 @@
           "description": "The initial response from the service that triggered the webhook."
         },
         "responseBody": {
-          "type": "string",
+          "type": "object",
           "description": "The full response body received from the webhook endpoint."
         },
         "createdAt": {
@@ -46,24 +46,11 @@
     ]
   },
   "firestore": {
-    "structure": [
-      {
-        "path": "/webhookResponses/{webhookResponseId}",
-        "definition": {
-          "entityName": "WebhookResponse",
-          "schema": {
-            "$ref": "#/backend/entities/WebhookResponse"
-          },
-          "description": "Stores webhook responses. The webhookResponseId is the unique ID for each response.",
-          "params": [
-            {
-              "name": "webhookResponseId",
-              "description": "The unique identifier for the webhook response."
-            }
-          ]
-        }
-      }
-    ],
-    "reasoning": "Based on the provided information, the application 'Beleza Integrada' primarily deals with processing webhook responses. Given the requirement to store webhook responses, a suitable Firestore structure would be to create a dedicated collection for these responses. Since the user mentioned tokens and API integrations for improvements, it's also important to structure the data for potential future user-specific customization or association of responses. This structure supports authorization independence as each WebhookResponse is self-contained and doesn't rely on parent document data for access control. Segregation is achieved by dedicating a collection solely for WebhookResponse entities, ensuring homogeneous security postures. QAPs are addressed by ensuring that list operations can be secured based on the presence or absence of specific fields, if needed, or by potentially scoping them to a user context if user accounts are later associated with these responses."
+    "/webhookResponses/{webhookResponseId}": {
+      "schema": {
+        "$ref": "#/entities/WebhookResponse"
+      },
+      "description": "Stores webhook responses. The webhookResponseId is the unique ID for each response."
+    }
   }
 }

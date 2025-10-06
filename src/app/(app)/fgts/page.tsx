@@ -22,6 +22,9 @@ import { Loader2, Search } from "lucide-react";
 import { useState } from "react";
 import { consultarSaldoFgts } from "@/app/actions/fgts";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useDoc } from "@/firebase/firestore/use-doc";
+import { useFirestore, useMemoFirebase } from "@/firebase";
+import { doc } from "firebase/firestore";
 
 const manualFormSchema = z.object({
   documentNumber: z.string().min(11, {
@@ -81,8 +84,10 @@ function ProviderSelector({ control }: { control: any }) {
 
 export default function FgtsPage() {
   const [isLoading, setIsLoading] = useState(false);
-  const [apiResponse, setApiResponse] = useState<any>(null);
+  const [currentCpf, setCurrentCpf] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
+  
+  const firestore = useFirestore();
 
   const manualForm = useForm<z.infer<typeof manualFormSchema>>({
     resolver: zodResolver(manualFormSchema),
@@ -95,20 +100,31 @@ export default function FgtsPage() {
       resolver: zodResolver(loteFormSchema),
   });
 
+  // This hook will listen for changes on the document with the ID of the current CPF
+  const docRef = useMemoFirebase(() => {
+    if (!firestore || !currentCpf) return null;
+    // We are assuming the webhook will save the response with the CPF as the ID.
+    // This might need adjustment based on the actual webhook payload.
+    return doc(firestore, "webhookResponses", currentCpf);
+  }, [firestore, currentCpf]);
+  
+  const { data: webhookResponse, isLoading: isWebhookLoading } = useDoc(docRef);
+
   async function onManualSubmit(values: z.infer<typeof manualFormSchema>) {
     setIsLoading(true);
-    setApiResponse(null);
+    setCurrentCpf(values.documentNumber);
     setApiError(null);
 
     try {
-      const result = await consultarSaldoFgts(values);
-      setApiResponse(result);
+      // We don't need the initial response, as we'll get the data from the webhook
+      await consultarSaldoFgts(values);
     } catch (error) {
         if (error instanceof Error) {
             setApiError(error.message);
         } else {
             setApiError("Ocorreu um erro inesperado.");
         }
+        setCurrentCpf(null); // Reset CPF if the initial call fails
     } finally {
       setIsLoading(false);
     }
@@ -155,21 +171,32 @@ export default function FgtsPage() {
                         <ProviderSelector control={manualForm.control} />
                       </div>
                       <Button type="submit" disabled={isLoading}>
-                        {isLoading ? (
+                        {isLoading || isWebhookLoading ? (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         ) : (
                             <Search className="mr-2 h-4 w-4" />
                         )}
-                        Consultar Saldo
+                        {isWebhookLoading ? 'Aguardando Resposta...' : 'Consultar Saldo'}
                       </Button>
                     </form>
                   </Form>
-                  {apiResponse && (
+                  {currentCpf && !webhookResponse && !apiError && (
                     <Alert className="mt-6">
-                      <AlertTitle>Consulta Realizada com Sucesso!</AlertTitle>
+                      <AlertTitle>Consulta Iniciada!</AlertTitle>
+                      <AlertDescription>
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span>Aguardando a resposta do webhook para o CPF: {currentCpf}. A resposta aparecerá aqui automaticamente.</span>
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  {webhookResponse && (
+                    <Alert className="mt-6" variant="default">
+                      <AlertTitle>Resposta Recebida!</AlertTitle>
                       <AlertDescription>
                         <pre className="mt-2 rounded-md bg-muted p-4 overflow-auto">
-                            {JSON.stringify(apiResponse, null, 2)}
+                            {JSON.stringify(webhookResponse.responseBody || webhookResponse, null, 2)}
                         </pre>
                       </AlertDescription>
                     </Alert>
@@ -195,16 +222,16 @@ export default function FgtsPage() {
                     <Form {...loteForm}>
                         <form className="space-y-8">
                           <div className="grid md:grid-cols-2 gap-8">
-                              <ProviderSelector control={loteForm.control} />
-                              <div className="flex flex-col items-center justify-center gap-4 text-center h-48 border-2 border-dashed rounded-lg">
-                                  <h3 className="text-2xl font-bold tracking-tight">
-                                      Upload de Arquivo
-                                  </h3>
-                                  <p className="text-sm text-muted-foreground">
-                                      A funcionalidade de upload será implementada aqui.
-                                  </p>
-                                  <Button variant="outline">Selecionar Arquivo</Button>
-                              </div>
+                            <ProviderSelector control={loteForm.control} />
+                            <div className="flex flex-col items-center justify-center gap-4 text-center h-48 border-2 border-dashed rounded-lg">
+                                <h3 className="text-2xl font-bold tracking-tight">
+                                    Upload de Arquivo
+                                </h3>
+                                <p className="text-sm text-muted-foreground">
+                                    A funcionalidade de upload será implementada aqui.
+                                </p>
+                                <Button variant="outline">Selecionar Arquivo</Button>
+                            </div>
                           </div>
                         </form>
                     </Form>
