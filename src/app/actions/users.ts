@@ -4,7 +4,7 @@
 
 import { z } from 'zod';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 
 
@@ -23,6 +23,7 @@ export type UserProfile = {
     email: string;
     role: 'admin' | 'user';
     status: 'pending' | 'active' | 'rejected';
+    createdAt: string; // Changed to string to be serializable
 };
 
 // Nova Server Action para buscar todos os usuários
@@ -34,7 +35,28 @@ export async function getUsers(): Promise<{users: UserProfile[] | null, error?: 
         if (usersSnapshot.empty) {
             return { users: [] };
         }
-        const users = usersSnapshot.docs.map(doc => doc.data() as UserProfile);
+        
+        const users = usersSnapshot.docs.map(doc => {
+            const data = doc.data();
+            const createdAt = data.createdAt;
+
+            // Convert Firestore Timestamp to a serializable format (ISO string)
+            let serializableCreatedAt = new Date().toISOString(); // Default value
+            if (createdAt instanceof Timestamp) {
+                serializableCreatedAt = createdAt.toDate().toISOString();
+            } else if (typeof createdAt === 'string') {
+                serializableCreatedAt = createdAt;
+            }
+
+            return {
+                uid: data.uid,
+                email: data.email,
+                role: data.role,
+                status: data.status,
+                createdAt: serializableCreatedAt,
+            } as UserProfile;
+        });
+
         return { users };
     } catch (error) {
         const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao buscar usuários.";
