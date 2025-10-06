@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Loader2, Search, CheckCircle2, XCircle, Circle, User, Briefcase, Landmark, Calendar, Banknote, Upload, FileText } from "lucide-react";
+import { Loader2, Search, CheckCircle2, XCircle, Circle, User, Briefcase, Landmark, Calendar, Banknote, Upload, FileText, Download } from "lucide-react";
 import { useState, useEffect, useRef, ChangeEvent } from "react";
 import { consultarSaldoFgts } from "@/app/actions/fgts";
 import { useDoc } from "@/firebase/firestore/use-doc";
@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import * as XLSX from 'xlsx';
-import { Badge } from "@/components/ui/badge";
+import { processarLoteFgts } from "@/app/actions/batch";
 
 const manualFormSchema = z.object({
   documentNumber: z.string().min(11, {
@@ -57,12 +57,6 @@ const initialSteps: StatusStep[] = [
   { name: "Enviando solicitação de consulta", status: "pending" },
   { name: "Aguardando resposta do Webhook", status: "pending" },
 ];
-
-type BatchStatus = {
-    cpf: string;
-    status: 'pending' | 'loading' | 'success' | 'error';
-    message?: string;
-};
 
 function ProviderSelector({ control, disabled }: { control: any, disabled?: boolean }) {
   return (
@@ -144,8 +138,8 @@ export default function FgtsPage() {
   const [showStatus, setShowStatus] = useState(false);
   
   const [file, setFile] = useState<File | null>(null);
-  const [batchStatus, setBatchStatus] = useState<BatchStatus[]>([]);
   const [isProcessingBatch, setIsProcessingBatch] = useState(false);
+  const [batchResult, setBatchResult] = useState<{file: string, name: string} | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const firestore = useFirestore();
@@ -182,7 +176,7 @@ export default function FgtsPage() {
     const files = event.target.files;
     if (files && files.length > 0) {
       setFile(files[0]);
-      setBatchStatus([]);
+      setBatchResult(null); 
     }
   };
 
@@ -196,7 +190,8 @@ export default function FgtsPage() {
     }
 
     setIsProcessingBatch(true);
-    
+    setBatchResult(null);
+
     const reader = new FileReader();
     reader.onload = async (e) => {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
@@ -206,27 +201,28 @@ export default function FgtsPage() {
         const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         
         const cpfs = json.map(row => String((row as any)[0])).filter(cpf => cpf && cpf.length >= 11);
-        const initialBatchStatus = cpfs.map(cpf => ({ cpf, status: 'pending' as const }));
-        setBatchStatus(initialBatchStatus);
 
-        for (let i = 0; i < cpfs.length; i++) {
-            const cpf = cpfs[i];
-            
-            setBatchStatus(prev => prev.map(item => item.cpf === cpf ? { ...item, status: 'loading' } : item));
+        const result = await processarLoteFgts({ cpfs, provider });
 
-            const result = await consultarSaldoFgts({ documentNumber: cpf, provider });
-
-            setBatchStatus(prev => prev.map(item => 
-                item.cpf === cpf ? { 
-                    ...item, 
-                    status: result.status === 'success' ? 'success' : 'error',
-                    message: result.message
-                } : item
-            ));
+        if (result.status === 'success') {
+            setBatchResult({ file: result.fileContent, name: result.fileName });
+        } else {
+            console.error("Erro ao processar lote:", result.message);
         }
+
         setIsProcessingBatch(false);
     };
     reader.readAsArrayBuffer(file);
+  };
+  
+  const downloadExcel = () => {
+    if (!batchResult) return;
+    const link = document.createElement('a');
+    link.href = batchResult.file;
+    link.download = batchResult.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
 
@@ -414,7 +410,7 @@ export default function FgtsPage() {
                  <CardHeader>
                   <CardTitle>Consulta de FGTS em Lote</CardTitle>
                   <CardDescription>
-                    Faça o upload de um arquivo XLSX com os CPFs na primeira coluna para consultar múltiplos clientes.
+                    Faça o upload de um arquivo XLSX com os CPFs na primeira coluna para consultar múltiplos clientes. Os resultados serão compilados em um novo arquivo Excel para download.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -434,8 +430,11 @@ export default function FgtsPage() {
                                     disabled={isProcessingBatch}
                                 />
                                 <div 
-                                    className="flex flex-col items-center justify-center gap-2 text-center h-48 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary"
-                                    onClick={() => fileInputRef.current?.click()}
+                                    className={cn(
+                                        "flex flex-col items-center justify-center gap-2 text-center h-48 border-2 border-dashed rounded-lg",
+                                        !isProcessingBatch && "cursor-pointer hover:border-primary"
+                                    )}
+                                    onClick={() => !isProcessingBatch && fileInputRef.current?.click()}
                                 >
                                     <Upload className="h-8 w-8 text-muted-foreground" />
                                     {file ? (
@@ -466,42 +465,24 @@ export default function FgtsPage() {
                            </Button>
                         </form>
                     </Form>
-                    {batchStatus.length > 0 && (
+                    {batchResult && (
                         <Card className="mt-6">
                             <CardHeader>
-                                <CardTitle>Resultados do Processamento em Lote</CardTitle>
+                                <CardTitle>Processamento Concluído</CardTitle>
+                                <CardDescription>O processamento do seu lote foi finalizado. Clique no botão abaixo para baixar o arquivo com os resultados.</CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>CPF</TableHead>
-                                            <TableHead>Status</TableHead>
-                                            <TableHead>Mensagem</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {batchStatus.map(({ cpf, status, message }) => (
-                                            <TableRow key={cpf}>
-                                                <TableCell className="font-mono">{cpf}</TableCell>
-                                                <TableCell>
-                                                    <Badge variant={
-                                                        status === 'success' ? 'default' :
-                                                        status === 'pending' ? 'secondary' :
-                                                        status === 'loading' ? 'outline' :
-                                                        'destructive'
-                                                    } className="capitalize">
-                                                        {status === 'loading' && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
-                                                        {status === 'pending' ? 'Pendente' : 
-                                                         status === 'loading' ? 'Processando' :
-                                                         status === 'success' ? 'Iniciado' : 'Erro'}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-sm text-muted-foreground">{message}</TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
+                                <div className="flex items-center gap-4 p-4 border rounded-lg bg-green-50 dark:bg-green-900/10">
+                                    <CheckCircle2 className="h-8 w-8 text-green-600" />
+                                    <div className="flex-grow">
+                                        <h4 className="font-semibold">Lote Processado com Sucesso!</h4>
+                                        <p className="text-sm text-muted-foreground">Seu arquivo <span className="font-medium text-primary">{batchResult.name}</span> está pronto.</p>
+                                    </div>
+                                    <Button onClick={downloadExcel}>
+                                        <Download className="mr-2 h-4 w-4" />
+                                        Baixar Resultados
+                                    </Button>
+                                </div>
                             </CardContent>
                         </Card>
                     )}
@@ -514,3 +495,5 @@ export default function FgtsPage() {
     </div>
   );
 }
+
+    
