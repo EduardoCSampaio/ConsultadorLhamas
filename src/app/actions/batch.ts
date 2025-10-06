@@ -121,7 +121,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                     results.push({
                         CPF: cpf,
                         Saldo: 'N/A',
-                        Mensagem: 'Aguardando resposta do webhook...',
+                        Mensagem: 'Resposta inválida ou incompleta do webhook.',
                     });
                 }
             } else {
