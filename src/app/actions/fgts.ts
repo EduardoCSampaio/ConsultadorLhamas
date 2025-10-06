@@ -80,51 +80,63 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
         documentNumber, 
         provider // Enviando o provedor como recebido (minúsculas)
       }),
-      // @ts-ignore
+      // @ts-ignore - Propriedade necessária para alguns ambientes Node.js
       duplex: 'half',
     });
     
-    if (consultaResponse.ok) {
-      const responseBody = await consultaResponse.text();
-      let data = null;
-      try {
-        if (responseBody) data = JSON.parse(responseBody);
-      } catch (e) {
-         return { 
+    // A API V8 pode retornar 200 OK com corpo vazio ou nulo mesmo em caso de erro lógico.
+    // Portanto, não podemos confiar apenas em `consultaResponse.ok`.
+    const responseBody = await consultaResponse.text();
+    let data = null;
+
+    try {
+      // Tenta parsear o JSON apenas se o corpo não for vazio.
+      if (responseBody) {
+        data = JSON.parse(responseBody);
+      }
+    } catch (e) {
+      // Se a resposta não for um JSON válido, é um erro.
+      return { 
+          status: 'error', 
+          stepIndex: 1, 
+          message: `A API parceira retornou uma resposta inesperada (não-JSON). Resposta: ${responseBody}` 
+      };
+    }
+      
+    // Se, após o parse, `data` for nulo ou um objeto vazio, consideramos um erro,
+    // pois a V8 não iniciou a consulta.
+    if (data === null || (typeof data === 'object' && Object.keys(data).length === 0 && responseBody.trim() !== '{}')) {
+        // Se a resposta HTTP não foi OK, usamos o status para montar a mensagem.
+        if (!consultaResponse.ok) {
+             let errorMessage = `Erro ao enviar consulta: ${consultaResponse.status} ${consultaResponse.statusText}.`;
+             try {
+                 // Tenta obter mais detalhes do corpo, se houver
+                 const errorData = JSON.parse(responseBody);
+                 errorMessage += ` Detalhes: ${errorData.message || JSON.stringify(errorData)}`;
+             } catch(e) {
+                 errorMessage += ` Resposta: ${responseBody}`;
+             }
+             return { status: 'error', stepIndex: 1, message: errorMessage };
+        }
+       
+        // Se a resposta HTTP foi OK, mas o corpo é nulo/vazio.
+        return { 
             status: 'error', 
             stepIndex: 1, 
-            message: `A API parceira retornou uma resposta inesperada (não-JSON). Resposta: ${responseBody}` 
+            message: "A API parceira aceitou a requisição, mas não iniciou a consulta (resposta vazia). Verifique as credenciais ou contate o suporte da V8." 
         };
-      }
-      
-      // A V8 pode retornar 200 OK com corpo vazio ou nulo se não processar.
-      if (data === null || (typeof data === 'object' && Object.keys(data).length === 0 && responseBody.trim() !== '{}')) {
-         return { 
-              status: 'error', 
-              stepIndex: 1, 
-              message: "A API parceira aceitou a requisição, mas não iniciou a consulta (resposta vazia). Verifique as credenciais ou contate o suporte da V8." 
-          };
-      }
-      
-      return { 
-          status: 'success', 
-          stepIndex: 1, 
-          message: 'Consulta de saldo iniciada. Aguardando o resultado via webhook.' 
-      };
-
-    } else {
-      let errorMessage = `Erro ao enviar consulta: ${consultaResponse.status} ${consultaResponse.statusText}.`;
-      try {
-          const errorData = await consultaResponse.json();
-          errorMessage += ` Detalhes: ${errorData.message || JSON.stringify(errorData)}`;
-      } catch(e) {
-          errorMessage += ` Resposta: ${await consultaResponse.text()}`;
-      }
-      return { status: 'error', stepIndex: 1, message: errorMessage };
     }
+    
+    // Se chegamos aqui, a resposta é um JSON válido e não vazio.
+    return { 
+        status: 'success', 
+        stepIndex: 1, 
+        message: 'Consulta de saldo iniciada. Aguardando o resultado via webhook.' 
+    };
 
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Ocorreu um erro de comunicação com a API.';
     return { status: 'error', stepIndex: 1, message };
   }
 }
+
