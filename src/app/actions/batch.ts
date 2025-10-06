@@ -166,7 +166,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
     const date = new Date(createdAt);
     const formattedDate = date.toLocaleDateString('pt-BR').replace(/\//g, '-');
     const formattedTime = date.toTimeString().split(' ')[0].replace(/:/g, '-');
-    const fileName = `HIGIENIZACAO_${originalFileName}_${formattedDate}_${formattedTime}.xlsx`;
+    const fileName = `HIGIENIZACAO_${originalFileName.replace(/\.xlsx?$/i, '')}_${formattedDate}_${formattedTime}.xlsx`;
 
     const fileContent = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64String}`;
 

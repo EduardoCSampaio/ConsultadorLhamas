@@ -155,10 +155,12 @@ const formatDate = (dateString: string | undefined) => {
 
 const formatBatchName = (fileName: string, isoDate: string) => {
     const date = new Date(isoDate);
+    const justFileName = fileName.replace(/\.xlsx?$/i, '');
     const formattedDate = date.toLocaleDateString('pt-BR').replace(/\//g, '-');
     const formattedTime = date.toTimeString().split(' ')[0].replace(/:/g, '-');
-    return `HIGIENIZACAO_${fileName}_${formattedDate}_${formattedTime}`;
+    return `HIGIENIZACAO_${justFileName}_${formattedDate}_${formattedTime}`;
 };
+
 
 const LOCAL_STORAGE_KEY = 'recentBatches';
 const ITEMS_PER_PAGE = 5;
@@ -672,7 +674,7 @@ export default function FgtsPage() {
                                         ))}
                                     </TableBody>
                                 </Table>
-                                {recentBatches.length === 0 && (
+                                {paginatedBatches.length === 0 && (
                                      <div className="text-center p-8 text-muted-foreground">
                                         Nenhum lote enviado ainda.
                                     </div>
