@@ -1,28 +1,29 @@
 
-import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
-import { firebaseConfig } from './config';
-import { getAuth } from 'firebase/auth';
+import { initializeApp, getApps, App, cert } from 'firebase-admin/app';
 
 /**
- * Initializes Firebase for server-side usage (e.g., API routes, server actions).
- * This function does NOT contain 'use client' and can be safely used on the server.
+ * Initializes the Firebase Admin SDK for server-side usage.
+ * This is safe to call multiple times; it will only initialize once.
+ * It uses environment variables for service account credentials, which are
+ * securely stored in the deployment environment.
  */
-export function initializeFirebaseAdmin() {
-  if (!getApps().length) {
-    // We are on the server, so we must use the explicit config.
-    const firebaseApp = initializeApp(firebaseConfig);
-    return getSdks(firebaseApp);
+export function initializeFirebaseAdmin(): App {
+  if (getApps().length) {
+    return getApps()[0];
   }
-  
-  // If already initialized, return the SDKs with the existing app.
-  return getSdks(getApp());
-}
 
-function getSdks(firebaseApp: FirebaseApp) {
-  return {
-    firebaseApp,
-    firestore: getFirestore(firebaseApp),
-    auth: getAuth(firebaseApp)
+  // Load service account credentials from environment variables
+  const serviceAccount = {
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+    privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
   };
+
+  if (!serviceAccount.projectId || !serviceAccount.clientEmail || !serviceAccount.privateKey) {
+      throw new Error('Firebase Admin SDK service account credentials are not fully set in environment variables.');
+  }
+
+  return initializeApp({
+    credential: cert(serviceAccount),
+  });
 }

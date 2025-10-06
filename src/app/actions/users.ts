@@ -2,8 +2,9 @@
 'use server';
 
 import { z } from 'zod';
-import { doc, updateDoc } from 'firebase/firestore';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
+import { getFirestore } from 'firebase-admin/firestore';
+
 
 const updateUserStatusSchema = z.object({
   uid: z.string().min(1, { message: "UID do usuário é obrigatório." }),
@@ -21,15 +22,17 @@ export async function updateUserStatus(input: z.infer<typeof updateUserStatusSch
   const validation = updateUserStatusSchema.safeParse(input);
 
   if (!validation.success) {
-    return { success: false, error: validation.error.flatten().fieldErrors };
+    const errorMessages = validation.error.flatten().fieldErrors;
+    return { success: false, error: JSON.stringify(errorMessages) };
   }
 
   const { uid, status } = validation.data;
-  const { firestore } = initializeFirebaseAdmin();
-
+  
   try {
-    const userRef = doc(firestore, 'users', uid);
-    await updateDoc(userRef, { status });
+    initializeFirebaseAdmin();
+    const firestore = getFirestore();
+    const userRef = firestore.collection('users').doc(uid);
+    await userRef.update({ status });
     return { success: true };
   } catch (error) {
     console.error("Erro ao atualizar status do usuário:", error);

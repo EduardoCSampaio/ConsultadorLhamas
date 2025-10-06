@@ -5,8 +5,8 @@
 import { z } from 'zod';
 import { consultarSaldoFgts } from './fgts';
 import * as XLSX from 'xlsx';
-import { getFirestore, doc, getDoc } from 'firebase/firestore';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
+import { getFirestore } from 'firebase-admin/firestore';
 
 const processActionSchema = z.object({
   cpfs: z.array(z.string()),
@@ -85,17 +85,18 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
     }
 
     const { cpfs } = validation.data;
-    const { firestore } = initializeFirebaseAdmin();
+    initializeFirebaseAdmin();
+    const firestore = getFirestore();
     
     const results: { CPF: string; Saldo: string | number; Mensagem: string }[] = [];
 
     for (const cpf of cpfs) {
         try {
-            const docRef = doc(firestore, 'webhookResponses', cpf);
-            const docSnap = await getDoc(docRef);
+            const docRef = firestore.collection('webhookResponses').doc(cpf);
+            const docSnap = await docRef.get();
 
-            if (docSnap.exists()) {
-                const data = docSnap.data().responseBody;
+            if (docSnap.exists) {
+                const data = docSnap.data()?.responseBody;
                 if (data.balance !== undefined && data.balance !== null) {
                     results.push({
                         CPF: cpf,
