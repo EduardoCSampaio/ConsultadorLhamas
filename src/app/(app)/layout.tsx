@@ -25,10 +25,11 @@ import {
 } from "lucide-react";
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth, useUser } from '@/firebase';
+import { useAuth, useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { Skeleton } from '@/components/ui/skeleton';
+import { doc } from 'firebase/firestore';
 
 const menuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard", tooltip: "Dashboard" },
@@ -39,8 +40,16 @@ const menuItems = [
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const auth = useAuth();
+  const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
   const router = useRouter();
+
+  const userProfileRef = useMemoFirebase(() => {
+    if (!firestore || !user) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [firestore, user]);
+
+  const { data: userProfile, isLoading: isProfileLoading } = useDoc(userProfileRef);
 
   const handleLogout = async () => {
     if (auth) {
@@ -50,13 +59,38 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   };
 
   React.useEffect(() => {
-    if (!isUserLoading && !user) {
+    const isLoading = isUserLoading || isProfileLoading;
+    if (isLoading) return; // Wait for all data to be loaded
+
+    // If not loading and no authenticated user, redirect to login
+    if (!user) {
       router.push('/');
+      return;
     }
-  }, [user, isUserLoading, router]);
+
+    // If there is a user, but their profile is not active, log them out and redirect
+    if (userProfile?.status !== 'active') {
+      if (auth) {
+        signOut(auth); // Log out the user from Firebase Auth
+      }
+      // Redirect to login with a status query param
+      router.push(`/?status=${userProfile?.status || 'pending'}`);
+    }
+
+  }, [user, userProfile, isUserLoading, isProfileLoading, router, auth]);
+
 
   const getInitials = (email = '') => {
     return email.substring(0, 2).toUpperCase();
+  }
+
+  // Show a loading state while checking for user and profile
+  if (isUserLoading || isProfileLoading) {
+    return (
+        <div className="flex min-h-screen items-center justify-center bg-background">
+            <Logo />
+        </div>
+    );
   }
 
   return (
@@ -84,12 +118,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter>
-          {isUserLoading ? (
-             <div className="flex items-center gap-3">
-                <Skeleton className="h-8 w-8 rounded-full" />
-                <Skeleton className="h-4 w-24" />
-            </div>
-          ) : user ? (
+          {user ? (
             <div className="flex items-center gap-3">
               <Avatar className="size-8">
                 {user.photoURL && <AvatarImage src={user.photoURL} alt="User Avatar" />}

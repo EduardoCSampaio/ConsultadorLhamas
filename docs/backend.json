@@ -37,6 +37,51 @@
         "status",
         "message"
       ]
+    },
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Stores user profile information, including their role and status.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "The user's unique ID from Firebase Authentication."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "The user's email address."
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "admin",
+            "user"
+          ],
+          "description": "The user's role in the system."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "active",
+            "rejected"
+          ],
+          "description": "The current status of the user's account."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the user profile was created."
+        }
+      },
+      "required": [
+        "uid",
+        "email",
+        "role",
+        "status",
+        "createdAt"
+      ]
     }
   },
   "auth": {
@@ -51,6 +96,12 @@
         "$ref": "#/entities/WebhookResponse"
       },
       "description": "Stores webhook responses. The webhookResponseId is the unique ID for each response."
+    },
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Stores user profiles. The userId is the same as the Firebase Auth UID."
     }
   }
 }

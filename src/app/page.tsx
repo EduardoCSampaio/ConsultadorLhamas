@@ -9,11 +9,13 @@ import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { Logo } from "@/components/logo";
 import { useAuth, useUser } from "@/firebase";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, AuthError } from "firebase/auth";
-import { useRouter } from "next/navigation";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, AuthError, signOut } from "firebase/auth";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, CheckCircle } from "lucide-react";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { useFirestore } from "@/firebase";
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -21,14 +23,20 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSignUp, setIsSignUp] = useState(false);
+  const [showPendingMessage, setShowPendingMessage] = useState(false);
 
   const auth = useAuth();
+  const firestore = useFirestore();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const { user, isUserLoading } = useUser();
 
+  const isPending = searchParams.get('status') === 'pending';
+
   useEffect(() => {
-    // Se o usuário já está logado e não está carregando, redireciona para o dashboard
+    // If user is logged in, redirect to dashboard.
+    // The layout will handle redirecting back if the user is not 'active'.
     if (!isUserLoading && user) {
       router.push('/dashboard');
     }
@@ -38,18 +46,39 @@ export default function LoginPage() {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+    setShowPendingMessage(false);
+
+    if (!auth || !firestore) {
+      setError("Serviços de autenticação não estão disponíveis. Tente novamente mais tarde.");
+      setIsLoading(false);
+      return;
+    }
 
     try {
       if (isSignUp) {
-        await createUserWithEmailAndPassword(auth, email, password);
-        toast({
-          title: "Conta criada com sucesso!",
-          description: "Você será redirecionado para o painel.",
-        });
+        // Create user
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const newUser = userCredential.user;
+
+        // Create user profile in Firestore
+        const userProfile = {
+          uid: newUser.uid,
+          email: newUser.email,
+          role: newUser.email === 'admin@lhamascred.com.br' ? 'admin' : 'user',
+          status: 'pending',
+          createdAt: serverTimestamp(),
+        };
+
+        await setDoc(doc(firestore, "users", newUser.uid), userProfile);
+        
+        // Show pending message and sign out the user
+        setShowPendingMessage(true);
+        await signOut(auth);
+
       } else {
         await signInWithEmailAndPassword(auth, email, password);
+        // Redirect is handled by the useEffect hook
       }
-      // O redirecionamento será feito pelo useEffect
     } catch (err) {
       const authError = err as AuthError;
       let friendlyMessage = 'Ocorreu um erro. Tente novamente.';
@@ -81,7 +110,7 @@ export default function LoginPage() {
     }
   };
 
-  // Não renderiza nada enquanto verifica a autenticação
+  // Do not render the form while checking auth state or if user is logged in
   if (isUserLoading || user) {
     return <div className="flex min-h-screen items-center justify-center bg-background"><Logo /></div>;
   }
@@ -92,78 +121,103 @@ export default function LoginPage() {
         <div className="flex justify-center mb-8">
           <Logo className="text-foreground"/>
         </div>
-        <Card>
-          <form onSubmit={handleAuth}>
+
+        {showPendingMessage ? (
+           <Card>
             <CardHeader className="text-center">
-              <CardTitle className="font-headline text-2xl font-semibold">
-                {isSignUp ? "Crie sua conta" : "Bem-vindo de volta!"}
-              </CardTitle>
-              <CardDescription>
-                {isSignUp ? "Preencha os dados para começar." : "Acesse sua conta para gerenciar suas finanças."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {error && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Erro de Autenticação</AlertTitle>
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input 
-                  id="email" 
-                  type="email" 
-                  placeholder="seu@email.com" 
-                  required 
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={isLoading}
-                  autoComplete="email"
-                />
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Senha</Label>
-                  {!isSignUp && (
-                    <Link href="#" className="text-sm text-primary hover:underline">
-                      Esqueceu a senha?
-                    </Link>
-                  )}
+                <div className="mx-auto bg-green-100 rounded-full p-2 w-fit">
+                    <CheckCircle className="h-8 w-8 text-green-600" />
                 </div>
-                <Input 
-                  id="password" 
-                  type="password" 
-                  required 
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={isLoading}
-                  autoComplete={isSignUp ? "new-password" : "current-password"}
-                />
-              </div>
-            </CardContent>
-            <CardFooter className="flex flex-col gap-4">
-              <Button className="w-full" type="submit" disabled={isLoading}>
-                {isLoading ? "Carregando..." : (isSignUp ? "Cadastrar" : "Entrar")}
-              </Button>
-              <div className="text-center text-sm text-muted-foreground">
-                {isSignUp ? "Já tem uma conta?" : "Não tem uma conta?"}{' '}
-                <Button 
-                  variant="link" 
-                  className="p-0 h-auto"
-                  type="button" 
-                  onClick={() => {
-                    setIsSignUp(!isSignUp);
-                    setError(null);
-                  }}
-                >
-                  {isSignUp ? "Faça o login" : "Cadastre-se"}
+               <CardTitle className="font-headline text-2xl font-semibold mt-4">Solicitação Enviada!</CardTitle>
+               <CardDescription className="text-base">
+                 Assim que a sua solicitação for concluída, o administrador te retornará.
+               </CardDescription>
+             </CardHeader>
+             <CardFooter>
+               <Button className="w-full" onClick={() => setShowPendingMessage(false)}>Voltar para o Login</Button>
+             </CardFooter>
+           </Card>
+        ) : (
+          <Card>
+            <form onSubmit={handleAuth}>
+              <CardHeader className="text-center">
+                <CardTitle className="font-headline text-2xl font-semibold">
+                  {isSignUp ? "Crie sua conta" : "Bem-vindo de volta!"}
+                </CardTitle>
+                <CardDescription>
+                  {isSignUp ? "Preencha os dados para começar." : "Acesse sua conta para gerenciar suas finanças."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Erro de Autenticação</AlertTitle>
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+                 {isPending && (
+                  <Alert variant="default" className="bg-yellow-50 border-yellow-200 text-yellow-800">
+                    <AlertCircle className="h-4 w-4 !text-yellow-600" />
+                    <AlertTitle>Conta Pendente</AlertTitle>
+                    <AlertDescription>Sua conta ainda está aguardando aprovação do administrador.</AlertDescription>
+                  </Alert>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input 
+                    id="email" 
+                    type="email" 
+                    placeholder="seu@email.com" 
+                    required 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    disabled={isLoading}
+                    autoComplete="email"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password">Senha</Label>
+                    {!isSignUp && (
+                      <Link href="#" className="text-sm text-primary hover:underline">
+                        Esqueceu a senha?
+                      </Link>
+                    )}
+                  </div>
+                  <Input 
+                    id="password" 
+                    type="password" 
+                    required 
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={isLoading}
+                    autoComplete={isSignUp ? "new-password" : "current-password"}
+                  />
+                </div>
+              </CardContent>
+              <CardFooter className="flex flex-col gap-4">
+                <Button className="w-full" type="submit" disabled={isLoading}>
+                  {isLoading ? "Carregando..." : (isSignUp ? "Cadastrar" : "Entrar")}
                 </Button>
-              </div>
-            </CardFooter>
-          </form>
-        </Card>
+                <div className="text-center text-sm text-muted-foreground">
+                  {isSignUp ? "Já tem uma conta?" : "Não tem uma conta?"}{' '}
+                  <Button 
+                    variant="link" 
+                    className="p-0 h-auto"
+                    type="button" 
+                    onClick={() => {
+                      setIsSignUp(!isSignUp);
+                      setError(null);
+                    }}
+                  >
+                    {isSignUp ? "Faça o login" : "Cadastre-se"}
+                  </Button>
+                </div>
+              </CardFooter>
+            </form>
+          </Card>
+        )}
       </div>
     </div>
   );
