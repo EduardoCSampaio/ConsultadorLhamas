@@ -22,6 +22,7 @@ import {
   Home,
   LogOut,
   Search,
+  Users,
 } from "lucide-react";
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -31,10 +32,17 @@ import { useRouter } from 'next/navigation';
 import { Skeleton } from '@/components/ui/skeleton';
 import { doc } from 'firebase/firestore';
 
-const menuItems = [
+const baseMenuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard", tooltip: "Dashboard" },
   { href: "/fgts", icon: Search, label: "Consulta FGTS", tooltip: "Consulta Saldo FGTS" },
-  { href: "/configuracoes", icon: Cog, label: "Configurações", tooltip: "Configurações" },
+];
+
+const adminMenuItems = [
+    { href: "/admin/users", icon: Users, label: "Gerenciar Usuários", tooltip: "Gerenciar Usuários" },
+];
+
+const bottomMenuItems = [
+    { href: "/configuracoes", icon: Cog, label: "Configurações", tooltip: "Configurações" },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -60,20 +68,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     const isLoading = isUserLoading || isProfileLoading;
-    if (isLoading) return; // Wait for all data to be loaded
+    if (isLoading) return; 
 
-    // If not loading and no authenticated user, redirect to login
     if (!user) {
       router.push('/');
       return;
     }
 
-    // If there is a user, but their profile is not active, log them out and redirect
     if (userProfile?.status !== 'active') {
       if (auth) {
-        signOut(auth); // Log out the user from Firebase Auth
+        signOut(auth); 
       }
-      // Redirect to login with a status query param
       router.push(`/?status=${userProfile?.status || 'pending'}`);
     }
 
@@ -84,7 +89,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return email.substring(0, 2).toUpperCase();
   }
 
-  // Show a loading state while checking for user and profile
   if (isUserLoading || isProfileLoading) {
     return (
         <div className="flex min-h-screen items-center justify-center bg-background">
@@ -92,6 +96,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
     );
   }
+
+  const menuItems = [
+      ...baseMenuItems,
+      ...(userProfile?.role === 'admin' ? adminMenuItems : []),
+      ...bottomMenuItems
+  ];
 
   return (
     <SidebarProvider>
