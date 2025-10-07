@@ -242,7 +242,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                 const data = docSnap.data();
                 const responseBody = data?.responseBody;
                 
-                // Check if the webhook response itself indicates an error from the provider
+                // Check for explicit error messages within the payload
                 const providerError = responseBody?.errorMessage || responseBody?.error;
                 const isSuccess = data?.status === 'success' && responseBody && typeof responseBody.balance !== 'undefined' && responseBody.balance !== null && !providerError;
 
