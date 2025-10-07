@@ -217,7 +217,38 @@ export default function CltPage() {
                     <div className="space-y-6">
                         <h3 className="text-lg font-medium border-b pb-2">Dados do Tomador</h3>
                         <FormField control={consentForm.control} name="borrowerDocumentNumber" render={({ field }) => ( <FormItem> <FormLabel>CPF do Tomador</FormLabel> <FormControl> <Input placeholder="000.000.000-00" {...field} disabled={isLoading} /> </FormControl> <FormMessage /> </FormItem> )}/>
-                        <FormField control={consentForm.control} name="birthDate" render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Data de Nascimento</FormLabel> <Popover> <PopoverTrigger asChild> <FormControl> <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")} disabled={isLoading}> {field.value ? (format(field.value, "PPP", { locale: ptBR })) : (<span>Escolha uma data</span>)} <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /> </Button> </FormControl> </PopoverTrigger> <PopoverContent className="w-auto p-0" align="start"> <Calendar mode="single" captionLayout="dropdown-buttons" fromYear={1940} toYear={new Date().getFullYear()} selected={field.value} onSelect={field.onChange} disabled={(date) => date > new Date() || date < new Date("1900-01-01")} initialFocus /> </PopoverContent> </Popover> <FormMessage /> </FormItem> )}/>
+                        <FormField
+                            control={consentForm.control}
+                            name="birthDate"
+                            render={({ field }) => (
+                                <FormItem className="flex flex-col">
+                                <FormLabel>Data de Nascimento</FormLabel>
+                                <Popover>
+                                    <FormControl>
+                                        <PopoverTrigger asChild>
+                                            <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")} disabled={isLoading}>
+                                                {field.value ? (format(field.value, "PPP", { locale: ptBR })) : (<span>Escolha uma data</span>)}
+                                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                            </Button>
+                                        </PopoverTrigger>
+                                    </FormControl>
+                                    <PopoverContent className="w-auto p-0" align="start">
+                                    <Calendar
+                                        mode="single"
+                                        captionLayout="dropdown-buttons"
+                                        fromYear={1940}
+                                        toYear={new Date().getFullYear()}
+                                        selected={field.value}
+                                        onSelect={field.onChange}
+                                        disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
+                                        initialFocus
+                                    />
+                                    </PopoverContent>
+                                </Popover>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                        />
                         <FormField
                             control={consentForm.control}
                             name="gender"
