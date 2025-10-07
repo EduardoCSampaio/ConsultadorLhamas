@@ -3,7 +3,7 @@
 
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { useForm, Controller } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,13 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CalendarIcon, Loader2, FileSignature, Wand, Banknote, Calendar as CalendarIconComponent, Hash, Percent } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -47,8 +54,8 @@ const consentFormSchema = z.object({
 });
 
 const simulationFormSchema = z.object({
-    config_id: z.string().min(1, { message: "Selecione uma tabela de juros."}),
-    number_of_installments: z.string().min(1, { message: "Selecione o número de parcelas."}),
+    config_id: z.string({ required_error: "Selecione uma tabela de juros."}),
+    number_of_installments: z.string({ required_error: "Selecione o número de parcelas."}),
     disbursed_amount: z.preprocess(
         (a) => parseFloat(String(a).replace(",", ".")),
         z.number().positive("O valor deve ser positivo.")
@@ -123,7 +130,7 @@ export default function CltPage() {
     if (selectedConfigId && simulationConfigs) {
       const config = simulationConfigs.find(c => c.id === selectedConfigId) || null;
       setSelectedConfig(config);
-      simulationForm.setValue('number_of_installments', ''); // Reset installments
+      simulationForm.resetField('number_of_installments');
     }
   }, [selectedConfigId, simulationConfigs, simulationForm]);
 
@@ -198,9 +205,6 @@ export default function CltPage() {
           });
       }
   }
-  
-  const selectClassName = "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
-
 
   return (
     <div className="flex flex-col gap-6">
@@ -271,40 +275,54 @@ export default function CltPage() {
                     <Form {...simulationForm}>
                         <form onSubmit={simulationForm.handleSubmit(onSimulationSubmit)} className="space-y-8">
                             <div className="grid md:grid-cols-3 gap-8 items-start">
-                                <div className="space-y-2">
-                                    <Label htmlFor="config_id">Tabela de Juros</Label>
-                                    <select
-                                        id="config_id"
-                                        {...simulationForm.register('config_id')}
-                                        className={selectClassName}
-                                        disabled={isSimulating}
-                                    >
-                                        <option value="">Selecione uma tabela...</option>
-                                        {simulationConfigs?.map(config => (
-                                            <option key={config.id} value={config.id}>
-                                                {config.slug} ({parseFloat(config.monthly_interest_rate).toFixed(2)}% a.m.)
-                                            </option>
-                                        ))}
-                                    </select>
-                                    {simulationForm.formState.errors.config_id && <p className="text-sm font-medium text-destructive">{simulationForm.formState.errors.config_id.message}</p>}
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="number_of_installments">Número de Parcelas</Label>
-                                    <select
-                                        id="number_of_installments"
-                                        {...simulationForm.register('number_of_installments')}
-                                        className={selectClassName}
-                                        disabled={!selectedConfig || isSimulating}
-                                    >
-                                        <option value="">{!selectedConfig ? "Selecione uma tabela primeiro" : "Selecione as parcelas..."}</option>
-                                        {selectedConfig?.number_of_installments.map(installment => (
-                                            <option key={installment} value={String(installment)}>
-                                                {installment} parcelas
-                                            </option>
-                                        ))}
-                                    </select>
-                                    {simulationForm.formState.errors.number_of_installments && <p className="text-sm font-medium text-destructive">{simulationForm.formState.errors.number_of_installments.message}</p>}
-                                </div>
+                                <FormField
+                                    control={simulationForm.control}
+                                    name="config_id"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Tabela de Juros</FormLabel>
+                                            <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSimulating}>
+                                                <FormControl>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Selecione uma tabela..." />
+                                                    </SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>
+                                                    {simulationConfigs?.map(config => (
+                                                        <SelectItem key={config.id} value={config.id}>
+                                                            {config.slug} ({parseFloat(config.monthly_interest_rate).toFixed(2)}% a.m.)
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={simulationForm.control}
+                                    name="number_of_installments"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Número de Parcelas</FormLabel>
+                                            <Select onValueChange={field.onChange} value={field.value} disabled={!selectedConfig || isSimulating}>
+                                                <FormControl>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder={!selectedConfig ? "Selecione uma tabela primeiro" : "Selecione as parcelas..."} />
+                                                    </SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>
+                                                    {selectedConfig?.number_of_installments.map(installment => (
+                                                        <SelectItem key={installment} value={String(installment)}>
+                                                            {installment} parcelas
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
                                  <FormField
                                     control={simulationForm.control}
                                     name="disbursed_amount"
