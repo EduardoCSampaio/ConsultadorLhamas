@@ -125,6 +125,23 @@
             }
         },
         "required": ["userId", "userEmail", "action", "createdAt"]
+    },
+    "BatchJob": {
+        "title": "Batch Job",
+        "description": "Represents a batch processing job for FGTS queries.",
+        "type": "object",
+        "properties": {
+            "id": { "type": "string" },
+            "userId": { "type": "string" },
+            "fileName": { "type": "string" },
+            "provider": { "type": "string" },
+            "status": { "type": "string", "enum": ["processing", "completed", "error"] },
+            "totalCpfs": { "type": "number" },
+            "processedCpfs": { "type": "number" },
+            "message": { "type": "string" },
+            "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "required": ["id", "userId", "status", "totalCpfs", "processedCpfs", "createdAt"]
     }
   },
   "auth": {
@@ -156,6 +173,12 @@
             "$ref": "#/entities/ActivityLog"
         },
         "description": "Stores records of user activities for auditing and dashboard metrics."
+    },
+    "/batches/{batchId}": {
+        "schema": { "$ref": "#/entities/BatchJob" },
+        "description": "Stores the state and progress of a batch processing job."
     }
   }
 }
+
+    

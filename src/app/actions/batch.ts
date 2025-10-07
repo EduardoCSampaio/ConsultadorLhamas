@@ -5,10 +5,11 @@ import { z } from 'zod';
 import { consultarSaldoFgts, getAuthToken } from './fgts';
 import * as XLSX from 'xlsx';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import type { ApiCredentials } from './users';
 
 const processActionSchema = z.object({
+  batchId: z.string(),
   cpfs: z.array(z.string()),
   provider: z.enum(["cartos", "bms", "qi"]),
   userId: z.string(),
@@ -41,7 +42,6 @@ type ReportActionResult = {
  */
 export async function processarLoteFgts(input: z.infer<typeof processActionSchema>): Promise<ProcessActionResult> {
   const validation = processActionSchema.safeParse(input);
-  const { cpfs, provider, userId, userEmail } = validation.data;
 
   if (!validation.success) {
     return { 
@@ -51,14 +51,38 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
     };
   }
 
+  const { batchId, cpfs, provider, userId, userEmail } = validation.data;
+  const firestore = getFirestore();
+  const batchRef = firestore.collection('batches').doc(batchId);
+
+  // Set the initial batch state in Firestore
+  try {
+      initializeFirebaseAdmin();
+      await batchRef.set({
+          id: batchId,
+          userId: userId,
+          fileName: `Lote de ${cpfs.length} CPFs`,
+          provider: provider,
+          status: 'processing',
+          totalCpfs: cpfs.length,
+          processedCpfs: 0,
+          cpfs: cpfs,
+          createdAt: FieldValue.serverTimestamp(),
+      });
+  } catch(error) {
+    const message = error instanceof Error ? error.message : "Erro ao iniciar o lote no Firestore.";
+    console.error("Batch init error:", message);
+    return { status: 'error', count: 0, message };
+  }
+
+
   // 1. Obter credenciais do usuário que solicitou
   let userCredentials: ApiCredentials;
   try {
-    initializeFirebaseAdmin();
-    const firestore = getFirestore();
     const userDoc = await firestore.collection('users').doc(userId).get();
     if (!userDoc.exists) {
-        return { status: 'error', count: 0, message: 'Usuário não encontrado para buscar as credenciais.' };
+        await batchRef.update({ status: 'error', message: 'Usuário não encontrado para buscar as credenciais.' });
+        return { status: 'error', count: 0, message: 'Usuário não encontrado.' };
     }
     const userData = userDoc.data()!;
     userCredentials = {
@@ -69,17 +93,20 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
     };
   } catch(error) {
       const message = error instanceof Error ? error.message : "Erro ao buscar credenciais.";
-      return { status: 'error', count: 0, message: `Não foi possível carregar as credenciais de API: ${message}` };
+      await batchRef.update({ status: 'error', message: `Não foi possível carregar as credenciais de API: ${message}` });
+      return { status: 'error', count: 0, message };
   }
 
   // 2. Autenticar UMA VEZ para todo o lote
   const { token, error: tokenError } = await getAuthToken(userCredentials);
   if (tokenError) {
-    return { status: 'error', count: 0, message: `Falha na autenticação do lote: ${tokenError}` };
+    await batchRef.update({ status: 'error', message: `Falha na autenticação do lote: ${tokenError}` });
+    return { status: 'error', count: 0, message: tokenError };
   }
 
   // 3. Processar CPFs com o token reutilizado
   let successCount = 0;
+  let processedCount = 0;
 
   for (const cpf of cpfs) {
     // Passa o token obtido para a função de consulta
@@ -90,12 +117,22 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
         userId: userId,
         userEmail: userEmail,
     });
+    
     if (result.status === 'success') {
       successCount++;
     }
+    
+    processedCount++;
+    
+    // Update progress in Firestore
+    await batchRef.update({ processedCpfs: processedCount });
+    
     // Small delay to avoid overwhelming the API
     await new Promise(resolve => setTimeout(resolve, 3000));
   }
+  
+  // Finalize batch status
+  await batchRef.update({ status: 'completed', processedCpfs: cpfs.length });
 
   return {
     status: 'success',
@@ -208,3 +245,6 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         message: 'Relatório gerado com sucesso.',
     };
 }
+
+
+    

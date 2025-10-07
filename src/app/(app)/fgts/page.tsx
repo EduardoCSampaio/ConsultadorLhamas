@@ -165,6 +165,119 @@ const getLocalStorageKey = (userId: string) => `recentBatches_${userId}`;
 
 const ITEMS_PER_PAGE = 5;
 
+function BatchRow({ initialBatch }: { initialBatch: BatchJob }) {
+    const firestore = useFirestore();
+    const batchRef = useMemoFirebase(() => {
+        if (!firestore || !initialBatch) return null;
+        return doc(firestore, 'batches', initialBatch.id);
+    }, [firestore, initialBatch.id]);
+
+    const { data: batch, isLoading: isBatchLoading } = useDoc<BatchJob>(batchRef);
+    const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+    const { toast } = useToast();
+
+    const currentBatch = batch || initialBatch;
+
+    const handleGenerateReport = async (batchToReport: BatchJob) => {
+        setIsGeneratingReport(true);
+        const result = await gerarRelatorioLote({
+            cpfs: batchToReport.cpfs,
+            fileName: batchToReport.fileName,
+            createdAt: batchToReport.createdAt,
+        });
+        setIsGeneratingReport(false);
+
+        if (result.status === 'success') {
+            const link = document.createElement('a');
+            link.href = result.fileContent;
+            link.download = result.fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            toast({
+                title: "Relatório gerado com sucesso!",
+                description: `O arquivo ${result.fileName} está sendo baixado.`
+            });
+        } else {
+            toast({
+                variant: "destructive",
+                title: "Erro ao gerar relatório",
+                description: result.message,
+            });
+        }
+    };
+
+    const handleDeleteBatch = (batchId: string) => {
+        // This should trigger the parent to delete from its state
+        (document.dispatchEvent(new CustomEvent('delete-batch', { detail: batchId })));
+    };
+    
+    const getBatchProgress = (batch: BatchJob) => {
+        if (batch.totalCpfs === 0) return 0;
+        const progress = (batch.processedCpfs / batch.totalCpfs) * 100;
+        if (batch.status === 'completed' || batch.status === 'error') return 100;
+        if (progress > 0 && progress < 10) return 10; // Show some progress early
+        return progress;
+    }
+
+    const getBatchProgressText = (batch: BatchJob) => {
+        if (batch.status === 'processing') return `Processando ${batch.processedCpfs} de ${batch.totalCpfs}...`;
+        if (batch.status === 'completed') return "Pronto para download";
+        if (batch.status === 'error') return "Falha ao enviar";
+        return "Pendente";
+    }
+
+    return (
+        <TableRow key={currentBatch.id}>
+            <TableCell>
+                <div className="font-medium">{formatBatchName(currentBatch.fileName, currentBatch.createdAt)}</div>
+                <div className="text-sm text-muted-foreground">{currentBatch.totalCpfs} CPFs</div>
+            </TableCell>
+            <TableCell>
+                <div className="flex flex-col gap-2">
+                    <Progress value={getBatchProgress(currentBatch)} className="h-2" />
+                    <span className="text-xs text-muted-foreground">{getBatchProgressText(currentBatch)}</span>
+                </div>
+            </TableCell>
+            <TableCell className="text-right">
+                <Button
+                    size="sm"
+                    onClick={() => handleGenerateReport(currentBatch)}
+                    disabled={currentBatch.status !== 'completed' || isGeneratingReport}
+                >
+                    {isGeneratingReport ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                        <Download className="mr-2 h-4 w-4" />
+                    )}
+                    Baixar
+                </Button>
+            </TableCell>
+            <TableCell className="text-right pr-4">
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Trash2 className="h-4 w-4 text-destructive"/>
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Esta ação não pode ser desfeita. Isso excluirá permanentemente o lote do seu histórico local.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDeleteBatch(currentBatch.id)} className="bg-destructive hover:bg-destructive/90">Excluir</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            </TableCell>
+        </TableRow>
+    );
+}
+
 export default function FgtsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [currentCpf, setCurrentCpf] = useState<string | null>(null);
@@ -173,7 +286,6 @@ export default function FgtsPage() {
   
   const [file, setFile] = useState<File | null>(null);
   const [isProcessingBatch, setIsProcessingBatch] = useState(false);
-  const [isGeneratingReport, setIsGeneratingReport] = useState<string | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -184,6 +296,23 @@ export default function FgtsPage() {
   const [isStorageLoaded, setIsStorageLoaded] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Custom event listener for batch deletion
+    useEffect(() => {
+        const handleDelete = (event: Event) => {
+            const batchId = (event as CustomEvent).detail;
+            setRecentBatches(prev => prev.filter(b => b.id !== batchId));
+            toast({
+                title: "Lote excluído",
+                description: "O lote foi removido do seu histórico local.",
+            });
+        };
+        document.addEventListener('delete-batch', handleDelete);
+        return () => {
+            document.removeEventListener('delete-batch', handleDelete);
+        };
+    }, [toast]);
+
 
   // Initialize batches from localStorage once user is available
   useEffect(() => {
@@ -288,8 +417,9 @@ export default function FgtsPage() {
         
         const cpfs = json.slice(1).map(row => String((row as any)[0])).filter(cpf => cpf && cpf.length >= 11);
         
+        const batchId = `batch-${Date.now()}-${user.uid}`;
         const newBatch: BatchJob = {
-          id: `batch-${Date.now()}`,
+          id: batchId,
           fileName: file.name,
           provider: provider,
           status: 'processing',
@@ -301,23 +431,22 @@ export default function FgtsPage() {
 
         setRecentBatches(prev => [newBatch, ...prev]);
 
-        const result = await processarLoteFgts({ cpfs, provider, userId: user.uid, userEmail: user.email || 'N/A' });
-        
+        // Don't await this, let it run in the background
+        processarLoteFgts({ 
+            batchId: newBatch.id,
+            cpfs, 
+            provider, 
+            userId: user.uid, 
+            userEmail: user.email || 'N/A' 
+        });
+
         setIsProcessingBatch(false);
-        if (result.status === 'success') {
-            setRecentBatches(prev => prev.map(b => b.id === newBatch.id ? {...b, status: 'completed'} : b));
-            toast({
-                title: "Lote enviado para processamento!",
-                description: `${result.count} consultas foram iniciadas em segundo plano.`,
-            });
-        } else {
-            setRecentBatches(prev => prev.map(b => b.id === newBatch.id ? {...b, status: 'error'} : b));
-            toast({
-                variant: "destructive",
-                title: "Erro ao processar lote",
-                description: result.message,
-            });
-        }
+        toast({
+            title: "Lote enviado para a fila!",
+            description: `${cpfs.length} CPFs serão processados em segundo plano.`,
+        });
+
+        // Reset file input
         setFile(null);
         if (fileInputRef.current) {
             fileInputRef.current.value = "";
@@ -326,44 +455,6 @@ export default function FgtsPage() {
     reader.readAsArrayBuffer(file);
   };
   
-  const handleGenerateReport = async (batch: BatchJob) => {
-    setIsGeneratingReport(batch.id);
-    const result = await gerarRelatorioLote({ 
-        cpfs: batch.cpfs, 
-        fileName: batch.fileName,
-        createdAt: batch.createdAt,
-    });
-    setIsGeneratingReport(null);
-
-    if (result.status === 'success') {
-        const link = document.createElement('a');
-        link.href = result.fileContent;
-        link.download = result.fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        toast({
-            title: "Relatório gerado com sucesso!",
-            description: `O arquivo ${result.fileName} está sendo baixado.`
-        });
-    } else {
-        toast({
-            variant: "destructive",
-            title: "Erro ao gerar relatório",
-            description: result.message,
-        });
-    }
-  };
-
-  const handleDeleteBatch = (batchId: string) => {
-    setRecentBatches(prev => prev.filter(b => b.id !== batchId));
-    toast({
-      title: "Lote excluído",
-      description: "O lote foi removido do seu histórico local.",
-    });
-  };
-
-
   async function onManualSubmit(values: z.infer<typeof manualFormSchema>) {
     if (!user) {
         toast({ variant: "destructive", title: "Erro", description: "Você precisa estar logado para consultar." });
@@ -406,19 +497,6 @@ export default function FgtsPage() {
     updateStep(2, 'running');
   
     setIsLoading(false);
-  }
-
-  const getBatchProgress = (batch: BatchJob) => {
-    if (batch.status === 'processing') return 50; // In-progress state
-    if (batch.status === 'completed' || batch.status === 'error') return 100;
-    return 0;
-  }
-  
-  const getBatchProgressText = (batch: BatchJob) => {
-    if (batch.status === 'processing') return "Em andamento...";
-    if (batch.status === 'completed') return "Pronto para download";
-    if (batch.status === 'error') return "Falha ao enviar";
-    return "Pendente";
   }
 
   return (
@@ -627,7 +705,7 @@ export default function FgtsPage() {
                            </div>
                         </form>
                     </Form>
-                    {recentBatches.length > 0 && (
+                    {isStorageLoaded && recentBatches.length > 0 && (
                         <Card className="mt-8">
                             <CardHeader>
                                 <CardTitle>Histórico de Lotes Recentes</CardTitle>
@@ -639,59 +717,13 @@ export default function FgtsPage() {
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead>Lote</TableHead>
-                                            <TableHead className="w-[200px]">Progresso</TableHead>
+                                            <TableHead className="w-[250px]">Progresso</TableHead>
                                             <TableHead colSpan={2} className="text-right w-[200px]">Ação</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {paginatedBatches.map((batch) => (
-                                            <TableRow key={batch.id}>
-                                                <TableCell>
-                                                    <div className="font-medium">{formatBatchName(batch.fileName, batch.createdAt)}</div>
-                                                    <div className="text-sm text-muted-foreground">{batch.totalCpfs} CPFs</div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex flex-col gap-2">
-                                                        <Progress value={getBatchProgress(batch)} className="h-2" />
-                                                        <span className="text-xs text-muted-foreground">{getBatchProgressText(batch)}</span>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    <Button 
-                                                        size="sm"
-                                                        onClick={() => handleGenerateReport(batch)}
-                                                        disabled={batch.status !== 'completed' || isGeneratingReport === batch.id}
-                                                    >
-                                                        {isGeneratingReport === batch.id ? (
-                                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                        ) : (
-                                                            <Download className="mr-2 h-4 w-4" />
-                                                        )}
-                                                        Baixar
-                                                    </Button>
-                                                </TableCell>
-                                                 <TableCell className="text-right pr-4">
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                                                                <Trash2 className="h-4 w-4 text-destructive"/>
-                                                            </Button>
-                                                        </AlertDialogTrigger>
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader>
-                                                            <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
-                                                            <AlertDialogDescription>
-                                                                Esta ação não pode ser desfeita. Isso excluirá permanentemente o lote do seu histórico local.
-                                                            </AlertDialogDescription>
-                                                            </AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                            <AlertDialogAction onClick={() => handleDeleteBatch(batch.id)} className="bg-destructive hover:bg-destructive/90">Excluir</AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
-                                                </TableCell>
-                                            </TableRow>
+                                            <BatchRow key={batch.id} initialBatch={batch} />
                                         ))}
                                     </TableBody>
                                 </Table>
@@ -738,5 +770,7 @@ export default function FgtsPage() {
     </div>
   );
 }
+
+    
 
     
