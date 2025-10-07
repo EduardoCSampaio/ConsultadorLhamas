@@ -99,33 +99,28 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                 const data = docSnap.data();
                 const responseBody = data?.responseBody;
                 
-                // Case 1: Success - We have a balance.
-                if (data?.status === 'success' && responseBody && responseBody.balance !== undefined && responseBody.balance !== null) {
+                // Case 1: Clear Success
+                const isSuccess = data?.status === 'success' && responseBody && typeof responseBody.balance !== 'undefined' && responseBody.balance !== null;
+
+                if (isSuccess) {
+                    const balanceValue = parseFloat(responseBody.balance);
                     results.push({
                         CPF: cpf,
-                        Saldo: parseFloat(responseBody.balance),
+                        Saldo: isNaN(balanceValue) ? 'N/A' : balanceValue,
                         Mensagem: 'Sucesso',
                     });
                 } 
-                // Case 2: Error - The webhook explicitly marked it as an error.
-                else if (data?.status === 'error' && responseBody) {
-                    const errorMessage = responseBody.errorMessage || responseBody.error || data.message || "Erro retornado pelo webhook.";
-                    results.push({
-                        CPF: cpf,
-                        Saldo: 'N/A',
-                        Mensagem: `Erro: ${errorMessage}`,
-                    });
-                }
-                // Case 3: Fallback for other non-success/non-error states, or invalid data.
+                // Case 2: Any other state is considered an error or pending.
                 else {
+                    const errorMessage = responseBody?.errorMessage || responseBody?.error || data?.message || "Erro no processamento do webhook.";
                     results.push({
                         CPF: cpf,
                         Saldo: 'N/A',
-                        Mensagem: 'Resposta inválida ou incompleta do webhook.',
+                        Mensagem: errorMessage,
                     });
                 }
             } else {
-                // Case 4: Document not created yet.
+                // Case 3: Document doesn't exist yet.
                 results.push({
                     CPF: cpf,
                     Saldo: 'N/A',
