@@ -119,12 +119,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const menuItems = [
       ...baseMenuItems,
       ...(userProfile?.role === 'admin' ? adminMenuItems : []),
-      ...bottomMenuItems
   ];
 
   return (
     <SidebarProvider>
-      <Sidebar>
+      <Sidebar variant="floating" collapsible="icon">
         <SidebarHeader>
           <Logo />
         </SidebarHeader>
@@ -146,35 +145,40 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             ))}
           </SidebarMenu>
         </SidebarContent>
-        <SidebarFooter>
-          {user ? (
-            <div className="flex items-center gap-3">
+        <SidebarFooter className="flex-col !gap-1">
+            <SidebarMenu>
+                 {bottomMenuItems.map((item) => (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={pathname.startsWith(item.href)}
+                      tooltip={item.tooltip}
+                    >
+                      <Link href={item.href}>
+                        <item.icon />
+                        <span>{item.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+            </SidebarMenu>
+             <div className="flex items-center gap-3 p-2">
               <Avatar className="size-8">
-                {user.photoURL && <AvatarImage src={user.photoURL} alt="User Avatar" />}
-                <AvatarFallback>{getInitials(user.email || '??')}</AvatarFallback>
+                {user?.photoURL && <AvatarImage src={user.photoURL} alt="User Avatar" />}
+                <AvatarFallback>{getInitials(user?.email || '??')}</AvatarFallback>
               </Avatar>
-              <span className="font-medium text-sm truncate">{user.email}</span>
-              <Button variant="ghost" size="icon" className="ml-auto size-7" onClick={handleLogout}>
+              <div className="flex flex-col text-sm overflow-hidden">
+                <span className="font-medium truncate">{user?.email}</span>
+                <span className="text-xs text-sidebar-foreground/70">{userProfile?.role === 'admin' ? 'Administrador' : 'Usuário'}</span>
+              </div>
+              <Button variant="ghost" size="icon" className="ml-auto size-7 text-sidebar-foreground/70 hover:text-sidebar-foreground" onClick={handleLogout}>
                 <LogOut />
               </Button>
             </div>
-          ) : (
-            <div className="flex items-center gap-3">
-                <Avatar className="size-8">
-                    <AvatarFallback>??</AvatarFallback>
-                </Avatar>
-                <span className="font-medium text-sm truncate">Não autenticado</span>
-                <Button variant="ghost" size="icon" className="ml-auto size-7" asChild>
-                    <Link href="/">
-                        <LogOut />
-                    </Link>
-                </Button>
-            </div>
-          )}
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        <header className="flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
+        <header className="flex h-16 items-center gap-4 border-b bg-card/50 backdrop-blur-sm sticky top-0 px-4 md:px-6 z-10">
           <SidebarTrigger className="md:hidden"/>
           <div className="flex-1">
             {/* We can add breadcrumbs here */}
