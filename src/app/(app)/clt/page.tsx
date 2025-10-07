@@ -19,7 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Loader2, FileSignature, Wand, Banknote, Calendar as CalendarIconComponent, Hash, Percent, ChevronDown } from "lucide-react";
+import { CalendarIcon, Loader2, FileSignature, Wand, Banknote, Calendar as CalendarIconComponent, Hash, Percent } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -90,10 +90,10 @@ export default function CltPage() {
   });
 
   useEffect(() => {
-    if (currentStep === 'simulation' && !simulationConfigs) {
+    if (currentStep === 'simulation' && !simulationConfigs && user) {
       const fetchTaxas = async () => {
         setIsLoading(true);
-        const result = await consultarTaxasCLT();
+        const result = await consultarTaxasCLT({ userId: user.uid });
         if (result.success && result.configs) {
           setSimulationConfigs(result.configs);
         } else {
@@ -108,7 +108,7 @@ export default function CltPage() {
       };
       fetchTaxas();
     }
-  }, [currentStep, simulationConfigs, toast]);
+  }, [currentStep, simulationConfigs, toast, user]);
   
   const handleConfigChange = (value: string) => {
       setConfigId(value);
@@ -160,7 +160,7 @@ export default function CltPage() {
   async function onSimulationSubmit(event: React.FormEvent) {
       event.preventDefault();
       if (!user || !consentResult?.consultationId) {
-          toast({ variant: "destructive", title: "Erro", description: "ID de consulta não encontrado." });
+          toast({ variant: "destructive", title: "Erro", description: "ID de consulta ou usuário não encontrado." });
           return;
       }
       
@@ -179,6 +179,7 @@ export default function CltPage() {
           disbursed_amount: disbursedAmount,
           number_of_installments: parseInt(numberOfInstallments, 10),
           provider: 'QI',
+          userId: user.uid,
       });
       setIsSimulating(false);
       if (result.success && result.simulation) {
@@ -474,5 +475,3 @@ export default function CltPage() {
     </div>
   );
 }
-
-    

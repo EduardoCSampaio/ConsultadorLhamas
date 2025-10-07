@@ -23,12 +23,17 @@ const consentActionSchema = z.object({
   userId: z.string(),
 });
 
+const taxasActionSchema = z.object({
+    userId: z.string(),
+});
+
 const simulationActionSchema = z.object({
   consult_id: z.string(),
   config_id: z.string(),
   disbursed_amount: z.number(),
   number_of_installments: z.number(),
   provider: z.literal("QI"),
+  userId: z.string(),
 });
 
 export type CLTConsentResult = {
@@ -78,27 +83,54 @@ type CreateSimulacaoResult = {
     simulation?: SimulationResult;
 };
 
+async function getUserCredentials(userId: string): Promise<{ credentials: ApiCredentials | null; error: string | null }> {
+    if (!userId) {
+        return { credentials: null, error: 'ID do usuário não fornecido.' };
+    }
+    try {
+        initializeFirebaseAdmin();
+        const firestore = getFirestore();
+        const userDoc = await firestore.collection('users').doc(userId).get();
+        if (!userDoc.exists) {
+            return { credentials: null, error: 'Usuário não encontrado para buscar credenciais.' };
+        }
+        const userData = userDoc.data()!;
+        const credentials = {
+            v8_username: userData.v8_username,
+            v8_password: userData.v8_password,
+            v8_audience: userData.v8_audience,
+            v8_client_id: userData.v8_client_id,
+        };
+
+        if (!credentials.v8_username || !credentials.v8_password || !credentials.v8_audience || !credentials.v8_client_id) {
+            const missing = [
+                !credentials.v8_username && "Username",
+                !credentials.v8_password && "Password",
+                !credentials.v8_audience && "Audience",
+                !credentials.v8_client_id && "Client ID"
+            ].filter(Boolean).join(', ');
+            return { credentials: null, error: `Credenciais de API incompletas. Faltando: ${missing}. Por favor, configure-as na página de Configurações.` };
+        }
+
+        return { credentials, error: null };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro ao carregar credenciais de API.";
+        console.error(`[getUserCredentials] Error fetching credentials for user ${userId}:`, error);
+        return { credentials: null, error: message };
+    }
+}
+
 async function getAuthToken(credentials: ApiCredentials): Promise<{token: string | null, error: string | null}> {
   const { v8_username, v8_password, v8_audience, v8_client_id } = credentials;
-
-  if (!v8_username || !v8_password || !v8_audience || !v8_client_id) {
-    const missing = [
-      !v8_username && "Username",
-      !v8_password && "Password",
-      !v8_audience && "Audience",
-      !v8_client_id && "Client ID"
-    ].filter(Boolean).join(', ');
-    return { token: null, error: `Credenciais de API incompletas. Faltando: ${missing}. Por favor, configure-as na página de Configurações.` };
-  }
   
   const tokenUrl = 'https://auth.v8sistema.com/oauth/token';
   const bodyPayload = new URLSearchParams({
     grant_type: 'password',
-    username: v8_username,
-    password: v8_password,
-    audience: v8_audience,
+    username: v8_username!,
+    password: v8_password!,
+    audience: v8_audience!,
     scope: 'offline_access',
-    client_id: v8_client_id,
+    client_id: v8_client_id!,
   });
 
   try {
@@ -123,29 +155,6 @@ async function getAuthToken(credentials: ApiCredentials): Promise<{token: string
   }
 }
 
-async function getUserCredentials(userId: string): Promise<{ credentials: ApiCredentials | null; error: string | null }> {
-    try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
-        const userDoc = await firestore.collection('users').doc(userId).get();
-        if (!userDoc.exists) {
-            return { credentials: null, error: 'Usuário não encontrado para buscar credenciais.' };
-        }
-        const userData = userDoc.data()!;
-        return {
-            credentials: {
-                v8_username: userData.v8_username,
-                v8_password: userData.v8_password,
-                v8_audience: userData.v8_audience,
-                v8_client_id: userData.v8_client_id,
-            },
-            error: null,
-        };
-    } catch (error) {
-        const message = error instanceof Error ? error.message : "Erro ao carregar credenciais de API.";
-        return { credentials: null, error: message };
-    }
-}
 
 export async function gerarTermoConsentimento(input: z.infer<typeof consentActionSchema>): Promise<CLTConsentResult> {
     const validation = consentActionSchema.safeParse(input);
@@ -167,7 +176,6 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
 
     const API_URL = 'https://bff.v8sistema.com/private-consignment/consult';
     
-    // Correctly construct the body with individual fields as per user's provided structure
     const body = {
       borrowerDocumentNumber: data.borrowerDocumentNumber,
       gender: data.gender,
@@ -217,41 +225,23 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
     }
 }
 
-export async function consultarTaxasCLT(): Promise<GetTaxasResult> {
-     // For now, we don't have a user context here, but if needed, userId could be passed.
-    // Let's assume a generic admin or service account for fetching configs.
-    const { credentials, error: credError } = await getUserCredentials('admin'); // Or a specific service account user
-     if (credError) {
-        // A simple workaround: try to find any admin user to get credentials
-        // This is not ideal for production but works for a single-admin setup.
-        console.warn("Could not find dedicated admin user for configs, will attempt to find one.");
+export async function consultarTaxasCLT(input: z.infer<typeof taxasActionSchema>): Promise<GetTaxasResult> {
+    const validation = taxasActionSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: 'ID do usuário inválido.' };
     }
 
-    // This is a placeholder for getting any admin user's credentials.
-    // In a real app, you'd have a more robust way to handle service-to-service auth.
-    let token: string | null;
+    const { userId } = validation.data;
 
-    try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
-        const usersSnapshot = await firestore.collection('users').where('role', '==', 'admin').limit(1).get();
-        if (usersSnapshot.empty) {
-            return { success: false, message: "Nenhum usuário administrador configurado para buscar taxas." };
-        }
-        const adminUser = usersSnapshot.docs[0].data();
-         const { token: fetchedToken, error: tokenError } = await getAuthToken(adminUser);
-         if (tokenError) {
-             return { success: false, message: tokenError };
-         }
-         token = fetchedToken;
-
-    } catch (e) {
-        const message = e instanceof Error ? e.message : 'Failed to fetch admin credentials.';
-        return { success: false, message };
+    const { credentials, error: credError } = await getUserCredentials(userId);
+    if (credError || !credentials) {
+        return { success: false, message: credError || "Credenciais não encontradas para buscar taxas." };
     }
 
-
-    if (!token) return { success: false, message: "Não foi possível autenticar para buscar as taxas." };
+    const { token, error: tokenError } = await getAuthToken(credentials);
+    if (tokenError) {
+        return { success: false, message: tokenError };
+    }
 
     const API_URL = 'https://bff.v8sistema.com/private-consignment/simulation/configs';
     try {
@@ -279,16 +269,11 @@ export async function criarSimulacaoCLT(input: z.infer<typeof simulationActionSc
         return { success: false, message: 'Dados de entrada para simulação inválidos.' };
     }
 
-    // We need a user context to get the right token
-    const { auth } = await initializeFirebaseAdmin();
-    const userRecords = await auth.listUsers();
-    const currentUser = userRecords.users.find(u => u.uid); // simplistic selection
-    
-    if (!currentUser) return { success: false, message: 'Usuário não encontrado para a simulação.' };
+    const { userId, ...simulationData } = validation.data;
 
-    const { credentials, error: credError } = await getUserCredentials(currentUser.uid);
+    const { credentials, error: credError } = await getUserCredentials(userId);
     if (credError || !credentials) {
-        return { success: false, message: credError || "Credenciais não encontradas." };
+        return { success: false, message: credError || "Credenciais não encontradas para a simulação." };
     }
 
     const { token, error: tokenError } = await getAuthToken(credentials);
@@ -305,7 +290,7 @@ export async function criarSimulacaoCLT(input: z.infer<typeof simulationActionSc
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`,
             },
-            body: JSON.stringify(validation.data),
+            body: JSON.stringify(simulationData),
         });
         const responseData = await response.json();
 
@@ -320,5 +305,3 @@ export async function criarSimulacaoCLT(input: z.infer<typeof simulationActionSc
         return { success: false, message };
     }
 }
-
-    
