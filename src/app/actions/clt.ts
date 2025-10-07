@@ -180,29 +180,25 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
         'Authorization': `Bearer ${token}`,
     };
 
-    // --- ETAPA 1: GERAR O TERMO DE CONSENTIMENTO ---
-    const generationBody = {
-        borrowerDocumentNumber: data.borrowerDocumentNumber,
-        gender: data.gender,
-        birthDate: data.birthDate,
-        signerName: data.signerName,
-        signerEmail: data.signerEmail,
-        signerPhone: {
-            phoneNumber: data.signerPhone.phoneNumber,
-            countryCode: data.signerPhone.countryCode,
-            areaCode: data.signerPhone.areaCode
-        },
-        provider: data.provider
-    };
-
-    console.log("--- [CLT_CONSENT DEBUG - ETAPA 1: GERAR] ---");
-    console.log("Endpoint:", API_URL);
-    console.log("Method: POST");
-    console.log("Headers:", JSON.stringify({ ...headers, Authorization: 'Bearer [REDACTED]' }, null, 2));
-    console.log("Request Body:", JSON.stringify(generationBody, null, 2));
-    console.log("------------------------------------------");
-
     try {
+        // --- ETAPA 1: GERAR O TERMO DE CONSENTIMENTO ---
+        const generationBody = {
+            borrowerDocumentNumber: data.borrowerDocumentNumber,
+            gender: data.gender,
+            birthDate: data.birthDate,
+            signerName: data.signerName,
+            signerEmail: data.signerEmail,
+            signerPhone: data.signerPhone,
+            provider: data.provider
+        };
+
+        console.log("--- [CLT_CONSENT DEBUG - ETAPA 1: GERAR] ---");
+        console.log("Endpoint:", API_URL);
+        console.log("Method: POST");
+        console.log("Headers:", JSON.stringify({ ...headers, Authorization: 'Bearer [REDACTED]' }, null, 2));
+        console.log("Request Body:", JSON.stringify(generationBody, null, 2));
+        console.log("------------------------------------------");
+
         const generationResponse = await fetch(API_URL, {
             method: 'POST',
             headers: headers,
@@ -247,7 +243,7 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
             console.error(`[CLT_CONSENT - ETAPA 2] API Error: ${JSON.stringify(authorizationData)}`);
             return { success: false, message: `O termo foi gerado, mas falhou ao autorizar: ${errorMessage}` };
         }
-
+        
         console.log(`[CLT_CONSENT - ETAPA 2] Sucesso! Termo autorizado.`);
 
         return { 
