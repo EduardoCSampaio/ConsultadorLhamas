@@ -156,16 +156,21 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
     const { userId, ...requestData } = validation.data;
 
     const { credentials, error: credError } = await getUserCredentials(userId);
-    if (credError) {
-        return { success: false, message: credError };
+    if (credError || !credentials) {
+        return { success: false, message: credError || "Credenciais não encontradas." };
     }
 
-    const { token, error: tokenError } = await getAuthToken(credentials!);
+    const { token, error: tokenError } = await getAuthToken(credentials);
     if (tokenError) {
         return { success: false, message: tokenError };
     }
 
     const API_URL = 'https://bff.v8sistema.com/private-consignment/consult';
+    
+    const body = {
+      ...requestData,
+      action: "CONSULT"
+    };
 
     try {
         const response = await fetch(API_URL, {
@@ -174,7 +179,7 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`,
             },
-            body: JSON.stringify(requestData),
+            body: JSON.stringify(body),
         });
 
         const responseData = await response.json();
@@ -272,11 +277,11 @@ export async function criarSimulacaoCLT(input: z.infer<typeof simulationActionSc
     if (!currentUser) return { success: false, message: 'Usuário não encontrado para a simulação.' };
 
     const { credentials, error: credError } = await getUserCredentials(currentUser.uid);
-    if (credError) {
-        return { success: false, message: credError };
+    if (credError || !credentials) {
+        return { success: false, message: credError || "Credenciais não encontradas." };
     }
 
-    const { token, error: tokenError } = await getAuthToken(credentials!);
+    const { token, error: tokenError } = await getAuthToken(credentials);
     if (tokenError) {
         return { success: false, message: tokenError };
     }
