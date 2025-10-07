@@ -58,7 +58,7 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
       successCount++;
     }
     // Small delay to avoid overwhelming the API
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
 
   return {
