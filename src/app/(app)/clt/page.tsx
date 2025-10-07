@@ -38,10 +38,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 // Schemas
 const consentFormSchema = z.object({
   borrowerDocumentNumber: z.string().min(11, "CPF deve ter 11 dígitos.").max(11, "CPF deve ter 11 dígitos."),
-  gender: z.enum(["male", "female"], { required_error: "Selecione o gênero." }),
+  signerName: z.string().min(3, "Nome completo é obrigatório."),
+  signerEmail: z.string().email("Email inválido."),
   birthDate: z.date({ required_error: "Data de nascimento é obrigatória." }),
-  signerName: z.string().min(3, "Nome do signatário é obrigatório."),
-  signerEmail: z.string().email("Email do signatário inválido."),
+  gender: z.enum(["male", "female"], { required_error: "Selecione o gênero." }),
   signerPhoneCountryCode: z.string().min(1, "DDI é obrigatório.").default("55"),
   signerPhoneAreaCode: z.string().min(2, "DDD é obrigatório."),
   signerPhoneNumber: z.string().min(8, "Número de telefone é obrigatório."),
@@ -208,100 +208,33 @@ export default function CltPage() {
             <CardHeader>
             <CardTitle>Etapa 1: Termo de Consentimento</CardTitle>
             <CardDescription>
-                Preencha os dados do tomador para gerar o termo. Este é o primeiro passo para a análise de crédito.
+                Preencha os dados do cliente para gerar o termo. Este é o primeiro passo para a análise de crédito.
             </CardDescription>
             </CardHeader>
             <CardContent>
             <Form {...consentForm}>
                 <form onSubmit={consentForm.handleSubmit(onConsentSubmit)} className="space-y-8">
-                <div className="grid md:grid-cols-2 gap-8">
-                    <div className="space-y-6">
-                        <h3 className="text-lg font-medium border-b pb-2">Dados do Tomador</h3>
+                    <div className="space-y-6 max-w-lg">
+                        <h3 className="text-lg font-medium border-b pb-2">Dados do Cliente</h3>
+                        <FormField control={consentForm.control} name="signerName" render={({ field }) => ( 
+                            <FormItem> 
+                                <FormLabel>Nome Completo</FormLabel> 
+                                <FormControl> 
+                                    <Input placeholder="Nome do cliente" {...field} disabled={isLoading} /> 
+                                </FormControl> 
+                                <FormMessage /> 
+                            </FormItem> 
+                        )}/>
                         <FormField control={consentForm.control} name="borrowerDocumentNumber" render={({ field }) => ( 
                             <FormItem> 
-                                <FormLabel>CPF do Tomador</FormLabel> 
+                                <FormLabel>CPF</FormLabel> 
                                 <FormControl> 
                                     <Input placeholder="000.000.000-00" {...field} disabled={isLoading} /> 
                                 </FormControl> 
                                 <FormMessage /> 
                             </FormItem> 
                         )}/>
-                        <FormField
-                            control={consentForm.control}
-                            name="birthDate"
-                            render={({ field }) => (
-                                <FormItem className="flex flex-col">
-                                <FormLabel>Data de Nascimento</FormLabel>
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                        <FormControl>
-                                            <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")} disabled={isLoading}>
-                                                {field.value ? (format(field.value, "PPP", { locale: ptBR })) : (<span>Escolha uma data</span>)}
-                                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                            </Button>
-                                        </FormControl>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0" align="start">
-                                    <Calendar
-                                        mode="single"
-                                        captionLayout="dropdown-buttons"
-                                        fromYear={1940}
-                                        toYear={new Date().getFullYear()}
-                                        selected={field.value}
-                                        onSelect={field.onChange}
-                                        disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
-                                        initialFocus
-                                    />
-                                    </PopoverContent>
-                                </Popover>
-                                <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                        <FormField
-                            control={consentForm.control}
-                            name="gender"
-                            render={({ field }) => (
-                                <FormItem className="space-y-3">
-                                <FormLabel>Gênero</FormLabel>
-                                <FormControl>
-                                    <RadioGroup
-                                        onValueChange={field.onChange}
-                                        defaultValue={field.value}
-                                        className="flex space-x-4"
-                                        disabled={isLoading}
-                                    >
-                                        <FormItem className="flex items-center space-x-2 space-y-0">
-                                            <FormControl>
-                                                <RadioGroupItem value="male" />
-                                            </FormControl>
-                                            <FormLabel className="font-normal">Masculino</FormLabel>
-                                        </FormItem>
-                                        <FormItem className="flex items-center space-x-2 space-y-0">
-                                            <FormControl>
-                                                <RadioGroupItem value="female" />
-                                            </FormControl>
-                                            <FormLabel className="font-normal">Feminino</FormLabel>
-                                        </FormItem>
-                                    </RadioGroup>
-                                </FormControl>
-                                <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                    </div>
-                    <div className="space-y-6">
-                        <h3 className="text-lg font-medium border-b pb-2">Dados do Signatário</h3>
-                        <FormField control={consentForm.control} name="signerName" render={({ field }) => ( 
-                            <FormItem> 
-                                <FormLabel>Nome Completo</FormLabel> 
-                                <FormControl> 
-                                    <Input placeholder="Nome do signatário" {...field} disabled={isLoading} /> 
-                                </FormControl> 
-                                <FormMessage /> 
-                            </FormItem> 
-                        )}/>
-                        <FormField control={consentForm.control} name="signerEmail" render={({ field }) => ( 
+                         <FormField control={consentForm.control} name="signerEmail" render={({ field }) => ( 
                             <FormItem> 
                                 <FormLabel>Email</FormLabel> 
                                 <FormControl> 
@@ -340,8 +273,73 @@ export default function CltPage() {
                             </div>
                             <FormDescription className="mt-2">Inclua DDI, DDD e o número.</FormDescription>
                         </div>
+
+                        <div className="grid grid-cols-2 gap-8">
+                             <FormField
+                                control={consentForm.control}
+                                name="birthDate"
+                                render={({ field }) => (
+                                    <FormItem className="flex flex-col">
+                                    <FormLabel>Data de Nascimento</FormLabel>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                          <FormControl>
+                                            <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")} disabled={isLoading}>
+                                                {field.value ? (format(field.value, "PPP", { locale: ptBR })) : (<span>Escolha uma data</span>)}
+                                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                            </Button>
+                                          </FormControl>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0" align="start">
+                                        <Calendar
+                                            mode="single"
+                                            captionLayout="dropdown-buttons"
+                                            fromYear={1940}
+                                            toYear={new Date().getFullYear()}
+                                            selected={field.value}
+                                            onSelect={field.onChange}
+                                            disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
+                                            initialFocus
+                                        />
+                                        </PopoverContent>
+                                    </Popover>
+                                    <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={consentForm.control}
+                                name="gender"
+                                render={({ field }) => (
+                                    <FormItem className="space-y-3">
+                                    <FormLabel>Gênero</FormLabel>
+                                    <FormControl>
+                                        <RadioGroup
+                                            onValueChange={field.onChange}
+                                            defaultValue={field.value}
+                                            className="flex space-x-4 pt-2"
+                                            disabled={isLoading}
+                                        >
+                                            <FormItem className="flex items-center space-x-2 space-y-0">
+                                                <FormControl>
+                                                    <RadioGroupItem value="male" />
+                                                </FormControl>
+                                                <FormLabel className="font-normal">Masculino</FormLabel>
+                                            </FormItem>
+                                            <FormItem className="flex items-center space-x-2 space-y-0">
+                                                <FormControl>
+                                                    <RadioGroupItem value="female" />
+                                                </FormControl>
+                                                <FormLabel className="font-normal">Feminino</FormLabel>
+                                            </FormItem>
+                                        </RadioGroup>
+                                    </FormControl>
+                                    <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                        </div>
                     </div>
-                </div>
                 
                 <Button type="submit" disabled={isLoading}>
                     {isLoading ? (<Loader2 className="mr-2 h-4 w-4 animate-spin" />) : (<FileSignature className="mr-2 h-4 w-4" />)}
@@ -475,3 +473,4 @@ export default function CltPage() {
     </div>
   );
 }
+
