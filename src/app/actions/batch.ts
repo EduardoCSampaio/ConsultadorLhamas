@@ -9,11 +9,11 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import type { ApiCredentials } from './users';
 
 const processActionSchema = z.object({
-  batchId: z.string(),
   cpfs: z.array(z.string()),
   provider: z.enum(["cartos", "bms", "qi"]),
   userId: z.string(),
   userEmail: z.string(),
+  fileName: z.string(),
 });
 
 const reportActionSchema = z.object({
@@ -32,7 +32,7 @@ export type BatchJob = {
     provider: string;
     status: 'processing' | 'completed' | 'error';
     totalCpfs: number;
-    processedCpfs: number; // This can be removed if we don't show real-time progress
+    processedCpfs: number;
     cpfs: string[];
     createdAt: string;
     message?: string;
@@ -42,6 +42,7 @@ export type BatchJob = {
 type ProcessActionResult = {
   status: 'success' | 'error';
   message?: string;
+  batch?: BatchJob;
 };
 
 type ReportActionResult = {
@@ -70,9 +71,8 @@ export async function getBatchStatus(input: z.infer<typeof getBatchStatusSchema>
         const createdAt = data.createdAt;
         let serializableCreatedAt = new Date().toISOString();
         if (createdAt instanceof FieldValue) {
-           // This case is tricky as we don't know the server time. Use current time as fallback.
            serializableCreatedAt = new Date().toISOString();
-        } else if (createdAt && typeof createdAt.toDate === 'function') { // Check for Timestamp
+        } else if (createdAt && typeof createdAt.toDate === 'function') {
             serializableCreatedAt = createdAt.toDate().toISOString();
         } else if (typeof createdAt === 'string') {
             serializableCreatedAt = createdAt;
@@ -113,23 +113,27 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
     };
   }
 
-  const { batchId, cpfs, provider, userId, userEmail } = validation.data;
+  const { cpfs, provider, userId, userEmail, fileName } = validation.data;
+  
+  initializeFirebaseAdmin();
   const firestore = getFirestore();
+  
+  const batchId = `batch-${Date.now()}-${userId}`;
   const batchRef = firestore.collection('batches').doc(batchId);
 
+  const batchData: Omit<BatchJob, 'createdAt'> & { createdAt: FieldValue } = {
+      id: batchId,
+      fileName: fileName,
+      provider: provider,
+      status: 'processing',
+      totalCpfs: cpfs.length,
+      processedCpfs: 0,
+      cpfs: cpfs,
+      createdAt: FieldValue.serverTimestamp(),
+  };
+
   try {
-      initializeFirebaseAdmin();
-      await batchRef.set({
-          id: batchId,
-          userId: userId,
-          fileName: `Lote de ${cpfs.length} CPFs`,
-          provider: provider,
-          status: 'processing',
-          totalCpfs: cpfs.length,
-          processedCpfs: 0,
-          cpfs: cpfs,
-          createdAt: FieldValue.serverTimestamp(),
-      });
+      await batchRef.set(batchData);
   } catch(error) {
     const message = error instanceof Error ? error.message : "Erro ao iniciar o lote no Firestore.";
     console.error("Batch init error:", message);
@@ -138,10 +142,16 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
 
   // Do not await the rest of the processing. It will run in the background.
   processBatchInBackground(batchId, cpfs, provider, userId, userEmail);
+  
+  const serializableBatch: BatchJob = {
+    ...batchData,
+    createdAt: new Date().toISOString(), // Return current time as a serializable placeholder
+  }
 
   return {
     status: 'success',
     message: `Lote enviado para processamento em segundo plano.`,
+    batch: serializableBatch
   };
 }
 
@@ -291,5 +301,3 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         message: 'Relatório gerado com sucesso.',
     };
 }
-
-    

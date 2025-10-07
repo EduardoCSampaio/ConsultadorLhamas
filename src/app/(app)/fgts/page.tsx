@@ -214,15 +214,15 @@ function BatchRow({ initialBatch }: { initialBatch: BatchJob }) {
     };
     
     const getBatchProgress = (currentBatch: BatchJob) => {
+        if (!currentBatch.totalCpfs) return 0;
         if (currentBatch.status === 'completed' || currentBatch.status === 'error') return 100;
-        if (currentBatch.status === 'processing') return 50; // In progress state
-        return 0;
+        return (currentBatch.processedCpfs / currentBatch.totalCpfs) * 100;
     }
 
     const getBatchProgressText = (currentBatch: BatchJob) => {
-        if (currentBatch.status === 'processing') return `Em andamento...`;
-        if (currentBatch.status === 'completed') return "Pronto para download";
-        if (currentBatch.status === 'error') return "Falha ao enviar";
+        if (currentBatch.status === 'processing') return `Em andamento... (${currentBatch.processedCpfs}/${currentBatch.totalCpfs})`;
+        if (currentBatch.status === 'completed') return "Concluído";
+        if (currentBatch.status === 'error') return `Falha: ${currentBatch.message || 'Erro desconhecido'}`;
         return "Pendente";
     }
 
@@ -316,7 +316,9 @@ export default function FgtsPage() {
         const localStorageKey = getLocalStorageKey(user.uid);
         try {
             const storedBatches = window.localStorage.getItem(localStorageKey);
-            setRecentBatches(storedBatches ? JSON.parse(storedBatches) : []);
+            if (storedBatches) {
+              setRecentBatches(JSON.parse(storedBatches));
+            }
         } catch (error) {
             console.error("Failed to parse recent batches from localStorage", error);
             setRecentBatches([]);
@@ -421,38 +423,34 @@ export default function FgtsPage() {
                 return;
             }
 
-            const batchId = `batch-${Date.now()}-${user.uid}`;
-            const newBatch: BatchJob = {
-              id: batchId,
-              fileName: file.name,
-              provider: provider,
-              status: 'processing',
-              totalCpfs: cpfs.length,
-              processedCpfs: 0,
-              cpfs: cpfs,
-              createdAt: new Date().toISOString(),
-            };
-
-            setRecentBatches(prev => [newBatch, ...prev]);
-
-            await processarLoteFgts({ 
-                batchId: newBatch.id,
+            const result = await processarLoteFgts({ 
                 cpfs, 
                 provider, 
                 userId: user.uid, 
-                userEmail: user.email || 'N/A' 
+                userEmail: user.email || 'N/A',
+                fileName: file.name
             });
 
-            toast({
-                title: "Lote enviado para a fila!",
-                description: `${cpfs.length} CPFs serão processados em segundo plano.`,
-            });
-        } catch (error) {
+            if (result.status === 'success' && result.batch) {
+                setRecentBatches(prev => [result.batch!, ...prev]);
+                toast({
+                    title: "Lote enviado para a fila!",
+                    description: `${cpfs.length} CPFs serão processados em segundo plano.`,
+                });
+            } else {
+                 toast({
+                    variant: "destructive",
+                    title: "Erro ao enviar o lote",
+                    description: result.message || "Não foi possível iniciar o processamento do lote.",
+                });
+            }
+        } catch (error: any) {
             console.error("Error processing batch file:", error);
+            const errorMessage = error.message || "Não foi possível ler o arquivo. Verifique se o formato está correto.";
             toast({
                 variant: "destructive",
                 title: "Erro ao processar arquivo",
-                description: "Não foi possível ler o arquivo. Verifique se o formato está correto.",
+                description: errorMessage,
             });
         } finally {
             setIsProcessingBatch(false);
@@ -780,5 +778,3 @@ export default function FgtsPage() {
     </div>
   );
 }
-
-    
