@@ -29,7 +29,6 @@ import { useState, useEffect } from "react";
 import { gerarTermoConsentimento, consultarTaxasCLT, criarSimulacaoCLT } from "@/app/actions/clt";
 import type { SimulationConfig, SimulationResult, CLTConsentResult } from "@/app/actions/clt";
 import { useUser } from "@/firebase";
-import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -273,53 +272,63 @@ export default function CltPage() {
                     <Form {...simulationForm}>
                         <form onSubmit={simulationForm.handleSubmit(onSimulationSubmit)} className="space-y-8">
                             <div className="grid md:grid-cols-3 gap-8 items-start">
-                                <FormItem>
-                                    <FormLabel>Tabela de Juros</FormLabel>
-                                    <div className="relative w-full">
-                                        <select
-                                            {...simulationForm.register("config_id")}
-                                            disabled={isSimulating}
-                                            className={cn(
-                                                "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 appearance-none",
-                                                simulationForm.formState.errors.config_id && "border-destructive"
-                                            )}
-                                            defaultValue=""
-                                        >
-                                            <option value="" disabled>Selecione uma tabela...</option>
-                                            {simulationConfigs?.map(config => (
-                                                <option key={config.id} value={config.id}>
-                                                    {config.slug} ({parseFloat(config.monthly_interest_rate).toFixed(2)}% a.m.)
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" />
-                                    </div>
-                                    <FormMessage>{simulationForm.formState.errors.config_id?.message}</FormMessage>
-                                </FormItem>
+                                <FormField
+                                    control={simulationForm.control}
+                                    name="config_id"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Tabela de Juros</FormLabel>
+                                            <FormControl>
+                                                <div className="relative w-full">
+                                                    <select
+                                                        {...field}
+                                                        disabled={isSimulating}
+                                                        className="appearance-none block w-full bg-background border border-input rounded-md py-2 px-3 text-sm placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                                        defaultValue=""
+                                                    >
+                                                        <option value="" disabled>Selecione uma tabela...</option>
+                                                        {simulationConfigs?.map(config => (
+                                                            <option key={config.id} value={config.id}>
+                                                                {config.slug} ({parseFloat(config.monthly_interest_rate).toFixed(2)}% a.m.)
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" />
+                                                </div>
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
 
-                                <FormItem>
-                                    <FormLabel>Número de Parcelas</FormLabel>
-                                    <div className="relative w-full">
-                                        <select
-                                            {...simulationForm.register("number_of_installments")}
-                                            disabled={!selectedConfig || isSimulating}
-                                            className={cn(
-                                                "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 appearance-none",
-                                                simulationForm.formState.errors.number_of_installments && "border-destructive"
-                                            )}
-                                            defaultValue=""
-                                        >
-                                            <option value="" disabled>{!selectedConfig ? "Selecione uma tabela primeiro" : "Selecione as parcelas..."}</option>
-                                            {selectedConfig?.number_of_installments.map(installment => (
-                                                <option key={installment} value={String(installment)}>
-                                                    {installment} parcelas
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" />
-                                    </div>
-                                    <FormMessage>{simulationForm.formState.errors.number_of_installments?.message}</FormMessage>
-                                </FormItem>
+                                <FormField
+                                    control={simulationForm.control}
+                                    name="number_of_installments"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Número de Parcelas</FormLabel>
+                                            <FormControl>
+                                                 <div className="relative w-full">
+                                                    <select
+                                                        {...field}
+                                                        disabled={!selectedConfig || isSimulating}
+                                                        className="appearance-none block w-full bg-background border border-input rounded-md py-2 px-3 text-sm placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                                        defaultValue=""
+                                                    >
+                                                        <option value="" disabled>{!selectedConfig ? "Selecione uma tabela primeiro" : "Selecione as parcelas..."}</option>
+                                                        {selectedConfig?.number_of_installments.map(installment => (
+                                                            <option key={installment} value={String(installment)}>
+                                                                {installment} parcelas
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" />
+                                                </div>
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
 
                                  <FormField
                                     control={simulationForm.control}
@@ -396,3 +405,5 @@ export default function CltPage() {
     </div>
   );
 }
+
+    
