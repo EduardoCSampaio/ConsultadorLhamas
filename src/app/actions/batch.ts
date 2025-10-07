@@ -70,16 +70,14 @@ export async function getBatchStatus(input: z.infer<typeof getBatchStatusSchema>
         const data = batchDoc.data()!;
         const createdAt = data.createdAt;
         let serializableCreatedAt = new Date().toISOString();
-        if (createdAt instanceof FieldValue) {
-           serializableCreatedAt = new Date().toISOString();
-        } else if (createdAt && typeof createdAt.toDate === 'function') {
+        if (createdAt && typeof createdAt.toDate === 'function') {
             serializableCreatedAt = createdAt.toDate().toISOString();
         } else if (typeof createdAt === 'string') {
             serializableCreatedAt = createdAt;
         }
 
         const batch: BatchJob = {
-            id: data.id,
+            id: batchDoc.id,
             fileName: data.fileName,
             provider: data.provider,
             status: data.status,

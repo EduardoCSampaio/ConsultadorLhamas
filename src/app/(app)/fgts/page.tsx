@@ -107,7 +107,7 @@ function ProviderSelector({ control, disabled }: { control: any; disabled?: bool
 const StepIcon = ({ status }: { status: StepStatus }) => {
     switch (status) {
       case "running":
-        return <Loader2 className="h-5 w-5 animate-spin text-blue-500" />;
+        return <Loader2 className="h-5 w-5 animate-spin text-primary" />;
       case "success":
         return <CheckCircle2 className="h-5 w-5 text-green-500" />;
       case "error":
