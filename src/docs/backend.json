@@ -1,4 +1,5 @@
 
+
 {
   "entities": {
     "WebhookResponse": {
@@ -167,6 +168,37 @@
             "createdAt": { "type": "string", "format": "date-time" }
         },
         "required": ["consultationId", "borrowerDocumentNumber", "userId", "createdAt"]
+    },
+    "SimulationConfig": {
+      "title": "Simulation Config",
+      "description": "Configuration for a CLT credit simulation.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "slug": { "type": "string" },
+        "monthly_interest_rate": { "type": "string" },
+        "number_of_installments": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "SimulationResult": {
+      "title": "Simulation Result",
+      "description": "The result of a CLT credit simulation.",
+      "type": "object",
+      "properties": {
+        "id_simulation": { "type": "string" },
+        "installment_value": { "type": "number" },
+        "number_of_installments": { "type": "number" },
+        "operation_amount": { "type": "number" },
+        "disbursement_amount": { "type": "number" },
+        "monthly_interest_rate": { "type": "number" },
+        "disbursement_option": {
+          "type": "object",
+          "properties": {
+            "cet": { "type": "number" },
+            "first_due_date": { "type": "string", "format": "date" }
+          }
+        }
+      }
     }
   },
   "auth": {
@@ -209,7 +241,5 @@
     }
   }
 }
-
-    
 
     
