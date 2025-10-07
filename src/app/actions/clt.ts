@@ -189,14 +189,23 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
         signerPhoneNumber: data.signerPhone.phoneNumber,
       }
     };
+    
+    const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+    };
+
+    console.log("--- [CLT_CONSENT DEBUG] ---");
+    console.log("Endpoint:", API_URL);
+    console.log("Headers:", JSON.stringify({ ...headers, Authorization: 'Bearer [REDACTED]' }, null, 2));
+    console.log("Request Body:", JSON.stringify(body, null, 2));
+    console.log("--------------------------");
+
 
     try {
         const response = await fetch(API_URL, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-            },
+            headers: headers,
             body: JSON.stringify(body),
         });
 
@@ -210,6 +219,7 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
         
         const consultationId = responseData.consultationId;
         if (!consultationId) {
+            console.error('[CLT_CONSENT] API Success but no consultationId returned:', responseData);
             return { success: false, message: "API retornou sucesso mas não incluiu o ID da consulta." };
         }
 
