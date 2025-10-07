@@ -193,8 +193,6 @@ async function processBatchInBackground(batchId: string, cpfs: string[], provide
         
         processedCount++;
         await batchRef.update({ processedCpfs: processedCount });
-        
-        await new Promise(resolve => setTimeout(resolve, 3000));
     }
   
     await batchRef.update({ status: 'completed' });
