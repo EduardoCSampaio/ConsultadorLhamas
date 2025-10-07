@@ -216,7 +216,15 @@ export default function CltPage() {
                 <div className="grid md:grid-cols-2 gap-8">
                     <div className="space-y-6">
                         <h3 className="text-lg font-medium border-b pb-2">Dados do Tomador</h3>
-                        <FormField control={consentForm.control} name="borrowerDocumentNumber" render={({ field }) => ( <FormItem> <FormLabel>CPF do Tomador</FormLabel> <FormControl> <Input placeholder="000.000.000-00" {...field} disabled={isLoading} /> </FormControl> <FormMessage /> </FormItem> )}/>
+                        <FormField control={consentForm.control} name="borrowerDocumentNumber" render={({ field }) => ( 
+                            <FormItem> 
+                                <FormLabel>CPF do Tomador</FormLabel> 
+                                <FormControl> 
+                                    <Input placeholder="000.000.000-00" {...field} disabled={isLoading} /> 
+                                </FormControl> 
+                                <FormMessage /> 
+                            </FormItem> 
+                        )}/>
                         <FormField
                             control={consentForm.control}
                             name="birthDate"
@@ -224,14 +232,14 @@ export default function CltPage() {
                                 <FormItem className="flex flex-col">
                                 <FormLabel>Data de Nascimento</FormLabel>
                                 <Popover>
-                                    <FormControl>
-                                        <PopoverTrigger asChild>
+                                    <PopoverTrigger asChild>
+                                        <FormControl>
                                             <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")} disabled={isLoading}>
                                                 {field.value ? (format(field.value, "PPP", { locale: ptBR })) : (<span>Escolha uma data</span>)}
                                                 <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                                             </Button>
-                                        </PopoverTrigger>
-                                    </FormControl>
+                                        </FormControl>
+                                    </PopoverTrigger>
                                     <PopoverContent className="w-auto p-0" align="start">
                                     <Calendar
                                         mode="single"
@@ -283,14 +291,51 @@ export default function CltPage() {
                     </div>
                     <div className="space-y-6">
                         <h3 className="text-lg font-medium border-b pb-2">Dados do Signatário</h3>
-                        <FormField control={consentForm.control} name="signerName" render={({ field }) => ( <FormItem> <FormLabel>Nome Completo</FormLabel> <FormControl> <Input placeholder="Nome do signatário" {...field} disabled={isLoading} /> </FormControl> <FormMessage /> </FormItem> )}/>
-                        <FormField control={consentForm.control} name="signerEmail" render={({ field }) => ( <FormItem> <FormLabel>Email</FormLabel> <FormControl> <Input placeholder="email@exemplo.com" {...field} disabled={isLoading} /> </FormControl> <FormMessage /> </FormItem> )}/>
+                        <FormField control={consentForm.control} name="signerName" render={({ field }) => ( 
+                            <FormItem> 
+                                <FormLabel>Nome Completo</FormLabel> 
+                                <FormControl> 
+                                    <Input placeholder="Nome do signatário" {...field} disabled={isLoading} /> 
+                                </FormControl> 
+                                <FormMessage /> 
+                            </FormItem> 
+                        )}/>
+                        <FormField control={consentForm.control} name="signerEmail" render={({ field }) => ( 
+                            <FormItem> 
+                                <FormLabel>Email</FormLabel> 
+                                <FormControl> 
+                                    <Input placeholder="email@exemplo.com" {...field} disabled={isLoading} /> 
+                                </FormControl> 
+                                <FormMessage /> 
+                            </FormItem> 
+                        )}/>
                         <div>
                             <Label>Telefone</Label>
                             <div className="flex gap-2 mt-2">
-                                <FormField control={consentForm.control} name="signerPhoneCountryCode" render={({ field }) => ( <FormItem className="w-20"> <FormControl> <Input placeholder="+55" {...field} disabled={isLoading} /> </FormControl> <FormMessage /> </FormItem> )}/>
-                                <FormField control={consentForm.control} name="signerPhoneAreaCode" render={({ field }) => ( <FormItem className="w-20"> <FormControl> <Input placeholder="DDD" {...field} disabled={isLoading} /> </FormControl> <FormMessage /> </FormItem> )}/>
-                                <FormField control={consentForm.control} name="signerPhoneNumber" render={({ field }) => ( <FormItem className="flex-1"> <FormControl> <Input placeholder="99999-9999" {...field} disabled={isLoading} /> </FormControl> <FormMessage /> </FormItem> )}/>
+                                <FormField control={consentForm.control} name="signerPhoneCountryCode" render={({ field }) => ( 
+                                    <FormItem className="w-20"> 
+                                        <FormControl> 
+                                            <Input placeholder="+55" {...field} disabled={isLoading} /> 
+                                        </FormControl> 
+                                        <FormMessage /> 
+                                    </FormItem> 
+                                )}/>
+                                <FormField control={consentForm.control} name="signerPhoneAreaCode" render={({ field }) => ( 
+                                    <FormItem className="w-20"> 
+                                        <FormControl> 
+                                            <Input placeholder="DDD" {...field} disabled={isLoading} /> 
+                                        </FormControl> 
+                                        <FormMessage /> 
+                                    </FormItem> 
+                                )}/>
+                                <FormField control={consentForm.control} name="signerPhoneNumber" render={({ field }) => ( 
+                                    <FormItem className="flex-1"> 
+                                        <FormControl> 
+                                            <Input placeholder="99999-9999" {...field} disabled={isLoading} /> 
+                                        </FormControl> 
+                                        <FormMessage /> 
+                                    </FormItem> 
+                                )}/>
                             </div>
                             <FormDescription className="mt-2">Inclua DDI, DDD e o número.</FormDescription>
                         </div>
@@ -429,3 +474,5 @@ export default function CltPage() {
     </div>
   );
 }
+
+    
