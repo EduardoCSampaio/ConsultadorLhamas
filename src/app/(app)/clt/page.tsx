@@ -277,9 +277,9 @@ export default function CltPage() {
                                     render={({ field }) => (
                                         <FormItem>
                                             <FormLabel>Tabela de Juros</FormLabel>
-                                            <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSimulating}>
+                                            <Select onValueChange={field.onChange} value={field.value} disabled={isSimulating}>
                                                 <FormControl>
-                                                    <SelectTrigger disabled={isSimulating}>
+                                                    <SelectTrigger>
                                                         <SelectValue placeholder="Selecione uma tabela..." />
                                                     </SelectTrigger>
                                                 </FormControl>
@@ -303,7 +303,7 @@ export default function CltPage() {
                                             <FormLabel>Número de Parcelas</FormLabel>
                                             <Select onValueChange={field.onChange} value={field.value} disabled={!selectedConfig || isSimulating}>
                                                 <FormControl>
-                                                    <SelectTrigger disabled={!selectedConfig || isSimulating}>
+                                                    <SelectTrigger>
                                                         <SelectValue placeholder={!selectedConfig ? "Selecione uma tabela primeiro" : "Selecione as parcelas..."} />
                                                     </SelectTrigger>
                                                 </FormControl>
@@ -394,5 +394,3 @@ export default function CltPage() {
     </div>
   );
 }
-
-    
