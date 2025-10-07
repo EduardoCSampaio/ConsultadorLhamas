@@ -19,7 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Loader2, FileSignature, Wand, Banknote, Calendar as CalendarIconComponent, Hash, Percent } from "lucide-react";
+import { CalendarIcon, Loader2, FileSignature, Wand, Banknote, Calendar as CalendarIconComponent, Hash, Percent, ChevronDown } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -31,7 +31,6 @@ import type { SimulationConfig, SimulationResult, CLTConsentResult } from "@/app
 import { useUser } from "@/firebase";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 
 // Schemas
@@ -217,7 +216,37 @@ export default function CltPage() {
                         <h3 className="text-lg font-medium border-b pb-2">Dados do Tomador</h3>
                         <FormField control={consentForm.control} name="borrowerDocumentNumber" render={({ field }) => ( <FormItem> <FormLabel>CPF do Tomador</FormLabel> <FormControl> <Input placeholder="000.000.000-00" {...field} disabled={isLoading} /> </FormControl> <FormMessage /> </FormItem> )}/>
                         <FormField control={consentForm.control} name="birthDate" render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Data de Nascimento</FormLabel> <Popover> <PopoverTrigger asChild> <FormControl> <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")} disabled={isLoading}> {field.value ? (format(field.value, "PPP", { locale: ptBR })) : (<span>Escolha uma data</span>)} <CalendarIcon className="ml-auto h-4 w-4 opacity-50" /> </Button> </FormControl> </PopoverTrigger> <PopoverContent className="w-auto p-0" align="start"> <Calendar mode="single" captionLayout="dropdown-buttons" fromYear={1940} toYear={new Date().getFullYear()} selected={field.value} onSelect={field.onChange} disabled={(date) => date > new Date() || date < new Date("1900-01-01")} initialFocus /> </PopoverContent> </Popover> <FormMessage /> </FormItem> )}/>
-                        <FormField control={consentForm.control} name="gender" render={({ field }) => ( <FormItem className="space-y-3"> <FormLabel>Gênero</FormLabel> <FormControl> <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex space-x-4" disabled={isLoading}> <FormItem className="flex items-center space-x-2 space-y-0"> <FormControl> <RadioGroupItem value="male" /> </FormControl> <FormLabel className="font-normal">Masculino</FormLabel> </FormItem> <FormItem className="flex items-center space-x-2 space-y-0"> <FormControl> <RadioGroupItem value="female" /> </FormControl> <FormLabel className="font-normal">Feminino</FormLabel> </FormItem> </RadioGroup> </FormControl> <FormMessage /> </FormItem> )}/>
+                        <FormField
+                            control={consentForm.control}
+                            name="gender"
+                            render={({ field }) => (
+                                <FormItem className="space-y-3">
+                                <FormLabel>Gênero</FormLabel>
+                                <FormControl>
+                                    <RadioGroup
+                                    onValueChange={field.onChange}
+                                    defaultValue={field.value}
+                                    className="flex space-x-4"
+                                    disabled={isLoading}
+                                    >
+                                    <FormItem className="flex items-center space-x-2 space-y-0">
+                                        <FormControl>
+                                        <RadioGroupItem value="male" />
+                                        </FormControl>
+                                        <FormLabel className="font-normal">Masculino</FormLabel>
+                                    </FormItem>
+                                    <FormItem className="flex items-center space-x-2 space-y-0">
+                                        <FormControl>
+                                        <RadioGroupItem value="female" />
+                                        </FormControl>
+                                        <FormLabel className="font-normal">Feminino</FormLabel>
+                                    </FormItem>
+                                    </RadioGroup>
+                                </FormControl>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                        />
                     </div>
                     <div className="space-y-6">
                         <h3 className="text-lg font-medium border-b pb-2">Dados do Signatário</h3>
@@ -262,36 +291,47 @@ export default function CltPage() {
                 ) : (
                     <form onSubmit={onSimulationSubmit} className="space-y-8">
                         <div className="grid md:grid-cols-3 gap-8 items-start">
+                            
                             <div className="space-y-2">
                                 <Label htmlFor="config_id">Tabela de Juros</Label>
-                                <Select onValueChange={handleConfigChange} value={configId} disabled={isSimulating}>
-                                    <SelectTrigger id="config_id">
-                                        <SelectValue placeholder="Selecione uma tabela..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
+                                <div className="relative">
+                                    <select
+                                        id="config_id"
+                                        value={configId}
+                                        onChange={(e) => handleConfigChange(e.target.value)}
+                                        disabled={isSimulating}
+                                        className="h-10 w-full appearance-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        <option value="" disabled>Selecione uma tabela...</option>
                                         {simulationConfigs?.map(config => (
-                                            <SelectItem key={config.id} value={config.id}>
+                                            <option key={config.id} value={config.id}>
                                                 {config.slug} ({parseFloat(config.monthly_interest_rate).toFixed(2)}% a.m.)
-                                            </SelectItem>
+                                            </option>
                                         ))}
-                                    </SelectContent>
-                                </Select>
+                                    </select>
+                                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" />
+                                </div>
                             </div>
-
+                            
                             <div className="space-y-2">
                                 <Label htmlFor="number_of_installments">Número de Parcelas</Label>
-                                <Select onValueChange={setNumberOfInstallments} value={numberOfInstallments} disabled={!selectedConfig || isSimulating}>
-                                    <SelectTrigger id="number_of_installments">
-                                        <SelectValue placeholder={!selectedConfig ? "Selecione uma tabela primeiro" : "Selecione as parcelas..."} />
-                                    </SelectTrigger>
-                                    <SelectContent>
+                                 <div className="relative">
+                                    <select
+                                        id="number_of_installments"
+                                        value={numberOfInstallments}
+                                        onChange={(e) => setNumberOfInstallments(e.target.value)}
+                                        disabled={!selectedConfig || isSimulating}
+                                        className="h-10 w-full appearance-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        <option value="" disabled>{!selectedConfig ? "Selecione uma tabela primeiro" : "Selecione as parcelas..."}</option>
                                         {selectedConfig?.number_of_installments.map(installment => (
-                                            <SelectItem key={installment} value={String(installment)}>
+                                            <option key={installment} value={String(installment)}>
                                                 {installment} parcelas
-                                            </SelectItem>
+                                            </option>
                                         ))}
-                                    </SelectContent>
-                                </Select>
+                                    </select>
+                                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" />
+                                </div>
                             </div>
                             
                             <div className="space-y-2">
@@ -307,7 +347,7 @@ export default function CltPage() {
                             </div>
                         </div>
                         {formError && <p className="text-sm font-medium text-destructive">{formError}</p>}
-                        <Button type="submit" disabled={isSimulating}>
+                        <Button type="submit" disabled={isSimulating || !configId || !numberOfInstallments || !disbursedAmount}>
                             {isSimulating ? (<Loader2 className="mr-2 h-4 w-4 animate-spin" />) : (<Wand className="mr-2 h-4 w-4" />)}
                             Simular Crédito
                         </Button>
@@ -366,5 +406,6 @@ export default function CltPage() {
       )}
     </div>
   );
+}
 
     
