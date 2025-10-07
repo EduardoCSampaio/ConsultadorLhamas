@@ -77,7 +77,7 @@ export default function CltPage() {
   
   const [simulationConfigs, setSimulationConfigs] = useState<SimulationConfig[] | null>(null);
   const [selectedConfig, setSelectedConfig] = useState<SimulationConfig | null>(null);
-  const [isSimulating, setIsSimulating] = useState(isSimulating);
+  const [isSimulating, setIsSimulating] = useState(false);
   const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null);
 
 
@@ -274,10 +274,9 @@ export default function CltPage() {
                         <form onSubmit={simulationForm.handleSubmit(onSimulationSubmit)} className="space-y-8">
                             <div className="grid md:grid-cols-3 gap-8 items-start">
                                 <FormItem>
-                                    <FormLabel htmlFor="config_id">Tabela de Juros</FormLabel>
+                                    <FormLabel>Tabela de Juros</FormLabel>
                                     <div className="relative w-full">
                                         <select
-                                            id="config_id"
                                             {...simulationForm.register("config_id")}
                                             disabled={isSimulating}
                                             className={cn(
@@ -299,10 +298,9 @@ export default function CltPage() {
                                 </FormItem>
 
                                 <FormItem>
-                                    <FormLabel htmlFor="number_of_installments">Número de Parcelas</FormLabel>
+                                    <FormLabel>Número de Parcelas</FormLabel>
                                     <div className="relative w-full">
                                         <select
-                                            id="number_of_installments"
                                             {...simulationForm.register("number_of_installments")}
                                             disabled={!selectedConfig || isSimulating}
                                             className={cn(
