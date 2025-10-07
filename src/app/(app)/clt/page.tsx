@@ -270,7 +270,7 @@ export default function CltPage() {
                 ) : (
                     <Form {...simulationForm}>
                         <form onSubmit={simulationForm.handleSubmit(onSimulationSubmit)} className="space-y-8">
-                            <div className="grid md:grid-cols-3 gap-8">
+                            <div className="grid md:grid-cols-3 gap-8 items-start">
                                 <div className="space-y-2">
                                     <FormLabel>Tabela de Juros</FormLabel>
                                     <Select 
@@ -384,3 +384,4 @@ export default function CltPage() {
     </div>
   );
 }
+
