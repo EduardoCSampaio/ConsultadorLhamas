@@ -278,9 +278,9 @@ export default function CltPage() {
                                         <FormLabel>Tabela de Juros</FormLabel>
                                         <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSimulating}>
                                             <FormControl>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Selecione uma tabela..." />
-                                            </SelectTrigger>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Selecione uma tabela..." />
+                                                </SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
                                                 {simulationConfigs?.map(config => (
@@ -302,13 +302,13 @@ export default function CltPage() {
                                         <FormLabel>Número de Parcelas</FormLabel>
                                         <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!selectedConfig || isSimulating}>
                                             <FormControl>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder={!selectedConfig ? "Selecione uma tabela primeiro" : "Selecione as parcelas..."} />
-                                            </SelectTrigger>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder={!selectedConfig ? "Selecione uma tabela primeiro" : "Selecione as parcelas..."} />
+                                                </SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
                                                 {selectedConfig?.number_of_installments.map(installment => (
-                                                     <SelectItem key={installment} value={installment}>
+                                                     <SelectItem key={installment} value={String(installment)}>
                                                         {installment} parcelas
                                                     </SelectItem>
                                                 ))}
@@ -393,5 +393,7 @@ export default function CltPage() {
     </div>
   );
 }
+
+    
 
     
