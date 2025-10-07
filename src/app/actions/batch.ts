@@ -153,8 +153,6 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
   };
 }
 
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
 async function processBatchInBackground(batchId: string, cpfs: string[], provider: "cartos" | "bms" | "qi", userId: string, userEmail: string) {
     console.log(`[Batch ${batchId}] Starting background processing for ${cpfs.length} CPFs.`);
     const firestore = getFirestore();
@@ -185,10 +183,7 @@ async function processBatchInBackground(batchId: string, cpfs: string[], provide
         return;
     }
     
-    console.log(`[Batch ${batchId}] Authentication successful. Pausing before starting CPF loop.`);
-
-    // Add a short delay before starting the loop to allow token to be fully ready on the provider side.
-    await delay(1000);
+    console.log(`[Batch ${batchId}] Authentication successful. Starting CPF loop.`);
 
     let processedCount = 0;
     for (const cpf of cpfs) {
@@ -204,9 +199,6 @@ async function processBatchInBackground(batchId: string, cpfs: string[], provide
         processedCount++;
         await batchRef.update({ processedCpfs: processedCount });
         console.log(`[Batch ${batchId}] Progress: ${processedCount}/${cpfs.length}`);
-        
-        // Introduce a small delay to avoid overwhelming the target API
-        await delay(300);
     }
     
     console.log(`[Batch ${batchId}] Processing complete.`);
