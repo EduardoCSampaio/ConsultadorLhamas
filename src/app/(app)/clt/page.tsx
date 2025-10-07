@@ -301,7 +301,7 @@ export default function CltPage() {
                                     render={({ field }) => (
                                         <FormItem>
                                         <FormLabel>Número de Parcelas</FormLabel>
-                                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!selectedConfig || isSimulating}>
+                                        <Select onValueChange={field.onChange} value={field.value} disabled={!selectedConfig || isSimulating}>
                                             <FormControl>
                                                 <SelectTrigger>
                                                     <SelectValue placeholder={!selectedConfig ? "Selecione uma tabela primeiro" : "Selecione as parcelas..."} />
