@@ -142,6 +142,31 @@
             "createdAt": { "type": "string", "format": "date-time" }
         },
         "required": ["id", "userId", "status", "totalCpfs", "processedCpfs", "createdAt"]
+    },
+    "CLTConsent": {
+        "title": "CLT Consent",
+        "description": "Represents the consent term data for a CLT credit consultation.",
+        "type": "object",
+        "properties": {
+            "consultationId": { "type": "string" },
+            "borrowerDocumentNumber": { "type": "string" },
+            "gender": { "type": "string", "enum": ["male", "female"] },
+            "birthDate": { "type": "string", "format": "date" },
+            "signerName": { "type": "string" },
+            "signerEmail": { "type": "string", "format": "email" },
+            "signerPhone": { 
+                "type": "object",
+                "properties": {
+                    "countryCode": { "type": "string" },
+                    "areaCode": { "type": "string" },
+                    "phoneNumber": { "type": "string" }
+                }
+            },
+            "provider": { "type": "string" },
+            "userId": { "type": "string" },
+            "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "required": ["consultationId", "borrowerDocumentNumber", "userId", "createdAt"]
     }
   },
   "auth": {
@@ -177,8 +202,14 @@
     "/batches/{batchId}": {
         "schema": { "$ref": "#/entities/BatchJob" },
         "description": "Stores the state and progress of a batch processing job."
+    },
+    "/cltConsents/{consentId}": {
+        "schema": { "$ref": "#/entities/CLTConsent" },
+        "description": "Stores generated CLT consent terms."
     }
   }
 }
+
+    
 
     

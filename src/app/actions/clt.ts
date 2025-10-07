@@ -3,17 +3,33 @@
 
 import { z } from 'zod';
 import type { ApiCredentials } from './users';
+import { initializeFirebaseAdmin } from '@/firebase/server-init';
+import { getFirestore } from 'firebase-admin/firestore';
+
+const phoneSchema = z.object({
+    countryCode: z.string(),
+    areaCode: z.string(),
+    phoneNumber: z.string(),
+});
 
 const actionSchema = z.object({
-  // Define schema for CLT actions here
+  borrowerDocumentNumber: z.string(),
+  gender: z.enum(["male", "female"]),
+  birthDate: z.string(),
+  signerName: z.string(),
+  signerEmail: z.string().email(),
+  signerPhone: phoneSchema,
+  provider: z.literal("QI"),
+  userId: z.string(),
 });
 
 type ActionResult = {
-  status: 'success' | 'error';
+  success: boolean;
   message: string;
+  consultationId?: string;
 };
 
-export async function getAuthToken(credentials: ApiCredentials): Promise<{token: string | null, error: string | null}> {
+async function getAuthToken(credentials: ApiCredentials): Promise<{token: string | null, error: string | null}> {
   const { v8_username, v8_password, v8_audience, v8_client_id } = credentials;
 
   if (!v8_username || !v8_password || !v8_audience || !v8_client_id) {
@@ -57,3 +73,75 @@ export async function getAuthToken(credentials: ApiCredentials): Promise<{token:
     return { token: null, error: 'Erro de rede ao tentar autenticar com a API parceira.' };
   }
 }
+
+export async function gerarTermoConsentimento(input: z.infer<typeof actionSchema>): Promise<ActionResult> {
+    const validation = actionSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: 'Dados de entrada inválidos.' };
+    }
+
+    const { userId, ...requestData } = validation.data;
+
+    let userCredentials: ApiCredentials;
+    try {
+        initializeFirebaseAdmin();
+        const firestore = getFirestore();
+        const userDoc = await firestore.collection('users').doc(userId).get();
+        if (!userDoc.exists) {
+            return { success: false, message: 'Usuário não encontrado para buscar credenciais.' };
+        }
+        const userData = userDoc.data();
+        userCredentials = {
+            v8_username: userData?.v8_username,
+            v8_password: userData?.v8_password,
+            v8_audience: userData?.v8_audience,
+            v8_client_id: userData?.v8_client_id,
+        };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro ao carregar credenciais de API.";
+        return { success: false, message };
+    }
+
+    const { token, error: tokenError } = await getAuthToken(userCredentials);
+    if (tokenError) {
+        return { success: false, message: tokenError };
+    }
+
+    const API_URL = 'https://bff.v8sistema.com/private-consignment/consult';
+
+    try {
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify(requestData),
+        });
+
+        const responseData = await response.json();
+
+        if (!response.ok) {
+            const errorMessage = responseData.message || responseData.error || 'Erro desconhecido da API.';
+            console.error(`[CLT_CONSENT] API Error: ${JSON.stringify(responseData)}`);
+            return { success: false, message: `Falha ao gerar termo: ${errorMessage}` };
+        }
+        
+        const consultationId = responseData.consultationId; // Assuming the API returns this
+        if (!consultationId) {
+            return { success: false, message: "API retornou sucesso mas não incluiu o ID da consulta." };
+        }
+
+        return { 
+            success: true, 
+            message: 'Termo de consentimento gerado com sucesso. O ID da consulta foi recebido.',
+            consultationId: consultationId
+        };
+    } catch (error) {
+        console.error("[CLT_CONSENT] Network or parsing error:", error);
+        const message = error instanceof Error ? error.message : 'Ocorreu um erro de comunicação.';
+        return { success: false, message };
+    }
+}
+
+    
