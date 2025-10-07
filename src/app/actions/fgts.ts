@@ -22,7 +22,7 @@ type ActionResult = {
   message: string;
 };
 
-export async function getAuthToken(credentials: ApiCredentials): Promise<{token: string | null, error: string | null}> {
+export async function getAuthToken(credentials: ApiCredentials): Promise<{token: string | undefined, error: string | null}> {
   const { v8_username, v8_password, v8_audience, v8_client_id } = credentials;
 
   if (!v8_username || !v8_password || !v8_audience || !v8_client_id) {
@@ -32,7 +32,7 @@ export async function getAuthToken(credentials: ApiCredentials): Promise<{token:
       !v8_audience && "Audience",
       !v8_client_id && "Client ID"
     ].filter(Boolean).join(', ');
-    return { token: null, error: `Credenciais de API incompletas. Faltando: ${missing}. Por favor, configure-as na página de Configurações.` };
+    return { token: undefined, error: `Credenciais de API incompletas. Faltando: ${missing}. Por favor, configure-as na página de Configurações.` };
   }
   
   const tokenUrl = 'https://auth.v8sistema.com/oauth/token';
@@ -57,13 +57,13 @@ export async function getAuthToken(credentials: ApiCredentials): Promise<{token:
     if (!response.ok || !data.access_token) {
       const errorMessage = data.error_description || data.error || JSON.stringify(data);
       console.error(`[V8 AUTH] Falha na autenticação: ${errorMessage}`);
-      return { token: null, error: `Falha na autenticação com a V8: ${errorMessage}` };
+      return { token: undefined, error: `Falha na autenticação com a V8: ${errorMessage}` };
     }
 
     return { token: data.access_token, error: null };
   } catch (error) {
     console.error('[V8 AUTH] Erro de comunicação ao tentar autenticar:', error);
-    return { token: null, error: 'Erro de rede ao tentar autenticar com a API parceira.' };
+    return { token: undefined, error: 'Erro de rede ao tentar autenticar com a API parceira.' };
   }
 }
 
