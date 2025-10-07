@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { PageHeader } from "@/components/page-header";
@@ -162,7 +161,11 @@ const formatBatchName = (fileName: string, isoDate: string) => {
 };
 
 
-const LOCAL_STORAGE_KEY = 'recentBatches';
+const getLocalStorageKey = (userId: string | undefined) => {
+    if (!userId) return null;
+    return `recentBatches_${userId}`;
+}
+
 const ITEMS_PER_PAGE = 5;
 
 export default function FgtsPage() {
@@ -180,35 +183,46 @@ export default function FgtsPage() {
   const { user } = useUser();
   const firestore = useFirestore();
 
-  const [recentBatches, setRecentBatches] = useState<BatchJob[]>(() => {
-    if (typeof window === 'undefined') {
-        return [];
-    }
-    try {
-        const storedBatches = window.localStorage.getItem(LOCAL_STORAGE_KEY);
-        return storedBatches ? JSON.parse(storedBatches) : [];
-    } catch (error) {
-        console.error("Failed to parse recent batches from localStorage", error);
-        return [];
-    }
-  });
+  const [recentBatches, setRecentBatches] = useState<BatchJob[]>([]);
 
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Initialize batches from localStorage once user is available
+  useEffect(() => {
+    if (typeof window !== 'undefined' && user) {
+        const localStorageKey = getLocalStorageKey(user.uid);
+        if (localStorageKey) {
+            try {
+                const storedBatches = window.localStorage.getItem(localStorageKey);
+                setRecentBatches(storedBatches ? JSON.parse(storedBatches) : []);
+            } catch (error) {
+                console.error("Failed to parse recent batches from localStorage", error);
+                setRecentBatches([]);
+            }
+        }
+    }
+  }, [user]);
+
+  // Save batches to localStorage whenever they change
+  useEffect(() => {
+    if (typeof window !== 'undefined' && user) {
+        const localStorageKey = getLocalStorageKey(user.uid);
+        if (localStorageKey) {
+            try {
+                window.localStorage.setItem(localStorageKey, JSON.stringify(recentBatches));
+            } catch (error) {
+                console.error("Failed to save recent batches to localStorage", error);
+            }
+        }
+    }
+  }, [recentBatches, user]);
+
+
   const totalPages = Math.ceil(recentBatches.length / ITEMS_PER_PAGE);
   const paginatedBatches = recentBatches.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
   );
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-        try {
-            window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(recentBatches));
-        } catch (error) {
-            console.error("Failed to save recent batches to localStorage", error);
-        }
-    }
-  }, [recentBatches]);
 
   const manualForm = useForm<z.infer<typeof manualFormSchema>>({
     resolver: zodResolver(manualFormSchema),
@@ -726,3 +740,5 @@ export default function FgtsPage() {
     </div>
   );
 }
+
+    
