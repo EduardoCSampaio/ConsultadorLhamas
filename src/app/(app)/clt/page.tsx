@@ -19,7 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Loader2, FileSignature, Wand, Banknote, Calendar as CalendarIconComponent, Hash, Percent } from "lucide-react";
+import { CalendarIcon, Loader2, FileSignature, Wand, Banknote, Calendar as CalendarIconComponent, Hash, Percent, ChevronDown } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -77,7 +77,7 @@ export default function CltPage() {
   
   const [simulationConfigs, setSimulationConfigs] = useState<SimulationConfig[] | null>(null);
   const [selectedConfig, setSelectedConfig] = useState<SimulationConfig | null>(null);
-  const [isSimulating, setIsSimulating] = useState(false);
+  const [isSimulating, setIsSimulating] = useState(isSimulating);
   const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null);
 
 
@@ -204,23 +204,6 @@ export default function CltPage() {
       }
   }
 
-  const NativeSelect = ({ field, placeholder, options, disabled, error }: any) => (
-    <div className="relative w-full">
-        <select
-            {...field}
-            disabled={disabled}
-            className={cn(
-                "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 appearance-none",
-                error && "border-destructive"
-            )}
-        >
-            <option value="" disabled>{placeholder}</option>
-            {options}
-        </select>
-        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50" />
-    </div>
-  );
-
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -291,9 +274,10 @@ export default function CltPage() {
                         <form onSubmit={simulationForm.handleSubmit(onSimulationSubmit)} className="space-y-8">
                             <div className="grid md:grid-cols-3 gap-8 items-start">
                                 <FormItem>
-                                    <FormLabel>Tabela de Juros</FormLabel>
+                                    <FormLabel htmlFor="config_id">Tabela de Juros</FormLabel>
                                     <div className="relative w-full">
                                         <select
+                                            id="config_id"
                                             {...simulationForm.register("config_id")}
                                             disabled={isSimulating}
                                             className={cn(
@@ -315,9 +299,10 @@ export default function CltPage() {
                                 </FormItem>
 
                                 <FormItem>
-                                    <FormLabel>Número de Parcelas</FormLabel>
+                                    <FormLabel htmlFor="number_of_installments">Número de Parcelas</FormLabel>
                                     <div className="relative w-full">
                                         <select
+                                            id="number_of_installments"
                                             {...simulationForm.register("number_of_installments")}
                                             disabled={!selectedConfig || isSimulating}
                                             className={cn(
@@ -413,7 +398,5 @@ export default function CltPage() {
     </div>
   );
 }
-
-    
 
     
