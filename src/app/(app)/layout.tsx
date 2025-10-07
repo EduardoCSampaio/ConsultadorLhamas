@@ -28,9 +28,6 @@ import {
   Briefcase,
   ChevronDown,
   Search,
-  DollarSign,
-  Landmark,
-  FileText
 } from "lucide-react";
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -45,10 +42,7 @@ import { cn } from '@/lib/utils';
 
 const baseMenuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard", tooltip: "Dashboard" },
-  { href: "/clientes", icon: Users, label: "Clientes", tooltip: "Clientes" },
-  { href: "/agendamentos", icon: Landmark, label: "Análise de Crédito", tooltip: "Análise de Crédito" },
   { href: "/fgts", icon: Search, label: "Consulta FGTS", tooltip: "Consulta FGTS" },
-  { href: "/servicos", icon: DollarSign, label: "Gestão de Contas", tooltip: "Gestão de Contas" },
 
 ];
 
