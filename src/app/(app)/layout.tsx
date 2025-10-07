@@ -58,8 +58,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, isUserLoading } = useUser();
   const router = useRouter();
   
-  const [isFgtsMenuOpen, setIsFgtsMenuOpen] = React.useState(pathname.startsWith('/fgts'));
-
   const userProfileRef = useMemoFirebase(() => {
     if (!firestore || !user) return null;
     return doc(firestore, 'users', user.uid);
@@ -149,43 +147,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </SidebarMenuButton>
               </SidebarMenuItem>
             ))}
-
-            <SidebarMenuItem>
-                <Collapsible open={isFgtsMenuOpen} onOpenChange={setIsFgtsMenuOpen}>
-                    <CollapsibleTrigger asChild>
-                        <SidebarMenuButton
-                            isSubmenu
-                            className="justify-between"
-                            isActive={pathname.startsWith('/fgts')}
-                        >
-                            <div className="flex items-center gap-2">
-                                <Search />
-                                <span>Consulta FGTS</span>
-                            </div>
-                            <ChevronDown className={cn("h-4 w-4 transition-transform", isFgtsMenuOpen && "rotate-180")} />
-                        </SidebarMenuButton>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                        <SidebarMenuSub>
-                             <SidebarMenuItem>
-                                <SidebarMenuSubButton asChild isActive={pathname === '/fgts'}>
-                                     <Link href="/fgts">
-                                        <Circle className={cn("size-2 fill-current", pathname === '/fgts' ? 'text-sidebar-primary' : 'text-sidebar-foreground/40')} />
-                                        <span>V8DIGITAL</span>
-                                     </Link>
-                                </SidebarMenuSubButton>
-                            </SidebarMenuItem>
-                             <SidebarMenuItem>
-                                <SidebarMenuSubButton disabled>
-                                    <Circle className="size-2 fill-current text-sidebar-foreground/20" />
-                                    <span>EM BREVE MAIS BANCOS</span>
-                                </SidebarMenuSubButton>
-                            </SidebarMenuItem>
-                        </SidebarMenuSub>
-                    </CollapsibleContent>
-                </Collapsible>
-            </SidebarMenuItem>
-
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter className="flex-col !gap-1">
