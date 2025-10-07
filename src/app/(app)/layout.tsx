@@ -24,10 +24,13 @@ import {
   Cog,
   Home,
   LogOut,
-  Search,
   Users,
   Briefcase,
   ChevronDown,
+  Search,
+  DollarSign,
+  Landmark,
+  FileText
 } from "lucide-react";
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -42,6 +45,11 @@ import { cn } from '@/lib/utils';
 
 const baseMenuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard", tooltip: "Dashboard" },
+  { href: "/clientes", icon: Users, label: "Clientes", tooltip: "Clientes" },
+  { href: "/agendamentos", icon: Landmark, label: "Análise de Crédito", tooltip: "Análise de Crédito" },
+  { href: "/fgts", icon: Search, label: "Consulta FGTS", tooltip: "Consulta FGTS" },
+  { href: "/servicos", icon: DollarSign, label: "Gestão de Contas", tooltip: "Gestão de Contas" },
+
 ];
 
 const adminMenuItems = [
@@ -163,20 +171,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </CollapsibleTrigger>
                 <CollapsibleContent asChild>
                   <SidebarMenuSub>
-                     <SidebarMenuSubItem>
+                     <SidebarMenuItem>
                       <SidebarMenuSubButton asChild isActive={pathname === '/clt/v8'}>
                         <Link href="/clt/v8">
                           <span>V8</span>
                         </Link>
                       </SidebarMenuSubButton>
-                    </SidebarMenuSubItem>
-                    <SidebarMenuSubItem>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
                       <SidebarMenuSubButton asChild isActive={pathname === '/clt/facta'}>
                         <Link href="/clt/facta">
                           <span>FACTA</span>
                         </Link>
                       </SidebarMenuSubButton>
-                    </SidebarMenuSubItem>
+                    </SidebarMenuItem>
                   </SidebarMenuSub>
                 </CollapsibleContent>
               </Collapsible>
