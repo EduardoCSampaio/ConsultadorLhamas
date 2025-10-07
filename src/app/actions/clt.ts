@@ -173,66 +173,96 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
     if (tokenError) {
         return { success: false, message: tokenError };
     }
-
-    const API_URL = 'https://bff.v8sistema.com/private-consignment/consult';
     
-    const body = {
-        action: "CONSULT", // Specify the action
-        provider: data.provider,
-        borrowerDocumentNumber: data.borrowerDocumentNumber,
-        gender: data.gender,
-        birthDate: data.birthDate,
-        signerName: data.signerName,
-        signerEmail: data.signerEmail,
-        signerPhoneCountryCode: data.signerPhone.countryCode,
-        signerPhoneAreaCode: data.signerPhone.areaCode,
-        signerPhoneNumber: data.signerPhone.phoneNumber
-    };
-
+    const API_URL = 'https://bff.v8sistema.com/private-consignment/consult';
     const headers = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
     };
 
-    console.log("--- [CLT_CONSENT DEBUG] ---");
+    // --- ETAPA 1: GERAR O TERMO DE CONSENTIMENTO ---
+    const generationBody = {
+        borrowerDocumentNumber: data.borrowerDocumentNumber,
+        gender: data.gender,
+        birthDate: data.birthDate,
+        signerName: data.signerName,
+        signerEmail: data.signerEmail,
+        signerPhone: {
+            phoneNumber: data.signerPhone.phoneNumber,
+            countryCode: data.signerPhone.countryCode,
+            areaCode: data.signerPhone.areaCode
+        },
+        provider: data.provider
+    };
+
+    console.log("--- [CLT_CONSENT DEBUG - ETAPA 1: GERAR] ---");
     console.log("Endpoint:", API_URL);
     console.log("Method: POST");
     console.log("Headers:", JSON.stringify({ ...headers, Authorization: 'Bearer [REDACTED]' }, null, 2));
-    console.log("Request Body:", JSON.stringify(body, null, 2));
-    console.log("--------------------------");
+    console.log("Request Body:", JSON.stringify(generationBody, null, 2));
+    console.log("------------------------------------------");
 
     try {
-        const response = await fetch(API_URL, {
+        const generationResponse = await fetch(API_URL, {
             method: 'POST',
             headers: headers,
-            body: JSON.stringify(body),
+            body: JSON.stringify(generationBody),
         });
 
-        const responseData = await response.json();
+        const generationData = await generationResponse.json();
 
-        if (!response.ok) {
-            const errorMessage = responseData.message || responseData.error || 'Erro desconhecido da API.';
-            console.error(`[CLT_CONSENT] API Error: ${JSON.stringify(responseData)}`);
+        if (!generationResponse.ok) {
+            const errorMessage = generationData.message || generationData.error || 'Erro desconhecido da API ao gerar o termo.';
+            console.error(`[CLT_CONSENT - ETAPA 1] API Error: ${JSON.stringify(generationData)}`);
             return { success: false, message: `Falha ao gerar termo: ${errorMessage}` };
         }
         
-        const consultationId = responseData.consultationId;
+        const consultationId = generationData.id;
         if (!consultationId) {
-            console.error('[CLT_CONSENT] API Success but no consultationId returned:', responseData);
+            console.error('[CLT_CONSENT - ETAPA 1] API Success but no consultationId returned:', generationData);
             return { success: false, message: "API retornou sucesso mas não incluiu o ID da consulta." };
         }
 
+        console.log(`[CLT_CONSENT - ETAPA 1] Sucesso! ID da Consulta: ${consultationId}`);
+
+        // --- ETAPA 2: AUTORIZAR O TERMO DE CONSENTIMENTO ---
+        const authorizationBody = { consult_id: consultationId };
+
+        console.log("--- [CLT_CONSENT DEBUG - ETAPA 2: AUTORIZAR] ---");
+        console.log("Endpoint:", API_URL);
+        console.log("Method: POST");
+        console.log("Headers:", JSON.stringify({ ...headers, Authorization: 'Bearer [REDACTED]' }, null, 2));
+        console.log("Request Body:", JSON.stringify(authorizationBody, null, 2));
+        console.log("---------------------------------------------");
+
+        const authorizationResponse = await fetch(API_URL, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify(authorizationBody),
+        });
+
+        if (!authorizationResponse.ok) {
+            const authorizationData = await authorizationResponse.json();
+            const errorMessage = authorizationData.message || authorizationData.error || 'Erro desconhecido da API ao autorizar o termo.';
+            console.error(`[CLT_CONSENT - ETAPA 2] API Error: ${JSON.stringify(authorizationData)}`);
+            return { success: false, message: `O termo foi gerado, mas falhou ao autorizar: ${errorMessage}` };
+        }
+
+        console.log(`[CLT_CONSENT - ETAPA 2] Sucesso! Termo autorizado.`);
+
         return { 
             success: true, 
-            message: 'Termo de consentimento gerado com sucesso. O ID da consulta foi recebido.',
+            message: 'Termo de consentimento gerado e autorizado com sucesso.',
             consultationId: consultationId
         };
+
     } catch (error) {
         console.error("[CLT_CONSENT] Network or parsing error:", error);
         const message = error instanceof Error ? error.message : 'Ocorreu um erro de comunicação.';
         return { success: false, message };
     }
 }
+
 
 export async function consultarTaxasCLT(input: z.infer<typeof taxasActionSchema>): Promise<GetTaxasResult> {
     const validation = taxasActionSchema.safeParse(input);
@@ -314,3 +344,6 @@ export async function criarSimulacaoCLT(input: z.infer<typeof simulationActionSc
         return { success: false, message };
     }
 }
+
+
+    
