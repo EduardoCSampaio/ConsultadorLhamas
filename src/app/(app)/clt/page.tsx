@@ -33,6 +33,7 @@ import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 
 // Schemas
@@ -214,130 +215,176 @@ export default function CltPage() {
             <CardContent>
             <Form {...consentForm}>
                 <form onSubmit={consentForm.handleSubmit(onConsentSubmit)} className="space-y-8">
-                    <div className="space-y-6 max-w-lg">
-                        <h3 className="text-lg font-medium border-b pb-2">Dados do Cliente</h3>
-                        <FormField control={consentForm.control} name="signerName" render={({ field }) => ( 
-                            <FormItem> 
-                                <FormLabel>Nome Completo</FormLabel> 
-                                <FormControl> 
-                                    <Input placeholder="Nome do cliente" {...field} disabled={isLoading} /> 
-                                </FormControl> 
-                                <FormMessage /> 
-                            </FormItem> 
-                        )}/>
-                        <FormField control={consentForm.control} name="borrowerDocumentNumber" render={({ field }) => ( 
-                            <FormItem> 
-                                <FormLabel>CPF</FormLabel> 
-                                <FormControl> 
-                                    <Input placeholder="000.000.000-00" {...field} disabled={isLoading} /> 
-                                </FormControl> 
-                                <FormMessage /> 
-                            </FormItem> 
-                        )}/>
-                         <FormField control={consentForm.control} name="signerEmail" render={({ field }) => ( 
-                            <FormItem> 
-                                <FormLabel>Email</FormLabel> 
-                                <FormControl> 
-                                    <Input placeholder="email@exemplo.com" {...field} disabled={isLoading} /> 
-                                </FormControl> 
-                                <FormMessage /> 
-                            </FormItem> 
-                        )}/>
-                        <div>
-                            <Label>Telefone</Label>
-                            <div className="flex gap-2 mt-2">
-                                <FormField control={consentForm.control} name="signerPhoneCountryCode" render={({ field }) => ( 
-                                    <FormItem className="w-20"> 
-                                        <FormControl> 
-                                            <Input placeholder="+55" {...field} disabled={isLoading} /> 
-                                        </FormControl> 
-                                        <FormMessage /> 
-                                    </FormItem> 
-                                )}/>
-                                <FormField control={consentForm.control} name="signerPhoneAreaCode" render={({ field }) => ( 
-                                    <FormItem className="w-20"> 
-                                        <FormControl> 
-                                            <Input placeholder="DDD" {...field} disabled={isLoading} /> 
-                                        </FormControl> 
-                                        <FormMessage /> 
-                                    </FormItem> 
-                                )}/>
-                                <FormField control={consentForm.control} name="signerPhoneNumber" render={({ field }) => ( 
-                                    <FormItem className="flex-1"> 
-                                        <FormControl> 
-                                            <Input placeholder="99999-9999" {...field} disabled={isLoading} /> 
-                                        </FormControl> 
-                                        <FormMessage /> 
-                                    </FormItem> 
-                                )}/>
+                    <div className="grid md:grid-cols-2 gap-8 items-start">
+                        <div className="space-y-6">
+                            <h3 className="text-lg font-medium border-b pb-2">Dados do Cliente</h3>
+                            <FormField control={consentForm.control} name="signerName" render={({ field }) => ( 
+                                <FormItem> 
+                                    <FormLabel>Nome Completo</FormLabel> 
+                                    <FormControl> 
+                                        <Input placeholder="Nome do cliente" {...field} disabled={isLoading} /> 
+                                    </FormControl> 
+                                    <FormMessage /> 
+                                </FormItem> 
+                            )}/>
+                            <FormField control={consentForm.control} name="borrowerDocumentNumber" render={({ field }) => ( 
+                                <FormItem> 
+                                    <FormLabel>CPF</FormLabel> 
+                                    <FormControl> 
+                                        <Input placeholder="000.000.000-00" {...field} disabled={isLoading} /> 
+                                    </FormControl> 
+                                    <FormMessage /> 
+                                </FormItem> 
+                            )}/>
+                             <FormField control={consentForm.control} name="signerEmail" render={({ field }) => ( 
+                                <FormItem> 
+                                    <FormLabel>Email</FormLabel> 
+                                    <FormControl> 
+                                        <Input placeholder="email@exemplo.com" {...field} disabled={isLoading} /> 
+                                    </FormControl> 
+                                    <FormMessage /> 
+                                </FormItem> 
+                            )}/>
+                            <div>
+                                <Label>Telefone</Label>
+                                <div className="flex gap-2 mt-2">
+                                    <FormField control={consentForm.control} name="signerPhoneCountryCode" render={({ field }) => ( 
+                                        <FormItem className="w-20"> 
+                                            <FormControl> 
+                                                <Input placeholder="+55" {...field} disabled={isLoading} /> 
+                                            </FormControl> 
+                                            <FormMessage /> 
+                                        </FormItem> 
+                                    )}/>
+                                    <FormField control={consentForm.control} name="signerPhoneAreaCode" render={({ field }) => ( 
+                                        <FormItem className="w-20"> 
+                                            <FormControl> 
+                                                <Input placeholder="DDD" {...field} disabled={isLoading} /> 
+                                            </FormControl> 
+                                            <FormMessage /> 
+                                        </FormItem> 
+                                    )}/>
+                                    <FormField control={consentForm.control} name="signerPhoneNumber" render={({ field }) => ( 
+                                        <FormItem className="flex-1"> 
+                                            <FormControl> 
+                                                <Input placeholder="99999-9999" {...field} disabled={isLoading} /> 
+                                            </FormControl> 
+                                            <FormMessage /> 
+                                        </FormItem> 
+                                    )}/>
+                                </div>
+                                <FormDescription className="mt-2">Inclua DDI, DDD e o número.</FormDescription>
                             </div>
-                            <FormDescription className="mt-2">Inclua DDI, DDD e o número.</FormDescription>
+
+                            <div className="grid grid-cols-2 gap-8">
+                                 <FormField
+                                    control={consentForm.control}
+                                    name="birthDate"
+                                    render={({ field }) => (
+                                        <FormItem className="flex flex-col">
+                                        <FormLabel>Data de Nascimento</FormLabel>
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                              <FormControl>
+                                                <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")} disabled={isLoading}>
+                                                    {field.value ? (format(field.value, "PPP", { locale: ptBR })) : (<span>Escolha uma data</span>)}
+                                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                                </Button>
+                                              </FormControl>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-auto p-0" align="start">
+                                            <Calendar
+                                                mode="single"
+                                                captionLayout="dropdown-buttons"
+                                                fromYear={1940}
+                                                toYear={new Date().getFullYear()}
+                                                selected={field.value}
+                                                onSelect={field.onChange}
+                                                disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
+                                                initialFocus
+                                            />
+                                            </PopoverContent>
+                                        </Popover>
+                                        <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={consentForm.control}
+                                    name="gender"
+                                    render={({ field }) => (
+                                        <FormItem className="space-y-3">
+                                        <FormLabel>Gênero</FormLabel>
+                                        <FormControl>
+                                            <RadioGroup
+                                                onValueChange={field.onChange}
+                                                defaultValue={field.value}
+                                                className="flex space-x-4 pt-2"
+                                                disabled={isLoading}
+                                            >
+                                                <FormItem className="flex items-center space-x-2 space-y-0">
+                                                    <FormControl>
+                                                        <RadioGroupItem value="male" />
+                                                    </FormControl>
+                                                    <FormLabel className="font-normal">Masculino</FormLabel>
+                                                </FormItem>
+                                                <FormItem className="flex items-center space-x-2 space-y-0">
+                                                    <FormControl>
+                                                        <RadioGroupItem value="female" />
+                                                    </FormControl>
+                                                    <FormLabel className="font-normal">Feminino</FormLabel>
+                                                </FormItem>
+                                            </RadioGroup>
+                                        </FormControl>
+                                        <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-8">
-                             <FormField
-                                control={consentForm.control}
-                                name="birthDate"
-                                render={({ field }) => (
-                                    <FormItem className="flex flex-col">
-                                    <FormLabel>Data de Nascimento</FormLabel>
-                                    <Popover>
-                                        <PopoverTrigger asChild>
-                                          <FormControl>
-                                            <Button variant={"outline"} className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")} disabled={isLoading}>
-                                                {field.value ? (format(field.value, "PPP", { locale: ptBR })) : (<span>Escolha uma data</span>)}
-                                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                            </Button>
-                                          </FormControl>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0" align="start">
-                                        <Calendar
-                                            mode="single"
-                                            captionLayout="dropdown-buttons"
-                                            fromYear={1940}
-                                            toYear={new Date().getFullYear()}
-                                            selected={field.value}
-                                            onSelect={field.onChange}
-                                            disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
-                                            initialFocus
-                                        />
-                                        </PopoverContent>
-                                    </Popover>
-                                    <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={consentForm.control}
-                                name="gender"
-                                render={({ field }) => (
-                                    <FormItem className="space-y-3">
-                                    <FormLabel>Gênero</FormLabel>
-                                    <FormControl>
-                                        <RadioGroup
-                                            onValueChange={field.onChange}
-                                            defaultValue={field.value}
-                                            className="flex space-x-4 pt-2"
-                                            disabled={isLoading}
-                                        >
-                                            <FormItem className="flex items-center space-x-2 space-y-0">
-                                                <FormControl>
-                                                    <RadioGroupItem value="male" />
-                                                </FormControl>
-                                                <FormLabel className="font-normal">Masculino</FormLabel>
-                                            </FormItem>
-                                            <FormItem className="flex items-center space-x-2 space-y-0">
-                                                <FormControl>
-                                                    <RadioGroupItem value="female" />
-                                                </FormControl>
-                                                <FormLabel className="font-normal">Feminino</FormLabel>
-                                            </FormItem>
-                                        </RadioGroup>
-                                    </FormControl>
-                                    <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
+                        <div className="space-y-4">
+                            <h3 className="text-lg font-medium border-b pb-2">Termo de Autorização</h3>
+                            <div className="text-sm text-center font-semibold text-primary">Aceite os Termos de Autorização!</div>
+                             <p className="text-xs text-center text-muted-foreground">
+                                Leia atentamente os termos antes de continuar. Ao prosseguir, você concorda com as condições estabelecidas para o uso da plataforma.
+                            </p>
+                            <ScrollArea className="h-72 w-full rounded-md border p-4 text-xs">
+                                <h4 className="font-bold text-center mb-4">TERMO DE AUTORIZAÇÃO</h4>
+                                <p className="mb-2">
+                                    Eu, {"<Nome_Cliente>"}, CPF {"<CPF_Cliente>"}, autorizo o MTE/DATAPREV a 
+                                    disponibilizar as informações abaixo indicadas para apoiar a 
+                                    contratação/simulação de empréstimo consignado, 
+                                    a fim de subsidiar a proposta pelo Banco Credor. 
+                                </p>
+                                <p className="mb-2">Informações a serem disponibilizadas:</p>
+                                <ul className="list-disc list-inside space-y-1 mb-2">
+                                    <li>CPF</li>
+                                    <li>Matrícula</li>
+                                    <li>Inscrição do Empregador (Código e Descrição)</li>
+                                    <li>Número da Inscrição do Empregador</li>
+                                    <li>Nome</li>
+                                    <li>Sexo (Código e Descrição)</li>
+                                    <li>Data de Nascimento</li>
+                                    <li>Código da Categoria do Trabalhador</li>
+                                    <li>Elegibilidade (Sim/Não)</li>
+                                    <li>Valor Total dos Vencimentos</li>
+                                    <li>Valor Base da Margem</li>
+                                    <li>Valor da Margem Disponível</li>
+                                    <li>Data de Admissão</li>
+                                    <li>Data de Desligamento</li>
+                                    <li>Código do Motivo do Desligamento</li>
+                                    <li>Pessoa Exposta Politicamente (Código e Descrição)</li>
+                                    <li>Alertas de Afastamento e Aviso Prévio</li>
+                                </ul>
+                                <p className="mb-2">
+                                    Este termo autoriza esta Instituição Financeira a 
+                                    consultar as informações acima descritas durante um período 
+                                    de 30 dias. Este pedido poderá ser efetuado pela 
+                                    Instituição Financeira em até 45 dias após a assinatura 
+                                    deste instrumento.
+                                </p>
+                            </ScrollArea>
                         </div>
                     </div>
                 
@@ -474,3 +521,6 @@ export default function CltPage() {
   );
 }
 
+
+
+    
