@@ -164,21 +164,31 @@ function BatchRow({ initialBatch }: { initialBatch: BatchJob }) {
         let interval: NodeJS.Timeout | undefined;
         if (batch.status === 'processing' && !isCheckingStatus) {
             interval = setInterval(async () => {
+                if (document.hidden) return; // Don't poll if tab is not visible
                 setIsCheckingStatus(true);
+                console.log(`Checking status for batch ${batch.id}`);
                 const result = await getBatchStatus({ batchId: batch.id });
+                setIsCheckingStatus(false);
+
                 if (result.status === 'success' && result.batch) {
+                     console.log('Got new batch status:', result.batch);
                      setBatch(result.batch);
                      if (result.batch.status === 'completed' || result.batch.status === 'error') {
+                         console.log(`Batch ${batch.id} finished. Stopping polling.`);
                          if (interval) clearInterval(interval);
                      }
+                } else {
+                    console.error(`Failed to get status for batch ${batch.id}:`, result.message);
                 }
-                 setIsCheckingStatus(false);
             }, 10000); // Check status every 10 seconds
         }
         return () => {
-            if (interval) clearInterval(interval);
+            if (interval) {
+                console.log(`Clearing interval for batch ${batch.id}`);
+                clearInterval(interval);
+            }
         };
-    }, [batch, isCheckingStatus]);
+    }, [batch.id, batch.status, isCheckingStatus]);
 
     const handleGenerateReport = async (batchToReport: BatchJob) => {
         setIsGeneratingReport(true);
@@ -214,7 +224,7 @@ function BatchRow({ initialBatch }: { initialBatch: BatchJob }) {
     };
     
     const getBatchProgress = (currentBatch: BatchJob) => {
-        if (!currentBatch.totalCpfs) return 0;
+        if (!currentBatch.totalCpfs || currentBatch.totalCpfs === 0) return 0;
         if (currentBatch.status === 'completed' || currentBatch.status === 'error') return 100;
         return (currentBatch.processedCpfs / currentBatch.totalCpfs) * 100;
     }
@@ -223,7 +233,7 @@ function BatchRow({ initialBatch }: { initialBatch: BatchJob }) {
         if (currentBatch.status === 'processing') return `Em andamento... (${currentBatch.processedCpfs}/${currentBatch.totalCpfs})`;
         if (currentBatch.status === 'completed') return "Concluído";
         if (currentBatch.status === 'error') return `Falha: ${currentBatch.message || 'Erro desconhecido'}`;
-        return "Pendente";
+        return "Na fila";
     }
 
     return (
@@ -326,7 +336,7 @@ export default function FgtsPage() {
             setIsStorageLoaded(true);
         }
     }
-  }, [user, isUserLoading, isStorageLoaded]);
+  }, [user, isStorageLoaded]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && user && isStorageLoaded) {
@@ -341,7 +351,7 @@ export default function FgtsPage() {
 
 
   const totalPages = Math.ceil(recentBatches.length / ITEMS_PER_PAGE);
-  const paginatedBatches = recentBatches.slice(
+  const paginatedBatches = recentBatches.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
   );
@@ -735,7 +745,7 @@ export default function FgtsPage() {
                                         ))}
                                     </TableBody>
                                 </Table>
-                                {paginatedBatches.length === 0 && (
+                                {recentBatches.length === 0 && (
                                      <div className="text-center p-8 text-muted-foreground">
                                         Nenhum lote enviado ainda.
                                     </div>

@@ -75,7 +75,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   }
   
   const { documentNumber, provider, userId, userEmail } = validation.data;
-  let authToken = input.token;
+  let authToken = validation.data.token;
   
   if (!authToken) {
       let userCredentials: ApiCredentials;

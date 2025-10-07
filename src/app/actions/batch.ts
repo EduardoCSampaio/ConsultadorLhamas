@@ -116,7 +116,7 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
   initializeFirebaseAdmin();
   const firestore = getFirestore();
   
-  const batchId = `batch-${Date.now()}-${userId}`;
+  const batchId = `batch-${Date.now()}-${userId.substring(0, 5)}`;
   const batchRef = firestore.collection('batches').doc(batchId);
 
   const batchData: Omit<BatchJob, 'createdAt'> & { createdAt: FieldValue } = {
@@ -155,6 +155,7 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
 
 
 async function processBatchInBackground(batchId: string, cpfs: string[], provider: "cartos" | "bms" | "qi", userId: string, userEmail: string) {
+    console.log(`[Batch ${batchId}] Starting background processing for ${cpfs.length} CPFs.`);
     const firestore = getFirestore();
     const batchRef = firestore.collection('batches').doc(batchId);
 
@@ -171,18 +172,23 @@ async function processBatchInBackground(batchId: string, cpfs: string[], provide
         };
     } catch (error) {
         const message = error instanceof Error ? error.message : "Erro ao buscar credenciais.";
+        console.error(`[Batch ${batchId}] Failed to get credentials: ${message}`);
         await batchRef.update({ status: 'error', message: `Não foi possível carregar as credenciais: ${message}` });
         return;
     }
 
     const { token, error: tokenError } = await getAuthToken(userCredentials);
     if (tokenError) {
+        console.error(`[Batch ${batchId}] Failed to authenticate: ${tokenError}`);
         await batchRef.update({ status: 'error', message: `Falha na autenticação do lote: ${tokenError}` });
         return;
     }
+    
+    console.log(`[Batch ${batchId}] Authentication successful. Starting CPF loop.`);
 
     let processedCount = 0;
     for (const cpf of cpfs) {
+        console.log(`[Batch ${batchId}] Processing CPF: ${cpf}`);
         await consultarSaldoFgts({ 
             documentNumber: cpf, 
             provider, 
@@ -193,8 +199,10 @@ async function processBatchInBackground(batchId: string, cpfs: string[], provide
         
         processedCount++;
         await batchRef.update({ processedCpfs: processedCount });
+        console.log(`[Batch ${batchId}] Progress: ${processedCount}/${cpfs.length}`);
     }
-  
+    
+    console.log(`[Batch ${batchId}] Processing complete.`);
     await batchRef.update({ status: 'completed' });
 }
 
