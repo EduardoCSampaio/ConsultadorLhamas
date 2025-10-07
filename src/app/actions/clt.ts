@@ -165,7 +165,7 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
         return { success: false, message: tokenError };
     }
 
-    const API_URL = 'https://bff.v8sistema.com/private-consignment/consult';
+    const API_URL = 'https://bff.v8sistema.com/private-consignment/consent';
 
     try {
         const response = await fetch(API_URL, {
@@ -305,5 +305,3 @@ export async function criarSimulacaoCLT(input: z.infer<typeof simulationActionSc
         return { success: false, message };
     }
 }
-
-    
