@@ -185,7 +185,10 @@ async function processBatchInBackground(batchId: string, cpfs: string[], provide
         return;
     }
     
-    console.log(`[Batch ${batchId}] Authentication successful. Starting CPF loop.`);
+    console.log(`[Batch ${batchId}] Authentication successful. Pausing before starting CPF loop.`);
+
+    // Add a short delay before starting the loop to allow token to be fully ready on the provider side.
+    await delay(1000);
 
     let processedCount = 0;
     for (const cpf of cpfs) {
