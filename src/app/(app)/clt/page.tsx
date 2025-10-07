@@ -19,7 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Loader2, FileSignature, Wand, Banknote, Calendar as CalendarIconComponent, Hash, Percent, ChevronDown } from "lucide-react";
+import { CalendarIcon, Loader2, FileSignature, Wand, Banknote, Calendar as CalendarIconComponent, Hash, Percent } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -31,7 +31,7 @@ import type { SimulationConfig, SimulationResult, CLTConsentResult } from "@/app
 import { useUser } from "@/firebase";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Schemas
 const consentFormSchema = z.object({
@@ -278,24 +278,20 @@ export default function CltPage() {
                                     render={({ field }) => (
                                         <FormItem>
                                             <FormLabel>Tabela de Juros</FormLabel>
-                                            <FormControl>
-                                                <div className="relative w-full">
-                                                    <select
-                                                        {...field}
-                                                        disabled={isSimulating}
-                                                        className="appearance-none block w-full bg-background border border-input rounded-md py-2 px-3 text-sm placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                                        defaultValue=""
-                                                    >
-                                                        <option value="" disabled>Selecione uma tabela...</option>
-                                                        {simulationConfigs?.map(config => (
-                                                            <option key={config.id} value={config.id}>
-                                                                {config.slug} ({parseFloat(config.monthly_interest_rate).toFixed(2)}% a.m.)
-                                                            </option>
-                                                        ))}
-                                                    </select>
-                                                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" />
-                                                </div>
-                                            </FormControl>
+                                            <Select onValueChange={field.onChange} value={field.value} disabled={isSimulating}>
+                                                <FormControl>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Selecione uma tabela..." />
+                                                    </SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>
+                                                    {simulationConfigs?.map(config => (
+                                                        <SelectItem key={config.id} value={config.id}>
+                                                            {config.slug} ({parseFloat(config.monthly_interest_rate).toFixed(2)}% a.m.)
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
                                             <FormMessage />
                                         </FormItem>
                                     )}
@@ -307,24 +303,20 @@ export default function CltPage() {
                                     render={({ field }) => (
                                         <FormItem>
                                             <FormLabel>Número de Parcelas</FormLabel>
-                                            <FormControl>
-                                                 <div className="relative w-full">
-                                                    <select
-                                                        {...field}
-                                                        disabled={!selectedConfig || isSimulating}
-                                                        className="appearance-none block w-full bg-background border border-input rounded-md py-2 px-3 text-sm placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                                        defaultValue=""
-                                                    >
-                                                        <option value="" disabled>{!selectedConfig ? "Selecione uma tabela primeiro" : "Selecione as parcelas..."}</option>
-                                                        {selectedConfig?.number_of_installments.map(installment => (
-                                                            <option key={installment} value={String(installment)}>
-                                                                {installment} parcelas
-                                                            </option>
-                                                        ))}
-                                                    </select>
-                                                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" />
-                                                </div>
-                                            </FormControl>
+                                            <Select onValueChange={field.onChange} value={field.value} disabled={!selectedConfig || isSimulating}>
+                                                <FormControl>
+                                                    <SelectTrigger>
+                                                         <SelectValue placeholder={!selectedConfig ? "Selecione uma tabela primeiro" : "Selecione as parcelas..."} />
+                                                    </SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>
+                                                    {selectedConfig?.number_of_installments.map(installment => (
+                                                        <SelectItem key={installment} value={String(installment)}>
+                                                            {installment} parcelas
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
                                             <FormMessage />
                                         </FormItem>
                                     )}
