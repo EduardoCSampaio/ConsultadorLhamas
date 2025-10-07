@@ -128,7 +128,7 @@ export default function CltPage() {
     if (selectedConfigId && simulationConfigs) {
       const config = simulationConfigs.find(c => c.id === selectedConfigId) || null;
       setSelectedConfig(config);
-      simulationForm.resetField('number_of_installments');
+      simulationForm.setValue('number_of_installments', '');
     }
   }, [selectedConfigId, simulationConfigs, simulationForm]);
 
@@ -396,5 +396,3 @@ export default function CltPage() {
     </div>
   );
 }
-
-    
