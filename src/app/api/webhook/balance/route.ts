@@ -1,6 +1,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getFirestore, serverTimestamp } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
 
 /**
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
 
     await docRef.set({
       responseBody: payload,
-      createdAt: serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       status: status,
       message: statusMessage,
       id: docId.toString(),
