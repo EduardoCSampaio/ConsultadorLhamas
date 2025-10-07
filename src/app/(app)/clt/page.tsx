@@ -20,7 +20,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Loader2, FileSignature, Search, Wand, Banknote, Calendar as CalendarIconComponent, Hash, Percent } from "lucide-react";
+import { CalendarIcon, Loader2, FileSignature, Wand, Banknote, Calendar as CalendarIconComponent, Hash, Percent } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -278,9 +278,11 @@ export default function CltPage() {
                                         <FormItem>
                                             <FormLabel>Tabela de Juros</FormLabel>
                                             <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSimulating}>
-                                                <SelectTrigger {...field} disabled={isSimulating}>
-                                                    <SelectValue placeholder="Selecione uma tabela..." />
-                                                </SelectTrigger>
+                                                <FormControl>
+                                                    <SelectTrigger disabled={isSimulating}>
+                                                        <SelectValue placeholder="Selecione uma tabela..." />
+                                                    </SelectTrigger>
+                                                </FormControl>
                                                 <SelectContent>
                                                     {simulationConfigs?.map(config => (
                                                         <SelectItem key={config.id} value={config.id}>
@@ -300,9 +302,11 @@ export default function CltPage() {
                                         <FormItem>
                                             <FormLabel>Número de Parcelas</FormLabel>
                                             <Select onValueChange={field.onChange} value={field.value} disabled={!selectedConfig || isSimulating}>
-                                                 <SelectTrigger {...field} disabled={!selectedConfig || isSimulating}>
-                                                    <SelectValue placeholder={!selectedConfig ? "Selecione uma tabela primeiro" : "Selecione as parcelas..."} />
-                                                </SelectTrigger>
+                                                <FormControl>
+                                                    <SelectTrigger disabled={!selectedConfig || isSimulating}>
+                                                        <SelectValue placeholder={!selectedConfig ? "Selecione uma tabela primeiro" : "Selecione as parcelas..."} />
+                                                    </SelectTrigger>
+                                                </FormControl>
                                                 <SelectContent>
                                                     {selectedConfig?.number_of_installments.map(installment => (
                                                          <SelectItem key={installment} value={String(installment)}>
@@ -390,3 +394,5 @@ export default function CltPage() {
     </div>
   );
 }
+
+    
