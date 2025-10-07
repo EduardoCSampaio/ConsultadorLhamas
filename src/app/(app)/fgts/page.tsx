@@ -22,7 +22,7 @@ import { Loader2, Search, CheckCircle2, XCircle, Circle, User, Briefcase, Landma
 import { useState, useEffect, useRef, ChangeEvent } from "react";
 import { consultarSaldoFgts } from "@/app/actions/fgts";
 import { useDoc } from "@/firebase/firestore/use-doc";
-import { useFirestore, useMemoFirebase, useUser } from "@/firebase";
+import { useUser, useFirestore, useMemoFirebase } from "@/firebase";
 import { doc } from "firebase/firestore";
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -161,10 +161,7 @@ const formatBatchName = (fileName: string, isoDate: string) => {
 };
 
 
-const getLocalStorageKey = (userId: string | undefined) => {
-    if (!userId) return null;
-    return `recentBatches_${userId}`;
-}
+const getLocalStorageKey = (userId: string) => `recentBatches_${userId}`;
 
 const ITEMS_PER_PAGE = 5;
 
@@ -180,42 +177,43 @@ export default function FgtsPage() {
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  const { user } = useUser();
+  const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
 
   const [recentBatches, setRecentBatches] = useState<BatchJob[]>([]);
+  const [isStorageLoaded, setIsStorageLoaded] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
 
   // Initialize batches from localStorage once user is available
   useEffect(() => {
-    if (typeof window !== 'undefined' && user) {
+    // Only run this if user is loaded and storage hasn't been checked yet
+    if (typeof window !== 'undefined' && !isUserLoading && user && !isStorageLoaded) {
         const localStorageKey = getLocalStorageKey(user.uid);
-        if (localStorageKey) {
-            try {
-                const storedBatches = window.localStorage.getItem(localStorageKey);
-                setRecentBatches(storedBatches ? JSON.parse(storedBatches) : []);
-            } catch (error) {
-                console.error("Failed to parse recent batches from localStorage", error);
-                setRecentBatches([]);
-            }
+        try {
+            const storedBatches = window.localStorage.getItem(localStorageKey);
+            setRecentBatches(storedBatches ? JSON.parse(storedBatches) : []);
+        } catch (error) {
+            console.error("Failed to parse recent batches from localStorage", error);
+            setRecentBatches([]);
+        } finally {
+            setIsStorageLoaded(true); // Mark storage as loaded to prevent re-running
         }
     }
-  }, [user]);
+  }, [user, isUserLoading, isStorageLoaded]);
 
   // Save batches to localStorage whenever they change
   useEffect(() => {
-    if (typeof window !== 'undefined' && user) {
+    // Only save if storage has been loaded, to prevent overwriting on initial load
+    if (typeof window !== 'undefined' && user && isStorageLoaded) {
         const localStorageKey = getLocalStorageKey(user.uid);
-        if (localStorageKey) {
-            try {
-                window.localStorage.setItem(localStorageKey, JSON.stringify(recentBatches));
-            } catch (error) {
-                console.error("Failed to save recent batches to localStorage", error);
-            }
+        try {
+            window.localStorage.setItem(localStorageKey, JSON.stringify(recentBatches));
+        } catch (error) {
+            console.error("Failed to save recent batches to localStorage", error);
         }
     }
-  }, [recentBatches, user]);
+  }, [recentBatches, user, isStorageLoaded]);
 
 
   const totalPages = Math.ceil(recentBatches.length / ITEMS_PER_PAGE);
@@ -740,5 +738,3 @@ export default function FgtsPage() {
     </div>
   );
 }
-
-    
