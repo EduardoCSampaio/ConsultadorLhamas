@@ -322,7 +322,7 @@ export default function FgtsPage() {
     }, [toast]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && user && !isStorageLoaded) {
+    if (user && !isUserLoading && !isStorageLoaded) {
         const localStorageKey = getLocalStorageKey(user.uid);
         try {
             const storedBatches = window.localStorage.getItem(localStorageKey);
@@ -336,10 +336,10 @@ export default function FgtsPage() {
             setIsStorageLoaded(true);
         }
     }
-  }, [user, isStorageLoaded]);
+  }, [user, isUserLoading, isStorageLoaded]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && user && isStorageLoaded) {
+    if (user && isStorageLoaded) {
         const localStorageKey = getLocalStorageKey(user.uid);
         try {
             window.localStorage.setItem(localStorageKey, JSON.stringify(recentBatches));
@@ -745,6 +745,11 @@ export default function FgtsPage() {
                                         ))}
                                     </TableBody>
                                 </Table>
+                                {paginatedBatches.length === 0 && recentBatches.length > 0 && (
+                                     <div className="text-center p-8 text-muted-foreground">
+                                        Fim do histórico.
+                                    </div>
+                                )}
                                 {recentBatches.length === 0 && (
                                      <div className="text-center p-8 text-muted-foreground">
                                         Nenhum lote enviado ainda.

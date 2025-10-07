@@ -153,6 +153,7 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
   };
 }
 
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function processBatchInBackground(batchId: string, cpfs: string[], provider: "cartos" | "bms" | "qi", userId: string, userEmail: string) {
     console.log(`[Batch ${batchId}] Starting background processing for ${cpfs.length} CPFs.`);
@@ -192,14 +193,17 @@ async function processBatchInBackground(batchId: string, cpfs: string[], provide
         await consultarSaldoFgts({ 
             documentNumber: cpf, 
             provider, 
-            token: token!,
-            userId: userId,
-            userEmail: userEmail,
+            token, // Pass the token here
+            userId,
+            userEmail,
         });
         
         processedCount++;
         await batchRef.update({ processedCpfs: processedCount });
         console.log(`[Batch ${batchId}] Progress: ${processedCount}/${cpfs.length}`);
+        
+        // Introduce a small delay to avoid overwhelming the target API
+        await delay(300);
     }
     
     console.log(`[Batch ${batchId}] Processing complete.`);
@@ -238,7 +242,9 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                 const data = docSnap.data();
                 const responseBody = data?.responseBody;
                 
-                const isSuccess = data?.status === 'success' && responseBody && typeof responseBody.balance !== 'undefined' && responseBody.balance !== null;
+                // Check if the webhook response itself indicates an error from the provider
+                const providerError = responseBody?.errorMessage || responseBody?.error;
+                const isSuccess = data?.status === 'success' && responseBody && typeof responseBody.balance !== 'undefined' && responseBody.balance !== null && !providerError;
 
                 if (isSuccess) {
                     const balanceValue = parseFloat(responseBody.balance);
@@ -249,7 +255,8 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                     });
                 } 
                 else {
-                    const errorMessage = responseBody?.errorMessage || responseBody?.error || data?.message || "Erro no processamento do webhook.";
+                    // Use the most specific error message available
+                    const errorMessage = providerError || data?.message || "Erro no processamento do webhook.";
                     results.push({
                         CPF: cpf,
                         Saldo: 'N/A',
@@ -260,14 +267,14 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                 results.push({
                     CPF: cpf,
                     Saldo: 'N/A',
-                    Mensagem: 'Aguardando resposta do webhook...',
+                    Mensagem: 'Nenhum resultado recebido via webhook.',
                 });
             }
         } catch (error) {
              results.push({
                 CPF: cpf,
                 Saldo: 'N/A',
-                Mensagem: 'Erro ao consultar resultado no Firestore.',
+                Mensagem: 'Erro interno ao consultar resultado no Firestore.',
             });
         }
     }
