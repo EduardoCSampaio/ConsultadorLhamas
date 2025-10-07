@@ -165,7 +165,7 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
         return { success: false, message: tokenError };
     }
 
-    const API_URL = 'https://bff.v8sistema.com/private-consignment/consent';
+    const API_URL = 'https://bff.v8sistema.com/private-consignment/consult';
 
     try {
         const response = await fetch(API_URL, {
