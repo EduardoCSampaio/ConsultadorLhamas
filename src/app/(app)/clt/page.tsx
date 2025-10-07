@@ -282,11 +282,9 @@ export default function CltPage() {
                                         <FormItem>
                                             <FormLabel>Tabela de Juros</FormLabel>
                                             <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSimulating}>
-                                                <FormControl>
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="Selecione uma tabela..." />
-                                                    </SelectTrigger>
-                                                </FormControl>
+                                                <SelectTrigger {...field} disabled={isSimulating}>
+                                                    <SelectValue placeholder="Selecione uma tabela..." />
+                                                </SelectTrigger>
                                                 <SelectContent>
                                                     {simulationConfigs?.map(config => (
                                                         <SelectItem key={config.id} value={config.id}>
@@ -306,11 +304,9 @@ export default function CltPage() {
                                         <FormItem>
                                             <FormLabel>Número de Parcelas</FormLabel>
                                             <Select onValueChange={field.onChange} value={field.value} disabled={!selectedConfig || isSimulating}>
-                                                <FormControl>
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder={!selectedConfig ? "Selecione uma tabela primeiro" : "Selecione as parcelas..."} />
-                                                    </SelectTrigger>
-                                                </FormControl>
+                                                <SelectTrigger {...field} disabled={!selectedConfig || isSimulating}>
+                                                    <SelectValue placeholder={!selectedConfig ? "Selecione uma tabela primeiro" : "Selecione as parcelas..."} />
+                                                </SelectTrigger>
                                                 <SelectContent>
                                                     {selectedConfig?.number_of_installments.map(installment => (
                                                         <SelectItem key={installment} value={String(installment)}>
