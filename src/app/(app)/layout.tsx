@@ -36,7 +36,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { doc } from 'firebase/firestore';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Circle } from "lucide-react";
 import { cn } from '@/lib/utils';
 
 const baseMenuItems = [
@@ -170,12 +170,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                              <SidebarMenuItem>
                                 <SidebarMenuSubButton asChild isActive={pathname === '/fgts'}>
                                      <Link href="/fgts">
+                                        <Circle className={cn("size-2 fill-current", pathname === '/fgts' ? 'text-sidebar-primary' : 'text-sidebar-foreground/40')} />
                                         <span>V8DIGITAL</span>
                                      </Link>
                                 </SidebarMenuSubButton>
                             </SidebarMenuItem>
                              <SidebarMenuItem>
                                 <SidebarMenuSubButton disabled>
+                                    <Circle className="size-2 fill-current text-sidebar-foreground/20" />
                                     <span>EM BREVE MAIS BANCOS</span>
                                 </SidebarMenuSubButton>
                             </SidebarMenuItem>
