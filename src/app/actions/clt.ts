@@ -176,19 +176,20 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
 
     const API_URL = 'https://bff.v8sistema.com/private-consignment/consult';
     
-    const body = {
-      provider: data.provider,
-      qi_request: {
-        borrowerDocumentNumber: data.borrowerDocumentNumber,
-        gender: data.gender,
-        birthDate: data.birthDate,
-        signerName: data.signerName,
-        signerEmail: data.signerEmail,
-        signerPhoneCountryCode: data.signerPhone.countryCode,
-        signerPhoneAreaCode: data.signerPhone.areaCode,
-        signerPhoneNumber: data.signerPhone.phoneNumber,
-      }
-    };
+    // Convert the payload to query parameters for a GET request
+    const queryParams = new URLSearchParams({
+        provider: data.provider,
+        'qi_request[borrowerDocumentNumber]': data.borrowerDocumentNumber,
+        'qi_request[gender]': data.gender,
+        'qi_request[birthDate]': data.birthDate,
+        'qi_request[signerName]': data.signerName,
+        'qi_request[signerEmail]': data.signerEmail,
+        'qi_request[signerPhoneCountryCode]': data.signerPhone.countryCode,
+        'qi_request[signerPhoneAreaCode]': data.signerPhone.areaCode,
+        'qi_request[signerPhoneNumber]': data.signerPhone.phoneNumber
+    });
+
+    const fullUrl = `${API_URL}?${queryParams.toString()}`;
     
     const headers = {
         'Content-Type': 'application/json',
@@ -196,17 +197,15 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
     };
 
     console.log("--- [CLT_CONSENT DEBUG] ---");
-    console.log("Endpoint:", API_URL);
+    console.log("Endpoint (Full URL):", fullUrl);
+    console.log("Method: GET");
     console.log("Headers:", JSON.stringify({ ...headers, Authorization: 'Bearer [REDACTED]' }, null, 2));
-    console.log("Request Body:", JSON.stringify(body, null, 2));
     console.log("--------------------------");
 
-
     try {
-        const response = await fetch(API_URL, {
-            method: 'POST',
+        const response = await fetch(fullUrl, {
+            method: 'GET',
             headers: headers,
-            body: JSON.stringify(body),
         });
 
         const responseData = await response.json();
