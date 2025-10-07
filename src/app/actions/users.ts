@@ -26,7 +26,7 @@ const updateApiCredentialsSchema = z.object({
 
 const updateUserStatusSchema = z.object({
   uid: z.string().min(1, { message: "UID do usuário é obrigatório." }),
-  status: z.enum(['pending', 'active', 'rejected']),
+  status: z.enum(['pending', 'active', 'rejected', 'inactive']),
 });
 
 const setAdminClaimSchema = z.object({
@@ -38,7 +38,7 @@ export type UserProfile = {
     uid: string;
     email: string;
     role: 'admin' | 'user';
-    status: 'pending' | 'active' | 'rejected';
+    status: 'pending' | 'active' | 'rejected' | 'inactive';
     createdAt: string; // Changed to string to be serializable
 } & ApiCredentials;
 

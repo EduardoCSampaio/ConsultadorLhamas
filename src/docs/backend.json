@@ -66,7 +66,8 @@
           "enum": [
             "pending",
             "active",
-            "rejected"
+            "rejected",
+            "inactive"
           ],
           "description": "The current status of the user's account."
         },
@@ -99,6 +100,31 @@
         "status",
         "createdAt"
       ]
+    },
+    "ActivityLog": {
+        "title": "Activity Log",
+        "description": "Stores a record of user actions within the application.",
+        "type": "object",
+        "properties": {
+            "userId": {
+                "type": "string",
+                "description": "The UID of the user who performed the action."
+            },
+            "userEmail": {
+                "type": "string",
+                "description": "The email of the user for easy reference."
+            },
+            "action": {
+                "type": "string",
+                "description": "A description of the action performed (e.g., 'Consulta FGTS')."
+            },
+            "createdAt": {
+                "type": "string",
+                "format": "date-time",
+                "description": "The timestamp when the action occurred."
+            }
+        },
+        "required": ["userId", "userEmail", "action", "createdAt"]
     }
   },
   "auth": {
@@ -124,6 +150,12 @@
         "$ref": "#/entities/UserProfile"
       },
       "description": "Stores user profiles. The userId is the same as the Firebase Auth UID."
+    },
+    "/activityLogs/{logId}": {
+        "schema": {
+            "$ref": "#/entities/ActivityLog"
+        },
+        "description": "Stores records of user activities for auditing and dashboard metrics."
     }
   }
 }
