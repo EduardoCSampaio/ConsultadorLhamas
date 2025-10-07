@@ -177,15 +177,17 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
     const API_URL = 'https://bff.v8sistema.com/private-consignment/consult';
     
     const body = {
-      borrowerDocumentNumber: data.borrowerDocumentNumber,
-      gender: data.gender,
-      birthDate: data.birthDate,
-      signerName: data.signerName,
-      signerEmail: data.signerEmail,
-      signerPhoneNumber: data.signerPhone.phoneNumber,
-      signerPhoneCountryCode: data.signerPhone.countryCode,
-      signerPhoneAreaCode: data.signerPhone.areaCode,
-      provider: data.provider
+      provider: data.provider,
+      qi_request: {
+        borrowerDocumentNumber: data.borrowerDocumentNumber,
+        gender: data.gender,
+        birthDate: data.birthDate,
+        signerName: data.signerName,
+        signerEmail: data.signerEmail,
+        signerPhoneCountryCode: data.signerPhone.countryCode,
+        signerPhoneAreaCode: data.signerPhone.areaCode,
+        signerPhoneNumber: data.signerPhone.phoneNumber,
+      }
     };
 
     try {
