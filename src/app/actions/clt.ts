@@ -183,13 +183,7 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
     try {
         // --- ETAPA 1: GERAR O TERMO DE CONSENTIMENTO ---
         const generationBody = {
-            borrowerDocumentNumber: data.borrowerDocumentNumber,
-            gender: data.gender,
-            birthDate: data.birthDate,
-            signerName: data.signerName,
-            signerEmail: data.signerEmail,
-            signerPhone: data.signerPhone,
-            provider: data.provider
+            ...data
         };
 
         console.log("--- [CLT_CONSENT DEBUG - ETAPA 1: GERAR] ---");
@@ -340,7 +334,5 @@ export async function criarSimulacaoCLT(input: z.infer<typeof simulationActionSc
         return { success: false, message };
     }
 }
-
-    
 
     
