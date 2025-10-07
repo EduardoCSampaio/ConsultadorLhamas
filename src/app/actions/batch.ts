@@ -22,10 +22,25 @@ const reportActionSchema = z.object({
   createdAt: z.string(),
 });
 
+const getBatchStatusSchema = z.object({
+    batchId: z.string(),
+});
+
+export type BatchJob = {
+    id: string;
+    fileName: string;
+    provider: string;
+    status: 'processing' | 'completed' | 'error';
+    totalCpfs: number;
+    processedCpfs: number; // This can be removed if we don't show real-time progress
+    cpfs: string[];
+    createdAt: string;
+    message?: string;
+};
+
 
 type ProcessActionResult = {
   status: 'success' | 'error';
-  count: number;
   message?: string;
 };
 
@@ -35,6 +50,54 @@ type ReportActionResult = {
   fileContent: string;
   message?: string;
 };
+
+export async function getBatchStatus(input: z.infer<typeof getBatchStatusSchema>): Promise<{ status: 'success' | 'error'; batch?: BatchJob; message?: string }> {
+    const validation = getBatchStatusSchema.safeParse(input);
+    if (!validation.success) {
+        return { status: 'error', message: 'ID do lote inválido.' };
+    }
+    
+    try {
+        initializeFirebaseAdmin();
+        const firestore = getFirestore();
+        const batchDoc = await firestore.collection('batches').doc(validation.data.batchId).get();
+
+        if (!batchDoc.exists) {
+            return { status: 'error', message: 'Lote não encontrado.' };
+        }
+        
+        const data = batchDoc.data()!;
+        const createdAt = data.createdAt;
+        let serializableCreatedAt = new Date().toISOString();
+        if (createdAt instanceof FieldValue) {
+           // This case is tricky as we don't know the server time. Use current time as fallback.
+           serializableCreatedAt = new Date().toISOString();
+        } else if (createdAt && typeof createdAt.toDate === 'function') { // Check for Timestamp
+            serializableCreatedAt = createdAt.toDate().toISOString();
+        } else if (typeof createdAt === 'string') {
+            serializableCreatedAt = createdAt;
+        }
+
+        const batch: BatchJob = {
+            id: data.id,
+            fileName: data.fileName,
+            provider: data.provider,
+            status: data.status,
+            totalCpfs: data.totalCpfs,
+            processedCpfs: data.processedCpfs,
+            cpfs: data.cpfs,
+            createdAt: serializableCreatedAt,
+            message: data.message,
+        };
+
+        return { status: 'success', batch };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro ao buscar status do lote.";
+        console.error("getBatchStatus error:", message);
+        return { status: 'error', message };
+    }
+}
+
 
 /**
  * Action to initiate batch processing. It authenticates once, then loops 
@@ -46,7 +109,6 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
   if (!validation.success) {
     return { 
         status: 'error', 
-        count: 0,
         message: 'Dados de entrada inválidos.' 
     };
   }
@@ -55,7 +117,6 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
   const firestore = getFirestore();
   const batchRef = firestore.collection('batches').doc(batchId);
 
-  // Set the initial batch state in Firestore
   try {
       initializeFirebaseAdmin();
       await batchRef.set({
@@ -72,74 +133,65 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
   } catch(error) {
     const message = error instanceof Error ? error.message : "Erro ao iniciar o lote no Firestore.";
     console.error("Batch init error:", message);
-    return { status: 'error', count: 0, message };
+    return { status: 'error', message };
   }
 
-
-  // 1. Obter credenciais do usuário que solicitou
-  let userCredentials: ApiCredentials;
-  try {
-    const userDoc = await firestore.collection('users').doc(userId).get();
-    if (!userDoc.exists) {
-        await batchRef.update({ status: 'error', message: 'Usuário não encontrado para buscar as credenciais.' });
-        return { status: 'error', count: 0, message: 'Usuário não encontrado.' };
-    }
-    const userData = userDoc.data()!;
-    userCredentials = {
-      v8_username: userData.v8_username,
-      v8_password: userData.v8_password,
-      v8_audience: userData.v8_audience,
-      v8_client_id: userData.v8_client_id,
-    };
-  } catch(error) {
-      const message = error instanceof Error ? error.message : "Erro ao buscar credenciais.";
-      await batchRef.update({ status: 'error', message: `Não foi possível carregar as credenciais de API: ${message}` });
-      return { status: 'error', count: 0, message };
-  }
-
-  // 2. Autenticar UMA VEZ para todo o lote
-  const { token, error: tokenError } = await getAuthToken(userCredentials);
-  if (tokenError) {
-    await batchRef.update({ status: 'error', message: `Falha na autenticação do lote: ${tokenError}` });
-    return { status: 'error', count: 0, message: tokenError };
-  }
-
-  // 3. Processar CPFs com o token reutilizado
-  let successCount = 0;
-  let processedCount = 0;
-
-  for (const cpf of cpfs) {
-    // Passa o token obtido para a função de consulta
-    const result = await consultarSaldoFgts({ 
-        documentNumber: cpf, 
-        provider, 
-        token: token!,
-        userId: userId,
-        userEmail: userEmail,
-    });
-    
-    if (result.status === 'success') {
-      successCount++;
-    }
-    
-    processedCount++;
-    
-    // Update progress in Firestore
-    await batchRef.update({ processedCpfs: processedCount });
-    
-    // Small delay to avoid overwhelming the API
-    await new Promise(resolve => setTimeout(resolve, 3000));
-  }
-  
-  // Finalize batch status
-  await batchRef.update({ status: 'completed', processedCpfs: cpfs.length });
+  // Do not await the rest of the processing. It will run in the background.
+  processBatchInBackground(batchId, cpfs, provider, userId, userEmail);
 
   return {
     status: 'success',
-    count: successCount,
-    message: `Foram iniciadas ${successCount} de ${cpfs.length} consultas.`,
+    message: `Lote enviado para processamento em segundo plano.`,
   };
 }
+
+
+async function processBatchInBackground(batchId: string, cpfs: string[], provider: "cartos" | "bms" | "qi", userId: string, userEmail: string) {
+    const firestore = getFirestore();
+    const batchRef = firestore.collection('batches').doc(batchId);
+
+    let userCredentials: ApiCredentials;
+    try {
+        const userDoc = await firestore.collection('users').doc(userId).get();
+        if (!userDoc.exists) throw new Error('Usuário não encontrado.');
+        const userData = userDoc.data()!;
+        userCredentials = {
+            v8_username: userData.v8_username,
+            v8_password: userData.v8_password,
+            v8_audience: userData.v8_audience,
+            v8_client_id: userData.v8_client_id,
+        };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro ao buscar credenciais.";
+        await batchRef.update({ status: 'error', message: `Não foi possível carregar as credenciais: ${message}` });
+        return;
+    }
+
+    const { token, error: tokenError } = await getAuthToken(userCredentials);
+    if (tokenError) {
+        await batchRef.update({ status: 'error', message: `Falha na autenticação do lote: ${tokenError}` });
+        return;
+    }
+
+    let processedCount = 0;
+    for (const cpf of cpfs) {
+        await consultarSaldoFgts({ 
+            documentNumber: cpf, 
+            provider, 
+            token: token!,
+            userId: userId,
+            userEmail: userEmail,
+        });
+        
+        processedCount++;
+        await batchRef.update({ processedCpfs: processedCount });
+        
+        await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+  
+    await batchRef.update({ status: 'completed' });
+}
+
 
 /**
  * Action to generate the final report. It fetches the results for each CPF
@@ -172,18 +224,16 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                 const data = docSnap.data();
                 const responseBody = data?.responseBody;
                 
-                // Case 1: Explicit Success
                 const isSuccess = data?.status === 'success' && responseBody && typeof responseBody.balance !== 'undefined' && responseBody.balance !== null;
 
                 if (isSuccess) {
                     const balanceValue = parseFloat(responseBody.balance);
                     results.push({
                         CPF: cpf,
-                        Saldo: isNaN(balanceValue) ? '0.00' : balanceValue, // Use number for currency formatting
+                        Saldo: isNaN(balanceValue) ? '0.00' : balanceValue, 
                         Mensagem: 'Sucesso',
                     });
                 } 
-                // Case 2: Explicit Error (Catch-all for any other existing document state)
                 else {
                     const errorMessage = responseBody?.errorMessage || responseBody?.error || data?.message || "Erro no processamento do webhook.";
                     results.push({
@@ -193,7 +243,6 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                     });
                 }
             } else {
-                // Case 3: Document doesn't exist yet (webhook response not received)
                 results.push({
                     CPF: cpf,
                     Saldo: 'N/A',
@@ -209,15 +258,12 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         }
     }
 
-    // Create an Excel file with the results
     const worksheet = XLSX.utils.json_to_sheet(results);
-    // Set column widths
     worksheet['!cols'] = [
         { wch: 15 }, // CPF
         { wch: 15 }, // Saldo
         { wch: 70 }, // Mensagem
     ];
-    // Format Saldo column as currency
     results.forEach((_, index) => {
         const cellRef = XLSX.utils.encode_cell({c: 1, r: index + 1});
         if (worksheet[cellRef] && typeof worksheet[cellRef].v === 'number') {
@@ -245,6 +291,5 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         message: 'Relatório gerado com sucesso.',
     };
 }
-
 
     

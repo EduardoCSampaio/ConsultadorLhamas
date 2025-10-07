@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import * as XLSX from 'xlsx';
-import { processarLoteFgts, gerarRelatorioLote } from "@/app/actions/batch";
+import { processarLoteFgts, gerarRelatorioLote, getBatchStatus, type BatchJob } from "@/app/actions/batch";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -53,17 +53,6 @@ type StatusStep = {
   name: string;
   status: StepStatus;
   message?: string;
-};
-
-type BatchJob = {
-  id: string;
-  fileName: string;
-  provider: string;
-  status: 'processing' | 'completed' | 'error';
-  totalCpfs: number;
-  processedCpfs: number;
-  cpfs: string[];
-  createdAt: string; // Add timestamp for consistent naming
 };
 
 
@@ -166,17 +155,30 @@ const getLocalStorageKey = (userId: string) => `recentBatches_${userId}`;
 const ITEMS_PER_PAGE = 5;
 
 function BatchRow({ initialBatch }: { initialBatch: BatchJob }) {
-    const firestore = useFirestore();
-    const batchRef = useMemoFirebase(() => {
-        if (!firestore || !initialBatch) return null;
-        return doc(firestore, 'batches', initialBatch.id);
-    }, [firestore, initialBatch.id]);
-
-    const { data: batch, isLoading: isBatchLoading } = useDoc<BatchJob>(batchRef);
+    const [batch, setBatch] = useState(initialBatch);
+    const [isCheckingStatus, setIsCheckingStatus] = useState(false);
     const [isGeneratingReport, setIsGeneratingReport] = useState(false);
     const { toast } = useToast();
-
-    const currentBatch = batch || initialBatch;
+    
+    useEffect(() => {
+        let interval: NodeJS.Timeout | undefined;
+        if (batch.status === 'processing' && !isCheckingStatus) {
+            interval = setInterval(async () => {
+                setIsCheckingStatus(true);
+                const result = await getBatchStatus({ batchId: batch.id });
+                if (result.status === 'success' && result.batch) {
+                     setBatch(result.batch);
+                     if (result.batch.status === 'completed' || result.batch.status === 'error') {
+                         if (interval) clearInterval(interval);
+                     }
+                }
+                 setIsCheckingStatus(false);
+            }, 10000); // Check status every 10 seconds
+        }
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [batch, isCheckingStatus]);
 
     const handleGenerateReport = async (batchToReport: BatchJob) => {
         setIsGeneratingReport(true);
@@ -208,42 +210,39 @@ function BatchRow({ initialBatch }: { initialBatch: BatchJob }) {
     };
 
     const handleDeleteBatch = (batchId: string) => {
-        // This should trigger the parent to delete from its state
         (document.dispatchEvent(new CustomEvent('delete-batch', { detail: batchId })));
     };
     
-    const getBatchProgress = (batch: BatchJob) => {
-        if (batch.totalCpfs === 0) return 0;
-        const progress = (batch.processedCpfs / batch.totalCpfs) * 100;
-        if (batch.status === 'completed' || batch.status === 'error') return 100;
-        if (progress > 0 && progress < 10) return 10; // Show some progress early
-        return progress;
+    const getBatchProgress = (currentBatch: BatchJob) => {
+        if (currentBatch.status === 'completed' || currentBatch.status === 'error') return 100;
+        if (currentBatch.status === 'processing') return 50; // In progress state
+        return 0;
     }
 
-    const getBatchProgressText = (batch: BatchJob) => {
-        if (batch.status === 'processing') return `Processando ${batch.processedCpfs} de ${batch.totalCpfs}...`;
-        if (batch.status === 'completed') return "Pronto para download";
-        if (batch.status === 'error') return "Falha ao enviar";
+    const getBatchProgressText = (currentBatch: BatchJob) => {
+        if (currentBatch.status === 'processing') return `Em andamento...`;
+        if (currentBatch.status === 'completed') return "Pronto para download";
+        if (currentBatch.status === 'error') return "Falha ao enviar";
         return "Pendente";
     }
 
     return (
-        <TableRow key={currentBatch.id}>
+        <TableRow key={batch.id}>
             <TableCell>
-                <div className="font-medium">{formatBatchName(currentBatch.fileName, currentBatch.createdAt)}</div>
-                <div className="text-sm text-muted-foreground">{currentBatch.totalCpfs} CPFs</div>
+                <div className="font-medium">{formatBatchName(batch.fileName, batch.createdAt)}</div>
+                <div className="text-sm text-muted-foreground">{batch.totalCpfs} CPFs</div>
             </TableCell>
             <TableCell>
                 <div className="flex flex-col gap-2">
-                    <Progress value={getBatchProgress(currentBatch)} className="h-2" />
-                    <span className="text-xs text-muted-foreground">{getBatchProgressText(currentBatch)}</span>
+                    <Progress value={getBatchProgress(batch)} className="h-2" />
+                    <span className="text-xs text-muted-foreground">{getBatchProgressText(batch)}</span>
                 </div>
             </TableCell>
             <TableCell className="text-right">
                 <Button
                     size="sm"
-                    onClick={() => handleGenerateReport(currentBatch)}
-                    disabled={currentBatch.status !== 'completed' || isGeneratingReport}
+                    onClick={() => handleGenerateReport(batch)}
+                    disabled={batch.status !== 'completed' || isGeneratingReport}
                 >
                     {isGeneratingReport ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -269,7 +268,7 @@ function BatchRow({ initialBatch }: { initialBatch: BatchJob }) {
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDeleteBatch(currentBatch.id)} className="bg-destructive hover:bg-destructive/90">Excluir</AlertDialogAction>
+                            <AlertDialogAction onClick={() => handleDeleteBatch(batch.id)} className="bg-destructive hover:bg-destructive/90">Excluir</AlertDialogAction>
                         </AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialog>
@@ -297,7 +296,6 @@ export default function FgtsPage() {
 
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Custom event listener for batch deletion
     useEffect(() => {
         const handleDelete = (event: Event) => {
             const batchId = (event as CustomEvent).detail;
@@ -313,11 +311,8 @@ export default function FgtsPage() {
         };
     }, [toast]);
 
-
-  // Initialize batches from localStorage once user is available
   useEffect(() => {
-    // Only run this if user is loaded and storage hasn't been checked yet
-    if (typeof window !== 'undefined' && !isUserLoading && user && !isStorageLoaded) {
+    if (typeof window !== 'undefined' && user && !isStorageLoaded) {
         const localStorageKey = getLocalStorageKey(user.uid);
         try {
             const storedBatches = window.localStorage.getItem(localStorageKey);
@@ -326,14 +321,12 @@ export default function FgtsPage() {
             console.error("Failed to parse recent batches from localStorage", error);
             setRecentBatches([]);
         } finally {
-            setIsStorageLoaded(true); // Mark storage as loaded to prevent re-running
+            setIsStorageLoaded(true);
         }
     }
   }, [user, isUserLoading, isStorageLoaded]);
 
-  // Save batches to localStorage whenever they change
   useEffect(() => {
-    // Only save if storage has been loaded, to prevent overwriting on initial load
     if (typeof window !== 'undefined' && user && isStorageLoaded) {
         const localStorageKey = getLocalStorageKey(user.uid);
         try {
@@ -409,47 +402,64 @@ export default function FgtsPage() {
 
     const reader = new FileReader();
     reader.onload = async (e) => {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        
-        const cpfs = json.slice(1).map(row => String((row as any)[0])).filter(cpf => cpf && cpf.length >= 11);
-        
-        const batchId = `batch-${Date.now()}-${user.uid}`;
-        const newBatch: BatchJob = {
-          id: batchId,
-          fileName: file.name,
-          provider: provider,
-          status: 'processing',
-          totalCpfs: cpfs.length,
-          processedCpfs: 0,
-          cpfs: cpfs,
-          createdAt: new Date().toISOString(),
-        };
+        try {
+            const data = new Uint8Array(e.target?.result as ArrayBuffer);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+            
+            const cpfs = [...new Set(json.slice(1).map(row => String((row as any)[0]).trim()).filter(cpf => cpf && /^\d{11}$/.test(cpf)))];
+            
+            if (cpfs.length === 0) {
+                toast({
+                    variant: "destructive",
+                    title: "Nenhum CPF válido encontrado",
+                    description: "Verifique se a primeira coluna do seu arquivo .xlsx contém CPFs válidos.",
+                });
+                setIsProcessingBatch(false);
+                return;
+            }
 
-        setRecentBatches(prev => [newBatch, ...prev]);
+            const batchId = `batch-${Date.now()}-${user.uid}`;
+            const newBatch: BatchJob = {
+              id: batchId,
+              fileName: file.name,
+              provider: provider,
+              status: 'processing',
+              totalCpfs: cpfs.length,
+              processedCpfs: 0,
+              cpfs: cpfs,
+              createdAt: new Date().toISOString(),
+            };
 
-        // Don't await this, let it run in the background
-        processarLoteFgts({ 
-            batchId: newBatch.id,
-            cpfs, 
-            provider, 
-            userId: user.uid, 
-            userEmail: user.email || 'N/A' 
-        });
+            setRecentBatches(prev => [newBatch, ...prev]);
 
-        setIsProcessingBatch(false);
-        toast({
-            title: "Lote enviado para a fila!",
-            description: `${cpfs.length} CPFs serão processados em segundo plano.`,
-        });
+            await processarLoteFgts({ 
+                batchId: newBatch.id,
+                cpfs, 
+                provider, 
+                userId: user.uid, 
+                userEmail: user.email || 'N/A' 
+            });
 
-        // Reset file input
-        setFile(null);
-        if (fileInputRef.current) {
-            fileInputRef.current.value = "";
+            toast({
+                title: "Lote enviado para a fila!",
+                description: `${cpfs.length} CPFs serão processados em segundo plano.`,
+            });
+        } catch (error) {
+            console.error("Error processing batch file:", error);
+            toast({
+                variant: "destructive",
+                title: "Erro ao processar arquivo",
+                description: "Não foi possível ler o arquivo. Verifique se o formato está correto.",
+            });
+        } finally {
+            setIsProcessingBatch(false);
+            setFile(null);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+            }
         }
     };
     reader.readAsArrayBuffer(file);
@@ -709,7 +719,7 @@ export default function FgtsPage() {
                         <Card className="mt-8">
                             <CardHeader>
                                 <CardTitle>Histórico de Lotes Recentes</CardTitle>
-                                <CardDescription>Os resultados ficam disponíveis para download assim que o processamento é concluído.</CardDescription>
+                                <CardDescription>O status é verificado periodicamente. Os resultados ficam disponíveis para download assim que o processamento é concluído.</CardDescription>
                             </CardHeader>
                             <CardContent>
                                 <div className="border rounded-md">
@@ -770,7 +780,5 @@ export default function FgtsPage() {
     </div>
   );
 }
-
-    
 
     
