@@ -3,14 +3,14 @@
 
 import { z } from 'zod';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
-import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import type { ApiCredentials } from './users';
 
 const actionSchema = z.object({
   documentNumber: z.string(),
   provider: z.enum(["cartos", "bms", "qi"]),
-  // O UID do usuário que está fazendo a chamada será pego do token de autenticação
+  // O token agora pode ser passado como argumento opcional
+  token: z.string().optional(),
 });
 
 type ActionResult = {
@@ -19,11 +19,10 @@ type ActionResult = {
   message: string;
 };
 
-// Função de autenticação que agora aceita as credenciais como argumento
-async function getAuthToken(credentials: ApiCredentials): Promise<{token: string | null, error: string | null}> {
+// Função de autenticação foi exportada para ser usada externamente
+export async function getAuthToken(credentials: ApiCredentials): Promise<{token: string | null, error: string | null}> {
   const { v8_username, v8_password, v8_audience, v8_client_id } = credentials;
 
-  // Validação para garantir que as credenciais necessárias foram fornecidas
   if (!v8_username || !v8_password || !v8_audience || !v8_client_id) {
     const missing = [
       !v8_username && "Username",
@@ -73,38 +72,39 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
     return { status: 'error', stepIndex: 0, message: 'Dados de entrada inválidos.' };
   }
   
-  // ETAPA 0: Obter o usuário e suas credenciais
-  let userCredentials: ApiCredentials;
-  try {
-    initializeFirebaseAdmin();
-    const firestore = getFirestore();
-    
-    // Busca as credenciais do usuário admin específico.
-    const userQuery = await firestore.collection('users').where('email', '==', 'admin@lhamascred.com.br').limit(1).get();
-    
-    if (userQuery.empty) {
-        return { status: 'error', stepIndex: 0, message: 'Usuário administrador não encontrado para buscar as credenciais.' };
-    }
-    
-    const userData = userQuery.docs[0].data();
-    userCredentials = {
-      v8_username: userData.v8_username,
-      v8_password: userData.v8_password,
-      v8_audience: userData.v8_audience,
-      v8_client_id: userData.v8_client_id,
-    };
+  let authToken = input.token;
+  
+  // Se nenhum token for passado, faz a autenticação
+  if (!authToken) {
+      let userCredentials: ApiCredentials;
+      try {
+        initializeFirebaseAdmin();
+        const firestore = getFirestore();
+        const userQuery = await firestore.collection('users').where('email', '==', 'admin@lhamascred.com.br').limit(1).get();
+        
+        if (userQuery.empty) {
+            return { status: 'error', stepIndex: 0, message: 'Usuário administrador não encontrado para buscar as credenciais.' };
+        }
+        
+        const userData = userQuery.docs[0].data();
+        userCredentials = {
+          v8_username: userData.v8_username,
+          v8_password: userData.v8_password,
+          v8_audience: userData.v8_audience,
+          v8_client_id: userData.v8_client_id,
+        };
 
-  } catch(error) {
-      const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao buscar credenciais.";
-      console.error("Erro ao buscar credenciais do usuário:", message);
-      return { status: 'error', stepIndex: 0, message: 'Não foi possível carregar as credenciais de API do usuário.' };
-  }
-
-  // Etapa 1: Autenticação com as credenciais do usuário
-  const { token, error: tokenError } = await getAuthToken(userCredentials);
-
-  if (tokenError) {
-    return { status: 'error', stepIndex: 0, message: tokenError };
+      } catch(error) {
+          const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao buscar credenciais.";
+          console.error("Erro ao buscar credenciais do usuário:", message);
+          return { status: 'error', stepIndex: 0, message: 'Não foi possível carregar as credenciais de API do usuário.' };
+      }
+      
+      const { token, error: tokenError } = await getAuthToken(userCredentials);
+      if (tokenError) {
+        return { status: 'error', stepIndex: 0, message: tokenError };
+      }
+      authToken = token;
   }
 
   // Etapa 2: Iniciar a consulta de saldo
@@ -118,7 +118,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        'Authorization': `Bearer ${authToken}`,
         'User-Agent': 'insomnia/11.6.1',
       },
       body: JSON.stringify(requestBody),

@@ -2,10 +2,11 @@
 'use server';
 
 import { z } from 'zod';
-import { consultarSaldoFgts } from './fgts';
+import { consultarSaldoFgts, getAuthToken } from './fgts';
 import * as XLSX from 'xlsx';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
 import { getFirestore } from 'firebase-admin/firestore';
+import type { ApiCredentials } from './users';
 
 const processActionSchema = z.object({
   cpfs: z.array(z.string()),
@@ -33,8 +34,8 @@ type ReportActionResult = {
 };
 
 /**
- * Action to initiate batch processing. It loops through CPFs and starts
- * the balance query for each one. This is fire-and-forget.
+ * Action to initiate batch processing. It authenticates once, then loops 
+ * through CPFs and starts the balance query for each one using the same token.
  */
 export async function processarLoteFgts(input: z.infer<typeof processActionSchema>): Promise<ProcessActionResult> {
   const validation = processActionSchema.safeParse(input);
@@ -47,13 +48,40 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
     };
   }
 
+  // 1. Obter credenciais do Admin
+  let userCredentials: ApiCredentials;
+  try {
+    initializeFirebaseAdmin();
+    const firestore = getFirestore();
+    const userQuery = await firestore.collection('users').where('email', '==', 'admin@lhamascred.com.br').limit(1).get();
+    if (userQuery.empty) {
+        return { status: 'error', count: 0, message: 'Usuário administrador não encontrado para buscar as credenciais.' };
+    }
+    const userData = userQuery.docs[0].data();
+    userCredentials = {
+      v8_username: userData.v8_username,
+      v8_password: userData.v8_password,
+      v8_audience: userData.v8_audience,
+      v8_client_id: userData.v8_client_id,
+    };
+  } catch(error) {
+      const message = error instanceof Error ? error.message : "Erro ao buscar credenciais.";
+      return { status: 'error', count: 0, message: `Não foi possível carregar as credenciais de API: ${message}` };
+  }
+
+  // 2. Autenticar UMA VEZ para todo o lote
+  const { token, error: tokenError } = await getAuthToken(userCredentials);
+  if (tokenError) {
+    return { status: 'error', count: 0, message: `Falha na autenticação do lote: ${tokenError}` };
+  }
+
+  // 3. Processar CPFs com o token reutilizado
   const { cpfs, provider } = validation.data;
   let successCount = 0;
 
-  // We don't await the whole loop, just each call to keep them in sequence
-  // but we don't wait for the webhook response.
   for (const cpf of cpfs) {
-    const result = await consultarSaldoFgts({ documentNumber: cpf, provider });
+    // Passa o token obtido para a função de consulta
+    const result = await consultarSaldoFgts({ documentNumber: cpf, provider, token: token! });
     if (result.status === 'success') {
       successCount++;
     }
@@ -99,14 +127,14 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                 const data = docSnap.data();
                 const responseBody = data?.responseBody;
                 
-                // Case 1: Clear Success
-                const isSuccess = data?.status === 'success' && responseBody && typeof responseBody.balance !== 'undefined' && responseBody.balance !== null;
+                // Case 1: Clear Success (status is success and balance is present)
+                const isSuccess = data?.status === 'success' && responseBody && responseBody.balance !== undefined && responseBody.balance !== null;
 
                 if (isSuccess) {
                     const balanceValue = parseFloat(responseBody.balance);
                     results.push({
                         CPF: cpf,
-                        Saldo: isNaN(balanceValue) ? 'N/A' : balanceValue,
+                        Saldo: isNaN(balanceValue) ? '0.00' : balanceValue, // Use number for currency formatting
                         Mensagem: 'Sucesso',
                     });
                 } 
