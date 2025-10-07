@@ -182,11 +182,9 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
       birthDate: data.birthDate,
       signerName: data.signerName,
       signerEmail: data.signerEmail,
-      signerPhone: {
-        phoneNumber: data.signerPhone.phoneNumber,
-        countryCode: data.signerPhone.countryCode,
-        areaCode: data.signerPhone.areaCode
-      },
+      signerPhoneNumber: data.signerPhone.phoneNumber,
+      signerPhoneCountryCode: data.signerPhone.countryCode,
+      signerPhoneAreaCode: data.signerPhone.areaCode,
       provider: data.provider
     };
 
