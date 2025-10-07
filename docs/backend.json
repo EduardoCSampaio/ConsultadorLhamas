@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "WebhookResponse": {
@@ -73,6 +74,22 @@
           "type": "string",
           "format": "date-time",
           "description": "The timestamp when the user profile was created."
+        },
+        "v8_username": {
+            "type": "string",
+            "description": "Username for the V8 API integration."
+        },
+        "v8_password": {
+            "type": "string",
+            "description": "Password for the V8 API integration (should be stored securely)."
+        },
+        "v8_audience": {
+            "type": "string",
+            "description": "Audience for the V8 API integration."
+        },
+        "v8_client_id": {
+            "type": "string",
+            "description": "Client ID for the V8 API integration."
         }
       },
       "required": [
@@ -82,6 +99,31 @@
         "status",
         "createdAt"
       ]
+    },
+    "ActivityLog": {
+        "title": "Activity Log",
+        "description": "Stores a record of user actions within the application.",
+        "type": "object",
+        "properties": {
+            "userId": {
+                "type": "string",
+                "description": "The UID of the user who performed the action."
+            },
+            "userEmail": {
+                "type": "string",
+                "description": "The email of the user for easy reference."
+            },
+            "action": {
+                "type": "string",
+                "description": "A description of the action performed (e.g., 'Consulta FGTS')."
+            },
+            "createdAt": {
+                "type": "string",
+                "format": "date-time",
+                "description": "The timestamp when the action occurred."
+            }
+        },
+        "required": ["userId", "userEmail", "action", "createdAt"]
     }
   },
   "auth": {
@@ -107,6 +149,12 @@
         "$ref": "#/entities/UserProfile"
       },
       "description": "Stores user profiles. The userId is the same as the Firebase Auth UID."
+    },
+    "/activityLogs/{logId}": {
+        "schema": {
+            "$ref": "#/entities/ActivityLog"
+        },
+        "description": "Stores records of user activities for auditing and dashboard metrics."
     }
   }
 }

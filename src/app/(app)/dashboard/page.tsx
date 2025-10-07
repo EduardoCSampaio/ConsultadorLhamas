@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { PageHeader } from "@/components/page-header";
@@ -6,22 +7,44 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Users, UserCheck, UserPlus, ArrowRight } from "lucide-react";
+import { Users, UserCheck, UserPlus, ArrowRight, Activity, TrendingUp } from "lucide-react";
 import React from "react";
 import { useFirestore, useMemoFirebase, useUser } from "@/firebase";
 import { collection, doc } from "firebase/firestore";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { UserProfile } from "@/app/actions/users";
-import { getUsers } from "@/app/actions/users";
+import { getUsers, getActivityLogs, ActivityLog } from "@/app/actions/users";
 import { useDoc } from "@/firebase/firestore/use-doc";
 
 
-function AdminDashboard({ initialUsers, error }: { initialUsers: UserProfile[] | null, error?: string }) {
+function AdminDashboard({ 
+  initialUsers, 
+  activityLogs, 
+  error 
+}: { 
+  initialUsers: UserProfile[] | null, 
+  activityLogs: ActivityLog[] | null,
+  error?: string 
+}) {
   
   const pendingUsers = initialUsers?.filter(u => u.status === 'pending') || [];
   const activeUsers = initialUsers?.filter(u => u.status === 'active') || [];
   const recentUsers = initialUsers?.slice(0, 5) || [];
+
+  const mostActiveUser = React.useMemo(() => {
+    if (!activityLogs || activityLogs.length === 0) {
+      return { email: 'N/A', count: 0 };
+    }
+    const counts = activityLogs.reduce((acc, log) => {
+      acc[log.userEmail] = (acc[log.userEmail] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return Object.entries(counts).reduce((topUser, [email, count]) => {
+      return count > topUser.count ? { email, count } : topUser;
+    }, { email: 'N/A', count: 0 });
+  }, [activityLogs]);
   
   const getStatusVariant = (status: string) => {
     switch (status) {
@@ -70,7 +93,7 @@ function AdminDashboard({ initialUsers, error }: { initialUsers: UserProfile[] |
             </Link>
         </Button>
       </PageHeader>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Usuários Pendentes</CardTitle>
@@ -93,50 +116,97 @@ function AdminDashboard({ initialUsers, error }: { initialUsers: UserProfile[] |
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Usuários</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Usuário Mais Ativo</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{initialUsers?.length || 0}</div>
-            <p className="text-xs text-muted-foreground">Total de contas registradas</p>
+            <div className="text-2xl font-bold truncate">{mostActiveUser.email}</div>
+            <p className="text-xs text-muted-foreground">{mostActiveUser.count} consultas realizadas</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total de Consultas</CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{activityLogs?.length || 0}</div>
+            <p className="text-xs text-muted-foreground">Consultas FGTS na plataforma</p>
           </CardContent>
         </Card>
       </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>Novos Registros</CardTitle>
-          <CardDescription>Os últimos 5 usuários que se registraram na plataforma.</CardDescription>
-        </CardHeader>
-        <CardContent>
-           <div className="rounded-md border">
-              <Table>
-                  <TableHeader>
-                      <TableRow>
-                          <TableHead>Email</TableHead>
-                          <TableHead className="text-right">Status</TableHead>
-                      </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                      {recentUsers.map((user) => (
-                          <TableRow key={user.uid}>
-                              <TableCell>
-                                  <div className="font-medium">{user.email}</div>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                  <Badge variant={getStatusVariant(user.status)} className="capitalize">{getStatusText(user.status)}</Badge>
-                              </TableCell>
-                          </TableRow>
-                      ))}
-                  </TableBody>
-              </Table>
-            </div>
-             {recentUsers?.length === 0 && (
-              <div className="text-center p-8 text-muted-foreground">
-                Nenhum usuário registrado ainda.
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Novos Registros</CardTitle>
+            <CardDescription>Os últimos 5 usuários que se registraram na plataforma.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Email</TableHead>
+                            <TableHead className="text-right">Status</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {recentUsers.map((user) => (
+                            <TableRow key={user.uid}>
+                                <TableCell>
+                                    <div className="font-medium">{user.email}</div>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                    <Badge variant={getStatusVariant(user.status)} className="capitalize">{getStatusText(user.status)}</Badge>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
               </div>
-            )}
-        </CardContent>
-      </Card>
+              {recentUsers?.length === 0 && (
+                <div className="text-center p-8 text-muted-foreground">
+                  Nenhum usuário registrado ainda.
+                </div>
+              )}
+          </CardContent>
+        </Card>
+         <Card>
+          <CardHeader>
+            <CardTitle>Atividade Recente</CardTitle>
+            <CardDescription>As últimas 5 consultas realizadas na plataforma.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Usuário</TableHead>
+                            <TableHead>Ação</TableHead>
+                            <TableHead className="text-right">Data</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(activityLogs?.slice(0, 5) || []).map((log) => (
+                        <TableRow key={log.id}>
+                          <TableCell className="font-medium truncate">{log.userEmail}</TableCell>
+                          <TableCell>{log.action}</TableCell>
+                          <TableCell className="text-right text-xs text-muted-foreground">
+                            {new Date(log.createdAt).toLocaleString('pt-BR')}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                </Table>
+            </div>
+             {activityLogs?.length === 0 && (
+                <div className="text-center p-8 text-muted-foreground">
+                  Nenhuma atividade registrada ainda.
+                </div>
+              )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -171,15 +241,22 @@ function AdminDashboardLoader() {
                 title={<Skeleton className="h-8 w-64"/>}
                 description={<Skeleton className="h-5 w-80"/>}
             />
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <Card><CardHeader><Skeleton className="h-5 w-32"/></CardHeader><CardContent><Skeleton className="h-8 w-24"/></CardContent></Card>
                 <Card><CardHeader><Skeleton className="h-5 w-32"/></CardHeader><CardContent><Skeleton className="h-8 w-24"/></CardContent></Card>
                 <Card><CardHeader><Skeleton className="h-5 w-32"/></CardHeader><CardContent><Skeleton className="h-8 w-24"/></CardContent></Card>
                 <Card><CardHeader><Skeleton className="h-5 w-32"/></CardHeader><CardContent><Skeleton className="h-8 w-24"/></CardContent></Card>
             </div>
-             <Card>
-                <CardHeader><Skeleton className="h-6 w-48"/></CardHeader>
-                <CardContent><Skeleton className="h-40 w-full"/></CardContent>
-            </Card>
+             <div className="grid gap-6 md:grid-cols-2">
+                 <Card>
+                    <CardHeader><Skeleton className="h-6 w-48"/></CardHeader>
+                    <CardContent><Skeleton className="h-40 w-full"/></CardContent>
+                </Card>
+                 <Card>
+                    <CardHeader><Skeleton className="h-6 w-48"/></CardHeader>
+                    <CardContent><Skeleton className="h-40 w-full"/></CardContent>
+                </Card>
+            </div>
         </div>
     );
 }
@@ -188,7 +265,12 @@ export default function DashboardPage() {
   const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
 
-  const [adminData, setAdminData] = React.useState<{users: UserProfile[] | null, error?: string}>({users: null, error: undefined});
+  const [adminData, setAdminData] = React.useState<{
+    users: UserProfile[] | null, 
+    logs: ActivityLog[] | null,
+    error?: string
+  }>({users: null, logs: null, error: undefined});
+
   const [isAdminLoading, setIsAdminLoading] = React.useState(true);
 
   const userProfileRef = useMemoFirebase(() => {
@@ -202,8 +284,11 @@ export default function DashboardPage() {
     async function fetchAdminData() {
         if (userProfile?.role === 'admin') {
             setIsAdminLoading(true);
-            const { users, error } = await getUsers();
-            setAdminData({ users, error });
+            const [{ users, error: usersError }, { logs, error: logsError }] = await Promise.all([
+                getUsers(),
+                getActivityLogs()
+            ]);
+            setAdminData({ users, logs, error: usersError || logsError });
             setIsAdminLoading(false);
         } else {
             setIsAdminLoading(false);
@@ -223,10 +308,8 @@ export default function DashboardPage() {
     if (isAdminLoading) {
         return <AdminDashboardLoader />;
     }
-    return <AdminDashboard initialUsers={adminData.users} error={adminData.error} />;
+    return <AdminDashboard initialUsers={adminData.users} activityLogs={adminData.logs} error={adminData.error} />;
   }
 
   return <UserDashboardPlaceholder />;
 }
-
-    

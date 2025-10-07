@@ -42,12 +42,59 @@ export type UserProfile = {
     createdAt: string; // Changed to string to be serializable
 } & ApiCredentials;
 
+export type ActivityLog = {
+    id: string;
+    userId: string;
+    userEmail: string;
+    action: string;
+    createdAt: string; // ISO string
+};
+
+// Action to fetch all activity logs
+export async function getActivityLogs(): Promise<{logs: ActivityLog[] | null, error?: string}> {
+    try {
+        initializeFirebaseAdmin();
+        const firestore = getFirestore();
+        const logsSnapshot = await firestore.collection('activityLogs').orderBy('createdAt', 'desc').get();
+        if (logsSnapshot.empty) {
+            return { logs: [] };
+        }
+        
+        const logs = logsSnapshot.docs.map(doc => {
+            const data = doc.data();
+            const createdAt = data.createdAt;
+
+            let serializableCreatedAt = new Date().toISOString(); // Default value
+            if (createdAt instanceof Timestamp) {
+                serializableCreatedAt = createdAt.toDate().toISOString();
+            } else if (typeof createdAt === 'string') {
+                serializableCreatedAt = createdAt;
+            }
+
+            return {
+                id: doc.id,
+                userId: data.userId,
+                userEmail: data.userEmail,
+                action: data.action,
+                createdAt: serializableCreatedAt,
+            } as ActivityLog;
+        });
+
+        return { logs };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao buscar logs de atividade.";
+        console.error("Erro ao buscar logs de atividade:", message);
+        return { logs: null, error: message };
+    }
+}
+
+
 // Nova Server Action para buscar todos os usuários
 export async function getUsers(): Promise<{users: UserProfile[] | null, error?: string}> {
     try {
         initializeFirebaseAdmin();
         const firestore = getFirestore();
-        const usersSnapshot = await firestore.collection('users').orderBy('email').get();
+        const usersSnapshot = await firestore.collection('users').orderBy('createdAt', 'desc').get();
         if (usersSnapshot.empty) {
             return { users: [] };
         }

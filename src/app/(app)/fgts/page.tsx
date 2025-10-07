@@ -23,7 +23,7 @@ import { Loader2, Search, CheckCircle2, XCircle, Circle, User, Briefcase, Landma
 import { useState, useEffect, useRef, ChangeEvent } from "react";
 import { consultarSaldoFgts } from "@/app/actions/fgts";
 import { useDoc } from "@/firebase/firestore/use-doc";
-import { useFirestore, useMemoFirebase } from "@/firebase";
+import { useFirestore, useMemoFirebase, useUser } from "@/firebase";
 import { doc } from "firebase/firestore";
 import { cn } from "@/lib/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -177,7 +177,7 @@ export default function FgtsPage() {
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-
+  const { user } = useUser();
   const firestore = useFirestore();
 
   const [recentBatches, setRecentBatches] = useState<BatchJob[]>(() => {
@@ -256,7 +256,7 @@ export default function FgtsPage() {
   };
 
   const handleProcessBatch = async () => {
-    if (!file) return;
+    if (!file || !user) return;
 
     const provider = loteForm.getValues("provider");
     if (!provider) {
@@ -289,7 +289,7 @@ export default function FgtsPage() {
 
         setRecentBatches(prev => [newBatch, ...prev]);
 
-        const result = await processarLoteFgts({ cpfs, provider });
+        const result = await processarLoteFgts({ cpfs, provider, userId: user.uid, userEmail: user.email || 'N/A' });
         
         setIsProcessingBatch(false);
         if (result.status === 'success') {
@@ -353,6 +353,11 @@ export default function FgtsPage() {
 
 
   async function onManualSubmit(values: z.infer<typeof manualFormSchema>) {
+    if (!user) {
+        toast({ variant: "destructive", title: "Erro", description: "Você precisa estar logado para consultar." });
+        return;
+    }
+    
     setIsLoading(true);
     setCurrentCpf(values.documentNumber);
     setShowStatus(true);
@@ -372,7 +377,11 @@ export default function FgtsPage() {
     };
   
     updateStep(0, 'running');
-    const result = await consultarSaldoFgts(values);
+    const result = await consultarSaldoFgts({
+        ...values,
+        userId: user.uid,
+        userEmail: user.email || 'N/A'
+    });
   
     if (result.status === 'error') {
       updateStep(result.stepIndex, 'error', result.message);
@@ -595,7 +604,7 @@ export default function FgtsPage() {
                             </div>
                           </div>
                            <div className="flex gap-4">
-                                <Button type="button" onClick={handleProcessBatch} disabled={!file || isProcessingBatch}>
+                                <Button type="button" onClick={handleProcessBatch} disabled={!file || isProcessingBatch || !user}>
                                     {isProcessingBatch ? (
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                     ) : (

@@ -3,14 +3,17 @@
 
 import { z } from 'zod';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import type { ApiCredentials } from './users';
 
 const actionSchema = z.object({
   documentNumber: z.string(),
   provider: z.enum(["cartos", "bms", "qi"]),
-  // O token agora pode ser passado como argumento opcional
   token: z.string().optional(),
+  // For logging purposes
+  userId: z.string(), 
+  userEmail: z.string(),
 });
 
 type ActionResult = {
@@ -19,7 +22,6 @@ type ActionResult = {
   message: string;
 };
 
-// Função de autenticação foi exportada para ser usada externamente
 export async function getAuthToken(credentials: ApiCredentials): Promise<{token: string | null, error: string | null}> {
   const { v8_username, v8_password, v8_audience, v8_client_id } = credentials;
 
@@ -72,26 +74,26 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
     return { status: 'error', stepIndex: 0, message: 'Dados de entrada inválidos.' };
   }
   
+  const { documentNumber, provider, userId, userEmail } = validation.data;
   let authToken = input.token;
   
-  // Se nenhum token for passado, faz a autenticação
   if (!authToken) {
       let userCredentials: ApiCredentials;
       try {
         initializeFirebaseAdmin();
         const firestore = getFirestore();
-        const userQuery = await firestore.collection('users').where('email', '==', 'admin@lhamascred.com.br').limit(1).get();
+        const userDoc = await firestore.collection('users').doc(userId).get();
         
-        if (userQuery.empty) {
-            return { status: 'error', stepIndex: 0, message: 'Usuário administrador não encontrado para buscar as credenciais.' };
+        if (!userDoc.exists) {
+            return { status: 'error', stepIndex: 0, message: 'Usuário não encontrado para buscar as credenciais.' };
         }
         
-        const userData = userQuery.docs[0].data();
+        const userData = userDoc.data();
         userCredentials = {
-          v8_username: userData.v8_username,
-          v8_password: userData.v8_password,
-          v8_audience: userData.v8_audience,
-          v8_client_id: userData.v8_client_id,
+          v8_username: userData?.v8_username,
+          v8_password: userData?.v8_password,
+          v8_audience: userData?.v8_audience,
+          v8_client_id: userData?.v8_client_id,
         };
 
       } catch(error) {
@@ -107,8 +109,6 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       authToken = token;
   }
 
-  // Etapa 2: Iniciar a consulta de saldo
-  const { documentNumber, provider } = validation.data;
   const API_URL_CONSULTA = 'https://bff.v8sistema.com/fgts/balance';
   
   const requestBody = { documentNumber, provider };
@@ -135,6 +135,22 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
         }
         const errorMessage = `Erro ao enviar consulta: ${consultaResponse.status} ${consultaResponse.statusText}. Detalhes: ${errorDetails}`;
         return { status: 'error', stepIndex: 1, message: errorMessage };
+    }
+
+    // Log activity on success
+    try {
+        const firestore = getFirestore();
+        await firestore.collection('activityLogs').add({
+            userId: userId,
+            userEmail: userEmail,
+            action: 'Consulta FGTS',
+            documentNumber: documentNumber,
+            provider: provider,
+            createdAt: FieldValue.serverTimestamp(),
+        });
+    } catch (logError) {
+        console.error("Failed to log user activity:", logError);
+        // Do not block the main flow if logging fails
     }
    
     return { 

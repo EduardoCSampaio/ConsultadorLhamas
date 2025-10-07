@@ -11,6 +11,8 @@ import type { ApiCredentials } from './users';
 const processActionSchema = z.object({
   cpfs: z.array(z.string()),
   provider: z.enum(["cartos", "bms", "qi"]),
+  userId: z.string(),
+  userEmail: z.string(),
 });
 
 const reportActionSchema = z.object({
@@ -39,6 +41,7 @@ type ReportActionResult = {
  */
 export async function processarLoteFgts(input: z.infer<typeof processActionSchema>): Promise<ProcessActionResult> {
   const validation = processActionSchema.safeParse(input);
+  const { cpfs, provider, userId, userEmail } = validation.data;
 
   if (!validation.success) {
     return { 
@@ -48,16 +51,16 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
     };
   }
 
-  // 1. Obter credenciais do Admin
+  // 1. Obter credenciais do usuário que solicitou
   let userCredentials: ApiCredentials;
   try {
     initializeFirebaseAdmin();
     const firestore = getFirestore();
-    const userQuery = await firestore.collection('users').where('email', '==', 'admin@lhamascred.com.br').limit(1).get();
-    if (userQuery.empty) {
-        return { status: 'error', count: 0, message: 'Usuário administrador não encontrado para buscar as credenciais.' };
+    const userDoc = await firestore.collection('users').doc(userId).get();
+    if (!userDoc.exists) {
+        return { status: 'error', count: 0, message: 'Usuário não encontrado para buscar as credenciais.' };
     }
-    const userData = userQuery.docs[0].data();
+    const userData = userDoc.data()!;
     userCredentials = {
       v8_username: userData.v8_username,
       v8_password: userData.v8_password,
@@ -76,12 +79,17 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
   }
 
   // 3. Processar CPFs com o token reutilizado
-  const { cpfs, provider } = validation.data;
   let successCount = 0;
 
   for (const cpf of cpfs) {
     // Passa o token obtido para a função de consulta
-    const result = await consultarSaldoFgts({ documentNumber: cpf, provider, token: token! });
+    const result = await consultarSaldoFgts({ 
+        documentNumber: cpf, 
+        provider, 
+        token: token!,
+        userId: userId,
+        userEmail: userEmail,
+    });
     if (result.status === 'success') {
       successCount++;
     }
@@ -127,8 +135,8 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                 const data = docSnap.data();
                 const responseBody = data?.responseBody;
                 
-                // Case 1: Clear Success (status is success and balance is present)
-                const isSuccess = data?.status === 'success' && responseBody && responseBody.balance !== undefined && responseBody.balance !== null;
+                // Case 1: Explicit Success
+                const isSuccess = data?.status === 'success' && responseBody && typeof responseBody.balance !== 'undefined' && responseBody.balance !== null;
 
                 if (isSuccess) {
                     const balanceValue = parseFloat(responseBody.balance);
@@ -138,7 +146,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                         Mensagem: 'Sucesso',
                     });
                 } 
-                // Case 2: Any other state is considered an error or pending.
+                // Case 2: Explicit Error (Catch-all for any other existing document state)
                 else {
                     const errorMessage = responseBody?.errorMessage || responseBody?.error || data?.message || "Erro no processamento do webhook.";
                     results.push({
@@ -148,7 +156,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                     });
                 }
             } else {
-                // Case 3: Document doesn't exist yet.
+                // Case 3: Document doesn't exist yet (webhook response not received)
                 results.push({
                     CPF: cpf,
                     Saldo: 'N/A',
