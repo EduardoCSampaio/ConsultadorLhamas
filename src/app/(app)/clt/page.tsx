@@ -21,13 +21,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CalendarIcon, Loader2, FileSignature, Wand, Banknote, Calendar as CalendarIconComponent, Hash, Percent } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -54,8 +47,8 @@ const consentFormSchema = z.object({
 });
 
 const simulationFormSchema = z.object({
-    config_id: z.string({ required_error: "Selecione uma tabela de juros."}),
-    number_of_installments: z.string({ required_error: "Selecione o número de parcelas."}),
+    config_id: z.string().min(1, "Selecione uma tabela de juros."),
+    number_of_installments: z.string().min(1, "Selecione o número de parcelas."),
     disbursed_amount: z.preprocess(
         (a) => parseFloat(String(a).replace(",", ".")),
         z.number().positive("O valor deve ser positivo.")
@@ -211,6 +204,23 @@ export default function CltPage() {
       }
   }
 
+  const NativeSelect = ({ field, placeholder, options, disabled, error }: any) => (
+    <div className="relative w-full">
+        <select
+            {...field}
+            disabled={disabled}
+            className={cn(
+                "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 appearance-none",
+                error && "border-destructive"
+            )}
+        >
+            <option value="" disabled>{placeholder}</option>
+            {options}
+        </select>
+        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50" />
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -280,54 +290,54 @@ export default function CltPage() {
                     <Form {...simulationForm}>
                         <form onSubmit={simulationForm.handleSubmit(onSimulationSubmit)} className="space-y-8">
                             <div className="grid md:grid-cols-3 gap-8 items-start">
-                                <FormField
-                                    control={simulationForm.control}
-                                    name="config_id"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Tabela de Juros</FormLabel>
-                                            <Select onValueChange={field.onChange} value={field.value} disabled={isSimulating}>
-                                                <FormControl>
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="Selecione uma tabela..." />
-                                                    </SelectTrigger>
-                                                </FormControl>
-                                                <SelectContent>
-                                                    {simulationConfigs?.map(config => (
-                                                        <SelectItem key={config.id} value={config.id}>
-                                                            {config.slug} ({parseFloat(config.monthly_interest_rate).toFixed(2)}% a.m.)
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={simulationForm.control}
-                                    name="number_of_installments"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Número de Parcelas</FormLabel>
-                                            <Select onValueChange={field.onChange} value={field.value} disabled={!selectedConfig || isSimulating}>
-                                                <FormControl>
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder={!selectedConfig ? "Selecione uma tabela primeiro" : "Selecione as parcelas..."} />
-                                                    </SelectTrigger>
-                                                </FormControl>
-                                                <SelectContent>
-                                                    {selectedConfig?.number_of_installments.map(installment => (
-                                                        <SelectItem key={installment} value={String(installment)}>
-                                                            {installment} parcelas
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
+                                <FormItem>
+                                    <FormLabel>Tabela de Juros</FormLabel>
+                                    <div className="relative w-full">
+                                        <select
+                                            {...simulationForm.register("config_id")}
+                                            disabled={isSimulating}
+                                            className={cn(
+                                                "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 appearance-none",
+                                                simulationForm.formState.errors.config_id && "border-destructive"
+                                            )}
+                                            defaultValue=""
+                                        >
+                                            <option value="" disabled>Selecione uma tabela...</option>
+                                            {simulationConfigs?.map(config => (
+                                                <option key={config.id} value={config.id}>
+                                                    {config.slug} ({parseFloat(config.monthly_interest_rate).toFixed(2)}% a.m.)
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" />
+                                    </div>
+                                    <FormMessage>{simulationForm.formState.errors.config_id?.message}</FormMessage>
+                                </FormItem>
+
+                                <FormItem>
+                                    <FormLabel>Número de Parcelas</FormLabel>
+                                    <div className="relative w-full">
+                                        <select
+                                            {...simulationForm.register("number_of_installments")}
+                                            disabled={!selectedConfig || isSimulating}
+                                            className={cn(
+                                                "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 appearance-none",
+                                                simulationForm.formState.errors.number_of_installments && "border-destructive"
+                                            )}
+                                            defaultValue=""
+                                        >
+                                            <option value="" disabled>{!selectedConfig ? "Selecione uma tabela primeiro" : "Selecione as parcelas..."}</option>
+                                            {selectedConfig?.number_of_installments.map(installment => (
+                                                <option key={installment} value={String(installment)}>
+                                                    {installment} parcelas
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 opacity-50 pointer-events-none" />
+                                    </div>
+                                    <FormMessage>{simulationForm.formState.errors.number_of_installments?.message}</FormMessage>
+                                </FormItem>
+
                                  <FormField
                                     control={simulationForm.control}
                                     name="disbursed_amount"
@@ -403,5 +413,7 @@ export default function CltPage() {
     </div>
   );
 }
+
+    
 
     
