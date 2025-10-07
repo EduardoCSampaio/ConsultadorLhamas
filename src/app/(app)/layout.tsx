@@ -26,6 +26,7 @@ import {
   LogOut,
   Search,
   Users,
+  Briefcase,
 } from "lucide-react";
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -41,6 +42,7 @@ import { cn } from '@/lib/utils';
 
 const baseMenuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard", tooltip: "Dashboard" },
+  { href: "/clt", icon: Briefcase, label: "CLT", tooltip: "CLT" },
 ];
 
 const adminMenuItems = [
