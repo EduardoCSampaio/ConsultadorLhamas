@@ -169,6 +169,7 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
     
     const body = {
       ...requestData,
+      document_type: "CPF",
       action: "CONSULT"
     };
 
