@@ -27,6 +27,7 @@ import {
   Search,
   Users,
   Briefcase,
+  ChevronDown,
 } from "lucide-react";
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -37,12 +38,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { doc } from 'firebase/firestore';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, Circle } from "lucide-react";
 import { cn } from '@/lib/utils';
 
 const baseMenuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard", tooltip: "Dashboard" },
-  { href: "/clt", icon: Briefcase, label: "CLT", tooltip: "CLT" },
 ];
 
 const adminMenuItems = [
@@ -149,6 +148,39 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </SidebarMenuButton>
               </SidebarMenuItem>
             ))}
+             <SidebarMenuItem>
+              <Collapsible>
+                <CollapsibleTrigger asChild>
+                  <SidebarMenuButton
+                    className="w-full justify-start"
+                    isActive={pathname.startsWith('/clt')}
+                    tooltip="Crédito CLT"
+                  >
+                    <Briefcase/>
+                    <span>CLT</span>
+                    <ChevronDown className="ml-auto size-4 shrink-0 transition-transform ease-in-out group-data-[state=open]:rotate-180" />
+                  </SidebarMenuButton>
+                </CollapsibleTrigger>
+                <CollapsibleContent asChild>
+                  <SidebarMenuSub>
+                     <SidebarMenuSubItem>
+                      <SidebarMenuSubButton asChild isActive={pathname === '/clt/v8'}>
+                        <Link href="/clt/v8">
+                          <span>V8</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                    <SidebarMenuSubItem>
+                      <SidebarMenuSubButton asChild isActive={pathname === '/clt/facta'}>
+                        <Link href="/clt/facta">
+                          <span>FACTA</span>
+                        </Link>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  </SidebarMenuSub>
+                </CollapsibleContent>
+              </Collapsible>
+            </SidebarMenuItem>
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter className="flex-col !gap-1">
