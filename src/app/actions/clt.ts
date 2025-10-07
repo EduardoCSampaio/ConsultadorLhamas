@@ -342,3 +342,5 @@ export async function criarSimulacaoCLT(input: z.infer<typeof simulationActionSc
 }
 
     
+
+    
