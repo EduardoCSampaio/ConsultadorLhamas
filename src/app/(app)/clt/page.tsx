@@ -102,6 +102,11 @@ export default function CltPage() {
 
   const simulationForm = useForm<SimulationFormValues>({
     resolver: zodResolver(simulationFormSchema),
+    defaultValues: {
+        disbursed_amount: 0,
+        config_id: '',
+        number_of_installments: ''
+    }
   });
 
   useEffect(() => {
@@ -281,7 +286,7 @@ export default function CltPage() {
                                     render={({ field }) => (
                                         <FormItem>
                                             <FormLabel>Tabela de Juros</FormLabel>
-                                            <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSimulating}>
+                                            <Select onValueChange={field.onChange} value={field.value} disabled={isSimulating}>
                                                 <FormControl>
                                                     <SelectTrigger>
                                                         <SelectValue placeholder="Selecione uma tabela..." />
