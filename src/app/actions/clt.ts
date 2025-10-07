@@ -153,7 +153,7 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
         return { success: false, message: 'Dados de entrada inválidos.' };
     }
 
-    const { userId, ...requestData } = validation.data;
+    const { userId, ...data } = validation.data;
 
     const { credentials, error: credError } = await getUserCredentials(userId);
     if (credError || !credentials) {
@@ -167,8 +167,15 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
 
     const API_URL = 'https://bff.v8sistema.com/private-consignment/consult';
     
+    // Correctly construct the body with individual fields
     const body = {
-      ...requestData,
+      borrowerDocumentNumber: data.borrowerDocumentNumber,
+      gender: data.gender,
+      birthDate: data.birthDate,
+      signerName: data.signerName,
+      signerEmail: data.signerEmail,
+      signerPhone: data.signerPhone,
+      provider: data.provider,
       document_type: "CPF",
       action: "CONSULT"
     };
@@ -311,3 +318,5 @@ export async function criarSimulacaoCLT(input: z.infer<typeof simulationActionSc
         return { success: false, message };
     }
 }
+
+    
