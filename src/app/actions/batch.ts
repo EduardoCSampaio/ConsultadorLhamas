@@ -251,19 +251,9 @@ async function processBatchInBackground(batchId: string) {
         console.log(`[Batch ${batchId}] Authenticating with provider: ${mainProvider}`);
 
         if (mainProvider === 'v8') {
-             const v8Creds: ApiCredentials = {
-                v8_username: userCredentials.v8_username,
-                v8_password: userCredentials.v8_password,
-                v8_audience: userCredentials.v8_audience,
-                v8_client_id: userCredentials.v8_client_id,
-             };
-             ({ token: authToken, error: authError } = await getV8AuthToken(v8Creds));
+             ({ token: authToken, error: authError } = await getV8AuthToken(userCredentials));
         } else if (mainProvider === 'facta') {
-            const factaCreds: ApiCredentials = {
-                facta_username: userCredentials.facta_username,
-                facta_password: userCredentials.facta_password
-            };
-            ({ token: authToken, error: authError } = await getFactaAuthToken(factaCreds));
+            ({ token: authToken, error: authError } = await getFactaAuthToken(userCredentials.facta_username, userCredentials.facta_password));
         }
 
         if (authError || !authToken) {

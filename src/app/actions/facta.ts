@@ -112,14 +112,12 @@ async function getFactaUserCredentials(userId: string): Promise<{ credentials: A
 }
 
 
-export async function getFactaAuthToken(credentials: ApiCredentials): Promise<{ token: string | undefined; error: string | null }> {
-  const { facta_username, facta_password } = credentials;
-
-  if (!facta_username || !facta_password) {
-      return { token: undefined, error: "Credenciais da Facta não fornecidas." };
+export async function getFactaAuthToken(username?: string, password?: string): Promise<{ token: string | undefined; error: string | null }> {
+  if (!username || !password) {
+      return { token: undefined, error: "Credenciais da Facta (usuário/senha) não fornecidas." };
   }
 
-  const encodedCreds = Buffer.from(`${facta_username}:${facta_password}`).toString('base64');
+  const encodedCreds = Buffer.from(`${username}:${password}`).toString('base64');
   
   try {
     const response = await fetch(`${FACTA_API_BASE_URL_PROD}/gera-token`, {
@@ -181,7 +179,7 @@ export async function consultarOfertasFacta(input: z.infer<typeof cltConsultaSch
         return { success: false, message: credError || "Credenciais não encontradas." };
     }
 
-    const { token, error: tokenError } = await getFactaAuthToken(credentials);
+    const { token, error: tokenError } = await getFactaAuthToken(credentials.facta_username, credentials.facta_password);
     if (tokenError || !token) {
         return { success: false, message: tokenError || "Não foi possível obter o token da Facta" };
     }
@@ -233,7 +231,7 @@ export async function consultarSaldoFgtsFacta(input: z.infer<typeof fgtsConsulta
             return { success: false, message: credError || "Credenciais não encontradas." };
         }
 
-        const { token: authToken, error: tokenError } = await getFactaAuthToken(credentials);
+        const { token: authToken, error: tokenError } = await getFactaAuthToken(credentials.facta_username, credentials.facta_password);
         if (tokenError || !authToken) {
             return { success: false, message: tokenError || "Não foi possível obter o token da Facta" };
         }
@@ -268,5 +266,3 @@ export async function consultarSaldoFgtsFacta(input: z.infer<typeof fgtsConsulta
         return { success: false, message };
     }
 }
-
-    
