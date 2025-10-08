@@ -427,3 +427,5 @@ export default function DashboardPage() {
   // Fallback or loading state if userProfile is not available for some reason.
   return <AdminDashboardLoader />;
 }
+
+    
