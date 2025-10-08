@@ -7,12 +7,23 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Download, RefreshCw, AlertCircle, Inbox } from 'lucide-react';
-import { getBatches, getBatchStatus, gerarRelatorioLote, type BatchJob } from '@/app/actions/batch';
+import { Loader2, Download, RefreshCw, AlertCircle, Inbox, Trash2 } from 'lucide-react';
+import { getBatches, getBatchStatus, gerarRelatorioLote, deleteBatch, type BatchJob } from '@/app/actions/batch';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 export default function EsteiraPage() {
     const { toast } = useToast();
@@ -63,6 +74,16 @@ export default function EsteiraPage() {
         }
     };
     
+    const handleDeleteBatch = async (batchId: string) => {
+        const { status, message } = await deleteBatch({ batchId });
+        if (status === 'success') {
+            toast({ title: 'Lote excluído!', description: message });
+            fetchBatches();
+        } else {
+            toast({ variant: 'destructive', title: 'Erro ao excluir lote', description: message });
+        }
+    };
+
     const getStatusVariant = (status: BatchJob['status']) => {
         switch (status) {
             case 'completed': return 'default';
@@ -146,6 +167,30 @@ export default function EsteiraPage() {
                                         <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleRefreshStatus(batch.id)}>
                                             <RefreshCw className="h-4 w-4" />
                                         </Button>
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10">
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                                                <AlertDialogDescription>
+                                                    Esta ação não pode ser desfeita. Isso irá excluir permanentemente o lote e seus dados associados.
+                                                </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                <AlertDialogAction
+                                                    className="bg-destructive hover:bg-destructive/90"
+                                                    onClick={() => handleDeleteBatch(batch.id)}
+                                                >
+                                                    Excluir
+                                                </AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
                                     </div>
                                 </div>
                                 <div>

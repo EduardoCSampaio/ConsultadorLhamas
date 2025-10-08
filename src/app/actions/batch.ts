@@ -30,6 +30,10 @@ const getBatchStatusSchema = z.object({
     batchId: z.string(),
 });
 
+const deleteBatchSchema = z.object({
+    batchId: z.string(),
+});
+
 export type BatchJob = {
     id: string;
     fileName: string;
@@ -66,6 +70,24 @@ function toISODate(timestamp: Timestamp | string | Date): string {
     }
     return timestamp.toISOString();
 }
+
+export async function deleteBatch(input: z.infer<typeof deleteBatchSchema>): Promise<{ status: 'success' | 'error'; message: string }> {
+    const validation = deleteBatchSchema.safeParse(input);
+    if (!validation.success) {
+        return { status: 'error', message: 'ID do lote inválido.' };
+    }
+    try {
+        initializeFirebaseAdmin();
+        const firestore = getFirestore();
+        await firestore.collection('batches').doc(validation.data.batchId).delete();
+        return { status: 'success', message: 'Lote excluído com sucesso.' };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro ao excluir o lote.";
+        console.error("deleteBatch error:", message);
+        return { status: 'error', message };
+    }
+}
+
 
 export async function getBatches(): Promise<{ status: 'success' | 'error'; batches?: BatchJob[]; message?: string }> {
     try {
