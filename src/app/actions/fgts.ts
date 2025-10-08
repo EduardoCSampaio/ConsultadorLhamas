@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import type { ApiCredentials } from './users';
+import { getFactaAuthToken, consultarSaldoFgtsFacta } from './facta';
 
 const actionSchema = z.object({
   documentNumber: z.string(),
@@ -15,11 +16,23 @@ const actionSchema = z.object({
   userEmail: z.string(),
 });
 
+const manualActionSchema = z.object({
+  cpf: z.string(),
+  userId: z.string(),
+});
+
+
 type ActionResult = {
   status: 'success' | 'error';
   stepIndex: number;
   message: string;
 };
+
+export type FgtsBalance = {
+    provider: 'qi' | 'cartos' | 'bms' | 'facta';
+    balance: number;
+};
+
 
 export async function getAuthToken(credentials: ApiCredentials): Promise<{token: string | undefined, error: string | null}> {
   const { v8_username, v8_password, v8_audience, v8_client_id } = credentials;
@@ -183,4 +196,90 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
     }, { merge: true });
     return { status: 'error', stepIndex: 1, message };
   }
+}
+
+async function waitForV8Response(cpf: string, timeout = 7000): Promise<number | null> {
+    initializeFirebaseAdmin();
+    const firestore = getFirestore();
+    const docRef = firestore.collection('webhookResponses').doc(cpf);
+
+    return new Promise((resolve) => {
+        const unsubscribe = docRef.onSnapshot((doc) => {
+            if (doc.exists) {
+                const data = doc.data();
+                if (data?.status === 'success' && data.responseBody?.balance > 0) {
+                    unsubscribe();
+                    resolve(data.responseBody.balance);
+                } else if (data?.status === 'error') {
+                    unsubscribe();
+                    resolve(null);
+                }
+            }
+        });
+        
+        setTimeout(() => {
+            unsubscribe();
+            resolve(null);
+        }, timeout);
+    });
+}
+
+export async function consultarSaldoManual(input: z.infer<typeof manualActionSchema>): Promise<{balances: FgtsBalance[], error?: string}> {
+    const validation = manualActionSchema.safeParse(input);
+    if (!validation.success) {
+        return { balances: [], error: 'CPF ou usuário inválido.' };
+    }
+
+    const { cpf, userId } = validation.data;
+
+    initializeFirebaseAdmin();
+    const firestore = getFirestore();
+    const userDoc = await firestore.collection('users').doc(userId).get();
+    if (!userDoc.exists) {
+        return { balances: [], error: 'Usuário não encontrado.' };
+    }
+    const user = userDoc.data() as ApiCredentials;
+    const userEmail = userDoc.data()?.email || 'unknown';
+
+    const finalBalances: FgtsBalance[] = [];
+    const v8Providers: Array<'qi' | 'cartos' | 'bms'> = ['qi', 'cartos', 'bms'];
+    const promises: Promise<any>[] = [];
+
+    // --- Facta Call (Synchronous) ---
+    const factaPromise = new Promise(async (resolve) => {
+         const { token, error: tokenError } = await getFactaAuthToken(user.facta_username, user.facta_password);
+         if (tokenError || !token) {
+             console.error("[Manual FGTS] Facta auth error:", tokenError);
+             resolve(null); // Don't add to balances
+             return;
+         }
+         const factaResult = await consultarSaldoFgtsFacta({cpf, userId, token });
+         if (factaResult.success && factaResult.data && parseFloat(factaResult.data.saldo_total) > 0) {
+             finalBalances.push({ provider: 'facta', balance: parseFloat(factaResult.data.saldo_total)});
+         }
+         resolve(null);
+    });
+    promises.push(factaPromise);
+
+    // --- V8 Calls (Simulated Synchronous) ---
+    const { token: v8Token, error: v8TokenError } = await getAuthToken(user);
+    if (v8Token) {
+        for (const provider of v8Providers) {
+            const v8Promise = new Promise(async (resolve) => {
+                await consultarSaldoFgts({ documentNumber: cpf, userId, userEmail, provider, token: v8Token });
+                const balance = await waitForV8Response(cpf); // Wait for webhook
+                if (balance !== null && balance > 0) {
+                    finalBalances.push({ provider, balance });
+                }
+                resolve(null);
+            });
+            promises.push(v8Promise);
+        }
+    } else {
+        console.error("[Manual FGTS] V8 auth error:", v8TokenError);
+    }
+    
+    await Promise.all(promises);
+
+    return { balances: finalBalances };
 }

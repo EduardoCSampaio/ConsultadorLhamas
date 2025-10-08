@@ -161,6 +161,22 @@
         },
         "required": ["id", "userId", "provider", "status", "totalCpfs", "processedCpfs", "createdAt"]
     },
+     "FGTSBalance": {
+        "title": "FGTS Balance",
+        "description": "Represents the result of an FGTS balance check from a single provider.",
+        "type": "object",
+        "properties": {
+            "provider": {
+                "type": "string",
+                "description": "The name of the provider (e.g., 'qi', 'cartos', 'bms', 'facta')."
+            },
+            "balance": {
+                "type": "number",
+                "description": "The available FGTS balance."
+            }
+        },
+        "required": ["provider", "balance"]
+    },
     "CLTConsent": {
         "title": "CLT Consent",
         "description": "Represents the consent term data for a CLT credit consultation.",

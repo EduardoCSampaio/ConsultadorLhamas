@@ -29,6 +29,8 @@ import {
   ChevronDown,
   Search,
   Workflow,
+  FileText,
+  User,
 } from "lucide-react";
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -43,7 +45,7 @@ import { cn } from '@/lib/utils';
 
 const allBaseMenuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard", tooltip: "Dashboard", adminOnly: false },
-  { href: "/fgts", icon: Search, label: "Consulta FGTS", tooltip: "Consulta FGTS", adminOnly: true },
+  // FGTS is now a collapsible menu
   { href: "/esteira", icon: Workflow, label: "Esteira", tooltip: "Acompanhamento de Lotes", adminOnly: true },
 ];
 
@@ -132,6 +134,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       ...(userProfile?.role === 'admin' ? adminBottomMenuItems : []),
       ...bottomMenuItems,
   ];
+  
+  const isAdmin = userProfile?.role === 'admin';
+
 
   return (
     <SidebarProvider>
@@ -155,6 +160,45 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </SidebarMenuButton>
               </SidebarMenuItem>
             ))}
+
+            {isAdmin && (
+               <SidebarMenuItem>
+                <Collapsible>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                      className="w-full justify-start"
+                      isActive={pathname.startsWith('/fgts')}
+                      tooltip="Consulta FGTS"
+                    >
+                      <Search/>
+                      <span>FGTS</span>
+                      <ChevronDown className="ml-auto size-4 shrink-0 transition-transform ease-in-out group-data-[state=open]:rotate-180" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent asChild>
+                    <SidebarMenuSub>
+                       <SidebarMenuItem>
+                        <SidebarMenuSubButton asChild isActive={pathname === '/fgts/manual'}>
+                          <Link href="/fgts/manual">
+                            <User className="mr-2"/>
+                            <span>Manual</span>
+                          </Link>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuItem>
+                      <SidebarMenuItem>
+                        <SidebarMenuSubButton asChild isActive={pathname === '/fgts'}>
+                          <Link href="/fgts">
+                            <FileText className="mr-2"/>
+                            <span>Em Lote</span>
+                          </Link>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuItem>
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </Collapsible>
+              </SidebarMenuItem>
+            )}
+
              <SidebarMenuItem>
               <Collapsible>
                 <CollapsibleTrigger asChild>
