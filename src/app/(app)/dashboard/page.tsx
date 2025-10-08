@@ -121,7 +121,7 @@ function AdminDashboard({
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold truncate">{mostActiveUser.email}</div>
+            <div className="text-2xl font-bold truncate" title={mostActiveUser.email}>{mostActiveUser.email}</div>
             <p className="text-xs text-muted-foreground">{mostActiveUser.count} consultas realizadas</p>
           </CardContent>
         </Card>
@@ -136,7 +136,7 @@ function AdminDashboard({
           </CardContent>
         </Card>
       </div>
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Novos Registros</CardTitle>
@@ -148,7 +148,7 @@ function AdminDashboard({
                     <TableHeader>
                         <TableRow>
                             <TableHead>Email</TableHead>
-                            <TableHead className="text-right">Status</TableHead>
+                            <TableHead className="text-right w-[100px]">Status</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -182,7 +182,7 @@ function AdminDashboard({
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead>Usuário</TableHead>
+                            <TableHead className="w-[40%]">Usuário</TableHead>
                             <TableHead>Ação</TableHead>
                             <TableHead className="text-right">Data</TableHead>
                         </TableRow>
@@ -192,7 +192,7 @@ function AdminDashboard({
                         <TableRow key={log.id}>
                           <TableCell className="font-medium truncate">{log.userEmail}</TableCell>
                           <TableCell>{log.action}</TableCell>
-                          <TableCell className="text-right text-xs text-muted-foreground">
+                          <TableCell className="text-right text-xs text-muted-foreground whitespace-nowrap">
                             {new Date(log.createdAt).toLocaleString('pt-BR')}
                           </TableCell>
                         </TableRow>
@@ -241,20 +241,22 @@ function AdminDashboardLoader() {
             <PageHeader
                 title={<Skeleton className="h-8 w-64"/>}
                 description={<Skeleton className="h-5 w-80"/>}
-            />
+            >
+                <Skeleton className="h-10 w-44" />
+            </PageHeader>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <Card><CardHeader><Skeleton className="h-5 w-32"/></CardHeader><CardContent><Skeleton className="h-8 w-24"/></CardContent></Card>
-                <Card><CardHeader><Skeleton className="h-5 w-32"/></CardHeader><CardContent><Skeleton className="h-8 w-24"/></CardContent></Card>
-                <Card><CardHeader><Skeleton className="h-5 w-32"/></CardHeader><CardContent><Skeleton className="h-8 w-24"/></CardContent></Card>
-                <Card><CardHeader><Skeleton className="h-5 w-32"/></CardHeader><CardContent><Skeleton className="h-8 w-24"/></CardContent></Card>
+                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><Skeleton className="h-5 w-32"/></CardHeader><CardContent><Skeleton className="h-8 w-10"/></CardContent></Card>
+                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><Skeleton className="h-5 w-32"/></CardHeader><CardContent><Skeleton className="h-8 w-10"/></CardContent></Card>
+                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><Skeleton className="h-5 w-40"/></CardHeader><CardContent><Skeleton className="h-8 w-48"/></CardContent></Card>
+                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><Skeleton className="h-5 w-32"/></CardHeader><CardContent><Skeleton className="h-8 w-10"/></CardContent></Card>
             </div>
-             <div className="grid gap-6 md:grid-cols-2">
+             <div className="grid gap-6 lg:grid-cols-2">
                  <Card>
-                    <CardHeader><Skeleton className="h-6 w-48"/></CardHeader>
+                    <CardHeader><CardTitle><Skeleton className="h-6 w-48"/></CardTitle><CardDescription><Skeleton className="h-4 w-72"/></CardDescription></CardHeader>
                     <CardContent><Skeleton className="h-40 w-full"/></CardContent>
                 </Card>
                  <Card>
-                    <CardHeader><Skeleton className="h-6 w-48"/></CardHeader>
+                    <CardHeader><CardTitle><Skeleton className="h-6 w-48"/></CardTitle><CardDescription><Skeleton className="h-4 w-72"/></CardDescription></CardHeader>
                     <CardContent><Skeleton className="h-40 w-full"/></CardContent>
                 </Card>
             </div>
@@ -272,7 +274,7 @@ export default function DashboardPage() {
     error?: string
   }>({users: null, logs: null, error: undefined});
 
-  const [isAdminLoading, setIsAdminLoading] = React.useState(true);
+  const [isAdminDataLoading, setIsAdminDataLoading] = React.useState(true);
 
   const userProfileRef = useMemoFirebase(() => {
     if (!firestore || !user) return null;
@@ -283,22 +285,31 @@ export default function DashboardPage() {
 
   React.useEffect(() => {
     async function fetchAdminData() {
-        if (userProfile?.role === 'admin') {
-            setIsAdminLoading(true);
-            const [{ users, error: usersError }, { logs, error: logsError }] = await Promise.all([
-                getUsers(),
-                getActivityLogs()
-            ]);
-            setAdminData({ users, logs, error: usersError || logsError });
-            setIsAdminLoading(false);
-        } else {
-            setIsAdminLoading(false);
+        if (userProfile?.role === 'admin' && !isProfileLoading) {
+            setIsAdminDataLoading(true);
+            try {
+                const [{ users, error: usersError }, { logs, error: logsError }] = await Promise.all([
+                    getUsers(),
+                    getActivityLogs()
+                ]);
+
+                if (usersError || logsError) {
+                   setAdminData({ users: null, logs: null, error: usersError || logsError });
+                } else {
+                   setAdminData({ users, logs });
+                }
+            } catch (e) {
+                const message = e instanceof Error ? e.message : "Erro ao carregar dados do dashboard."
+                setAdminData({ users: null, logs: null, error: message });
+            } finally {
+                setIsAdminDataLoading(false);
+            }
+        } else if (!isProfileLoading) {
+            setIsAdminDataLoading(false);
         }
     }
-
-    if (!isProfileLoading) {
-      fetchAdminData();
-    }
+    
+    fetchAdminData();
   }, [userProfile, isProfileLoading]);
   
   if (isUserLoading || isProfileLoading) {
@@ -306,7 +317,7 @@ export default function DashboardPage() {
   }
 
   if (userProfile?.role === 'admin') {
-    if (isAdminLoading) {
+    if (isAdminDataLoading) {
         return <AdminDashboardLoader />;
     }
     return <AdminDashboard initialUsers={adminData.users} activityLogs={adminData.logs} error={adminData.error} />;
