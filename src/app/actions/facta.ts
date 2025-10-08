@@ -54,7 +54,6 @@ export type ConsultaFactaResult = {
   data?: FactaOffer[];
 };
 
-// const FACTA_API_BASE_URL_HOMOL = 'https://webservice-homol.facta.com.br';
 const FACTA_API_BASE_URL_PROD = 'https://webservice.facta.com.br';
 
 async function getFactaUserCredentials(userId: string): Promise<{ credentials: ApiCredentials | null; error: string | null }> {

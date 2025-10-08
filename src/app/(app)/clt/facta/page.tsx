@@ -68,7 +68,7 @@ export default function FactaPage() {
         if(response.data && response.data.length > 0) {
             setResult(response.data);
         } else {
-            setNoOffersMessage(response.message);
+            setNoOffersMessage(response.message || "Nenhuma oferta encontrada para o CPF informado.");
         }
     } else {
       setError(response.message);
