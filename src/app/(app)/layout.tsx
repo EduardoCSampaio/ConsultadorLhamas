@@ -28,6 +28,7 @@ import {
   Briefcase,
   ChevronDown,
   Search,
+  Workflow,
 } from "lucide-react";
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -43,6 +44,7 @@ import { cn } from '@/lib/utils';
 const allBaseMenuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard", tooltip: "Dashboard", adminOnly: false },
   { href: "/fgts", icon: Search, label: "Consulta FGTS", tooltip: "Consulta FGTS", adminOnly: true },
+  { href: "/esteira", icon: Workflow, label: "Esteira", tooltip: "Acompanhamento de Lotes", adminOnly: true },
 ];
 
 const adminBottomMenuItems = [

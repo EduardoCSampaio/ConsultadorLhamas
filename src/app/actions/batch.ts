@@ -6,7 +6,7 @@ import { consultarSaldoFgts as consultarSaldoV8, getAuthToken as getV8AuthToken 
 import { consultarSaldoFgtsFacta, getFactaAuthToken } from './facta';
 import * as XLSX from 'xlsx';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import type { ApiCredentials } from './users';
 
 type Provider = "v8" | "facta";
@@ -38,7 +38,7 @@ export type BatchJob = {
     totalCpfs: number;
     processedCpfs: number;
     cpfs: string[];
-    createdAt: string;
+    createdAt: string; // ISO String
     message?: string;
 };
 
@@ -56,6 +56,51 @@ type ReportActionResult = {
   message?: string;
 };
 
+
+function toISODate(timestamp: Timestamp | string | Date): string {
+    if (timestamp instanceof Timestamp) {
+        return timestamp.toDate().toISOString();
+    }
+    if (typeof timestamp === 'string') {
+        return timestamp;
+    }
+    return timestamp.toISOString();
+}
+
+export async function getBatches(): Promise<{ status: 'success' | 'error'; batches?: BatchJob[]; message?: string }> {
+    try {
+        initializeFirebaseAdmin();
+        const firestore = getFirestore();
+        const batchesSnapshot = await firestore.collection('batches').orderBy('createdAt', 'desc').get();
+
+        if (batchesSnapshot.empty) {
+            return { status: 'success', batches: [] };
+        }
+
+        const batches = batchesSnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                fileName: data.fileName,
+                provider: data.provider,
+                status: data.status,
+                totalCpfs: data.totalCpfs,
+                processedCpfs: data.processedCpfs,
+                cpfs: data.cpfs,
+                createdAt: toISODate(data.createdAt),
+                message: data.message,
+            } as BatchJob;
+        });
+
+        return { status: 'success', batches };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro ao buscar lotes.";
+        console.error("getBatches error:", message);
+        return { status: 'error', message };
+    }
+}
+
+
 export async function getBatchStatus(input: z.infer<typeof getBatchStatusSchema>): Promise<{ status: 'success' | 'error'; batch?: BatchJob; message?: string }> {
     const validation = getBatchStatusSchema.safeParse(input);
     if (!validation.success) {
@@ -72,14 +117,7 @@ export async function getBatchStatus(input: z.infer<typeof getBatchStatusSchema>
         }
         
         const data = batchDoc.data()!;
-        const createdAt = data.createdAt;
-        let serializableCreatedAt = new Date().toISOString();
-        if (createdAt && typeof createdAt.toDate === 'function') {
-            serializableCreatedAt = createdAt.toDate().toISOString();
-        } else if (typeof createdAt === 'string') {
-            serializableCreatedAt = createdAt;
-        }
-
+        
         const batch: BatchJob = {
             id: batchDoc.id,
             fileName: data.fileName,
@@ -88,7 +126,7 @@ export async function getBatchStatus(input: z.infer<typeof getBatchStatusSchema>
             totalCpfs: data.totalCpfs,
             processedCpfs: data.processedCpfs,
             cpfs: data.cpfs,
-            createdAt: serializableCreatedAt,
+            createdAt: toISODate(data.createdAt),
             message: data.message,
         };
 
@@ -138,6 +176,7 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
     return { status: 'error', message };
   }
 
+  // Do not await this, let it run in the background
   processBatchInBackground(batchId);
   
   const serializableBatch: BatchJob = {
@@ -359,5 +398,3 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         message: 'Relatório gerado com sucesso.',
     };
 }
-
-    

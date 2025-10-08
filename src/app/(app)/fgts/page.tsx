@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -10,12 +10,10 @@ import { useDropzone } from 'react-dropzone';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { UploadCloud, File, Loader2, Download, RefreshCw, AlertCircle } from 'lucide-react';
-import { processarLoteFgts, gerarRelatorioLote, getBatchStatus, type BatchJob } from '@/app/actions/batch';
+import { UploadCloud, File, Loader2, ArrowRight } from 'lucide-react';
+import { processarLoteFgts } from '@/app/actions/batch';
 import { useUser } from '@/firebase';
-import { Progress } from '@/components/ui/progress';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import Link from 'next/link';
 
 
 type Provider = 'v8' | 'facta';
@@ -27,19 +25,7 @@ export default function FgtsBatchPage() {
     const [cpfs, setCpfs] = useState<string[]>([]);
     const [selectedProviders, setSelectedProviders] = useState<Provider[]>(['v8', 'facta']);
     const [isProcessing, setIsProcessing] = useState(false);
-    const [activeBatches, setActiveBatches] = useState<BatchJob[]>([]);
-
-    useEffect(() => {
-        const storedBatches = localStorage.getItem('activeFgtsBatches');
-        if (storedBatches) {
-            setActiveBatches(JSON.parse(storedBatches));
-        }
-    }, []);
-
-    useEffect(() => {
-        localStorage.setItem('activeFgtsBatches', JSON.stringify(activeBatches));
-    }, [activeBatches]);
-
+    
     const onDrop = useCallback((acceptedFiles: File[]) => {
         if (acceptedFiles.length > 0) {
             const uploadedFile = acceptedFiles[0];
@@ -96,7 +82,6 @@ export default function FgtsBatchPage() {
         }
 
         setIsProcessing(true);
-        const newBatches: BatchJob[] = [];
         for (const provider of selectedProviders) {
             const result = await processarLoteFgts({
                 cpfs,
@@ -107,10 +92,9 @@ export default function FgtsBatchPage() {
             });
 
             if (result.status === 'success' && result.batch) {
-                newBatches.push(result.batch);
                 toast({
                     title: `Lote para ${provider.toUpperCase()} iniciado`,
-                    description: `${cpfs.length} CPFs foram enviados para processamento.`,
+                    description: `${cpfs.length} CPFs foram enviados para a esteira.`,
                 });
             } else {
                 toast({
@@ -120,45 +104,20 @@ export default function FgtsBatchPage() {
                 });
             }
         }
-        setActiveBatches(prev => [...newBatches, ...prev]);
         setFile(null);
         setCpfs([]);
         setIsProcessing(false);
-    };
-
-    const handleRefreshStatus = useCallback(async (batchId: string) => {
-        const { status, batch, message } = await getBatchStatus({ batchId });
-        if (status === 'success' && batch) {
-            setActiveBatches(prev => prev.map(b => b.id === batchId ? batch : b));
-        } else {
-            toast({ variant: 'destructive', title: 'Erro ao atualizar status', description: message });
-        }
-    }, [toast]);
-    
-    const handleDownloadReport = async (batch: BatchJob) => {
-        toast({ title: "Gerando relatório...", description: "Aguarde enquanto preparamos seu arquivo." });
-        const result = await gerarRelatorioLote({ cpfs: batch.cpfs, fileName: batch.fileName, createdAt: batch.createdAt, provider: batch.provider });
-        
-        if (result.status === 'success') {
-            const link = document.createElement("a");
-            link.href = result.fileContent;
-            link.download = result.fileName;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            toast({ title: "Download iniciado!", description: `O arquivo ${result.fileName} está sendo baixado.` });
-        } else {
-            toast({ variant: "destructive", title: "Erro ao gerar relatório", description: result.message });
-        }
-    };
-    
-    const getStatusVariant = (status: BatchJob['status']) => {
-        switch (status) {
-            case 'completed': return 'default';
-            case 'processing': return 'secondary';
-            case 'error': return 'destructive';
-            default: return 'outline';
-        }
+         toast({
+            title: "Lotes enviados!",
+            description: (
+                <Button variant="outline" size="sm" asChild>
+                    <Link href="/esteira">
+                        Acompanhar na Esteira
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                    </Link>
+                </Button>
+            )
+        });
     };
 
     return (
@@ -212,55 +171,6 @@ export default function FgtsBatchPage() {
                 {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <File className="mr-2 h-4 w-4" />}
                 Processar Lote
             </Button>
-
-            {activeBatches.length > 0 && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Lotes de Processamento</CardTitle>
-                        <CardDescription>Acompanhe o andamento e baixe os relatórios dos lotes enviados.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        {activeBatches.map(batch => (
-                            <div key={batch.id} className="p-4 border rounded-lg space-y-3">
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <h3 className="font-semibold">{batch.fileName} ({batch.provider.toUpperCase()})</h3>
-                                        <p className="text-sm text-muted-foreground">
-                                            Enviado em: {new Date(batch.createdAt).toLocaleString('pt-BR')}
-                                        </p>
-                                    </div>
-                                    <div className='flex items-center gap-2'>
-                                        <Badge variant={getStatusVariant(batch.status)} className="capitalize">{batch.status}</Badge>
-                                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleRefreshStatus(batch.id)}>
-                                            <RefreshCw className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                </div>
-                                <div>
-                                    <div className="flex justify-between text-sm text-muted-foreground mb-1">
-                                        <span>Progresso</span>
-                                        <span>{batch.processedCpfs} / {batch.totalCpfs}</span>
-                                    </div>
-                                    <Progress value={(batch.processedCpfs / batch.totalCpfs) * 100} />
-                                </div>
-                                {batch.status === 'error' && (
-                                     <Alert variant="destructive" className="mt-2">
-                                        <AlertCircle className="h-4 w-4" />
-                                        <AlertTitle>Erro no Lote</AlertTitle>
-                                        <AlertDescription>{batch.message || "Ocorreu um erro desconhecido durante o processamento."}</AlertDescription>
-                                     </Alert>
-                                )}
-                                {batch.status === 'completed' && (
-                                    <Button onClick={() => handleDownloadReport(batch)} size="sm">
-                                        <Download className="mr-2 h-4 w-4" />
-                                        Baixar Relatório
-                                    </Button>
-                                )}
-                            </div>
-                        ))}
-                    </CardContent>
-                </Card>
-            )}
         </div>
     );
 }
