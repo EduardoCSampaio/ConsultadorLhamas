@@ -46,7 +46,7 @@ const baseMenuItems = [
 
 ];
 
-const adminMenuItems = [
+const adminBottomMenuItems = [
     { href: "/admin/users", icon: Users, label: "Gerenciar Usuários", tooltip: "Gerenciar Usuários" },
 ];
 
@@ -123,9 +123,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const menuItems = [
-      ...baseMenuItems,
-      ...(userProfile?.role === 'admin' ? adminMenuItems : []),
+  const allBottomMenuItems = [
+      ...(userProfile?.role === 'admin' ? adminBottomMenuItems : []),
+      ...bottomMenuItems,
   ];
 
   return (
@@ -136,7 +136,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </SidebarHeader>
         <SidebarContent>
           <SidebarMenu>
-            {menuItems.map((item) => (
+            {baseMenuItems.map((item) => (
               <SidebarMenuItem key={item.href}>
                 <SidebarMenuButton
                   asChild
@@ -187,7 +187,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </SidebarContent>
         <SidebarFooter className="flex-col !gap-1">
             <SidebarMenu>
-                 {bottomMenuItems.map((item) => (
+                 {allBottomMenuItems.map((item) => (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
                       asChild
