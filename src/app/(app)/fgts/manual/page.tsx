@@ -42,6 +42,8 @@ const formatCurrency = (value: string | number | undefined | null) => {
     }).format(numberValue);
 };
 
+const v8Providers: V8Provider[] = ['qi', 'cartos', 'bms'];
+
 export default function FgtsManualPage() {
   const { user } = useUser();
   const [isLoading, setIsLoading] = useState(false);
@@ -200,21 +202,31 @@ export default function FgtsManualPage() {
         </Card>
       )}
 
-      {!isLoading && results && results.length > 0 && (
+    {!isLoading && results && results.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {results.map((result) => (
-                <Card key={result.provider} className="p-4 flex flex-col justify-between">
-                    <div className="mb-4">
-                        <p className="text-xl font-bold uppercase">{result.provider}</p>
-                    </div>
-                    <div>
-                        <p className="text-sm text-muted-foreground">Saldo Disponível</p>
-                        <p className="text-2xl font-bold font-headline">{formatCurrency(result.balance)}</p>
-                    </div>
-                </Card>
-            ))}
+            {results.map((result) => {
+                const isV8 = v8Providers.includes(result.provider as V8Provider);
+                return (
+                    <Card key={result.provider} className="p-4 flex flex-col justify-between">
+                        <div className="mb-4">
+                            {isV8 ? (
+                                <>
+                                    <p className="text-xl font-bold uppercase">V8</p>
+                                    <p className="text-sm uppercase text-muted-foreground">{result.provider}</p>
+                                </>
+                            ) : (
+                                <p className="text-xl font-bold uppercase">{result.provider}</p>
+                            )}
+                        </div>
+                        <div>
+                            <p className="text-sm text-muted-foreground">Saldo Disponível</p>
+                            <p className="text-2xl font-bold font-headline">{formatCurrency(result.balance)}</p>
+                        </div>
+                    </Card>
+                )
+            })}
         </div>
-      )}
+    )}
 
     </div>
   );
