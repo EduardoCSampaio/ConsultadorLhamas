@@ -164,7 +164,7 @@ async function processFactaBatchInBackground(batchId: string) {
                     responseBody: result.data || { error: result.message },
                     createdAt: FieldValue.serverTimestamp(),
                     status: result.success ? 'success' : 'error',
-                    message: result.message,
+                    message: result.message || (result.success ? 'Sucesso' : 'Erro desconhecido'),
                     id: `facta-${cpf}`,
                     provider: 'facta',
                 };

@@ -207,7 +207,7 @@ export async function consultarOfertasFacta(input: z.infer<typeof cltConsultaSch
             return { success: true, message: 'Nenhuma oferta encontrada para o CPF informado.', data: [] };
         }
 
-        return { success: true, message: data.mensagem, data: data.dados };
+        return { success: true, message: data.mensagem || 'Ofertas encontradas com sucesso.', data: data.dados };
 
     } catch (error) {
         const message = error instanceof Error ? error.message : "Erro de comunicação ao consultar ofertas da Facta.";
@@ -258,7 +258,7 @@ export async function consultarSaldoFgtsFacta(input: z.infer<typeof fgtsConsulta
             return { success: false, message: data.msg || 'Erro ao consultar saldo FGTS na Facta.' };
         }
         
-        return { success: true, message: data.msg, data: data.retorno };
+        return { success: true, message: data.msg || 'Saldo FGTS consultado com sucesso.', data: data.retorno };
 
     } catch (error) {
         const message = error instanceof Error ? error.message : "Erro de comunicação ao consultar saldo FGTS da Facta.";
