@@ -145,7 +145,7 @@ export async function consultarOfertasFacta(input: z.infer<typeof consultaSchema
 
     // 3. Consult Offers
     try {
-        const url = new URL(`${FACTA_API_-BASE_URL_HOMOL}/consignado-trabalhador/consulta-ofertas`);
+        const url = new URL(`${FACTA_API_BASE_URL_HOMOL}/consignado-trabalhador/consulta-ofertas`);
         url.searchParams.append('cpf', cpf);
 
         const response = await fetch(url.toString(), {
