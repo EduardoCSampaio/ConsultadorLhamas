@@ -9,6 +9,7 @@ import type { ApiCredentials } from './users';
 const actionSchema = z.object({
   documentNumber: z.string(),
   token: z.string().optional(),
+  provider: z.enum(['qi', 'bms']),
   // For logging purposes
   userId: z.string(), 
   userEmail: z.string(),
@@ -72,7 +73,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
     return { status: 'error', stepIndex: 0, message: 'Dados de entrada inválidos.' };
   }
   
-  const { documentNumber, userId, userEmail } = validation.data;
+  const { documentNumber, userId, userEmail, provider } = validation.data;
   let authToken = validation.data.token;
   
   // This function is only for V8, so we get V8 creds.
@@ -110,7 +111,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
 
   const API_URL_CONSULTA = 'https://bff.v8sistema.com/fgts/balance';
   
-  const requestBody = { documentNumber, provider: "qi" };
+  const requestBody = { documentNumber, provider };
 
   try {
     try {
@@ -118,9 +119,9 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
         await firestore.collection('activityLogs').add({
             userId: userId,
             userEmail: userEmail,
-            action: `Consulta FGTS - V8`,
+            action: `Consulta FGTS - V8 (${provider})`,
             documentNumber: documentNumber,
-            provider: 'v8', // Log provider as 'v8'
+            provider: `v8-${provider}`,
             createdAt: FieldValue.serverTimestamp(),
         });
     } catch (logError) {
@@ -155,7 +156,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
             status: 'error',
             message: errorMessage,
             id: documentNumber.toString(),
-            provider: 'v8',
+            provider: `v8-${provider}`,
         }, { merge: true });
         return { status: 'error', stepIndex: 1, message: errorMessage };
     }
@@ -178,7 +179,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
         status: 'error',
         message: message,
         id: documentNumber.toString(),
-        provider: 'v8',
+        provider: `v8-${provider}`,
     }, { merge: true });
     return { status: 'error', stepIndex: 1, message };
   }

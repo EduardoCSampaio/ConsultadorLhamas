@@ -10,6 +10,7 @@ import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import type { ApiCredentials } from './users';
 
 type Provider = "v8" | "facta";
+type V8Provider = 'qi' | 'bms';
 
 const processActionSchema = z.object({
   cpfs: z.array(z.string()),
@@ -17,13 +18,14 @@ const processActionSchema = z.object({
   userId: z.string(),
   userEmail: z.string(),
   fileName: z.string(),
+  v8Provider: z.enum(['qi', 'bms']).optional(),
 });
 
 const reportActionSchema = z.object({
   cpfs: z.array(z.string()),
   fileName: z.string(),
   createdAt: z.string(),
-  provider: z.enum(["v8", "facta"]),
+  provider: z.string(), // Can be v8-qi, v8-bms, facta
 });
 
 const getBatchStatusSchema = z.object({
@@ -37,7 +39,7 @@ const deleteBatchSchema = z.object({
 export type BatchJob = {
     id: string;
     fileName: string;
-    provider: Provider,
+    provider: string, // Now can be 'v8-qi', 'v8-bms', 'facta'
     status: 'processing' | 'completed' | 'error';
     totalCpfs: number;
     processedCpfs: number;
@@ -171,17 +173,18 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
     };
   }
 
-  const { cpfs, provider, userId, userEmail, fileName } = validation.data;
+  const { cpfs, provider, userId, userEmail, fileName, v8Provider } = validation.data;
   
   initializeFirebaseAdmin();
   const firestore = getFirestore();
   
-  const batchId = `batch-${provider}-${Date.now()}-${userId.substring(0, 5)}`;
+  const finalProvider = provider === 'v8' && v8Provider ? `${provider}-${v8Provider}` : provider;
+  const batchId = `batch-${finalProvider}-${Date.now()}-${userId.substring(0, 5)}`;
   const batchRef = firestore.collection('batches').doc(batchId);
 
   const batchData: Omit<BatchJob, 'createdAt' | 'id'> & { createdAt: FieldValue; userId: string; } = {
       fileName: fileName,
-      provider: provider,
+      provider: finalProvider,
       status: 'processing',
       totalCpfs: cpfs.length,
       processedCpfs: 0,
@@ -209,7 +212,7 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
 
   return {
     status: 'success',
-    message: `Lote para ${provider.toUpperCase()} enviado para processamento.`,
+    message: `Lote para ${finalProvider.toUpperCase()} enviado para processamento.`,
     batch: serializableBatch
   };
 }
@@ -227,9 +230,9 @@ async function processBatchInBackground(batchId: string) {
         }
 
         const batchData = batchDoc.data() as Omit<BatchJob, 'createdAt' | 'id'> & { userId: string, userEmail: string };
-        const { cpfs, provider, userId, userEmail } = batchData;
+        const { cpfs, provider: finalProvider, userId, userEmail } = batchData;
         
-        console.log(`[Batch ${batchId}] Starting background processing for ${cpfs.length} CPFs via ${provider}.`);
+        console.log(`[Batch ${batchId}] Starting background processing for ${cpfs.length} CPFs via ${finalProvider}.`);
 
         const userDoc = await firestore.collection('users').doc(userId).get();
         if (!userDoc.exists) {
@@ -239,8 +242,11 @@ async function processBatchInBackground(batchId: string) {
         
         let authToken: string | undefined;
         let authError: string | null = null;
+
+        const mainProvider = finalProvider.split('-')[0];
+        const subProvider = finalProvider.split('-')[1] as V8Provider | undefined;
         
-        if (provider === 'v8') {
+        if (mainProvider === 'v8') {
              const v8Creds: ApiCredentials = {
                 v8_username: userCredentials.v8_username,
                 v8_password: userCredentials.v8_password,
@@ -248,7 +254,7 @@ async function processBatchInBackground(batchId: string) {
                 v8_client_id: userCredentials.v8_client_id,
              };
              ({ token: authToken, error: authError } = await getV8AuthToken(v8Creds));
-        } else if (provider === 'facta') {
+        } else if (mainProvider === 'facta') {
             const factaCreds: ApiCredentials = {
                 facta_username: userCredentials.facta_username,
                 facta_password: userCredentials.facta_password
@@ -264,9 +270,9 @@ async function processBatchInBackground(batchId: string) {
         for (const cpf of cpfs) {
             console.log(`[Batch ${batchId}] Processing CPF: ${cpf}`);
             
-            if (provider === 'v8') {
-                await consultarSaldoV8({ documentNumber: cpf, userId, userEmail, token: authToken });
-            } else if (provider === 'facta') {
+            if (mainProvider === 'v8' && subProvider) {
+                await consultarSaldoV8({ documentNumber: cpf, userId, userEmail, token: authToken, provider: subProvider });
+            } else if (mainProvider === 'facta') {
                 const result = await consultarSaldoFgtsFacta({ cpf, userId, token: authToken });
                 
                 const docId = `facta-${cpf}`;
@@ -316,7 +322,9 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         return { status: 'error', fileName: '', fileContent: '', message: 'Dados de entrada para o relatório são inválidos.' };
     }
 
-    const { cpfs, fileName: originalFileName, createdAt, provider } = validation.data;
+    const { cpfs, fileName: originalFileName, createdAt, provider: finalProvider } = validation.data;
+    const mainProvider = finalProvider.split('-')[0];
+
     initializeFirebaseAdmin();
     const firestore = getFirestore();
     
@@ -324,7 +332,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
 
     for (const cpf of cpfs) {
         try {
-            const docId = provider === 'v8' ? cpf : `facta-${cpf}`;
+            const docId = mainProvider === 'v8' ? cpf : `facta-${cpf}`;
             const docRef = firestore.collection('webhookResponses').doc(docId);
             const docSnap = await docRef.get();
 
@@ -336,14 +344,14 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                 const isSuccess = data?.status === 'success' && responseBody;
 
                 if (isSuccess) {
-                    if (provider === 'v8') {
+                    if (mainProvider === 'v8') {
                         const balanceValue = parseFloat(responseBody.balance);
                          results.push({
                             CPF: cpf,
                             Saldo: isNaN(balanceValue) ? '0.00' : balanceValue, 
                             Mensagem: 'Sucesso',
                         });
-                    } else if (provider === 'facta') {
+                    } else if (mainProvider === 'facta') {
                         const saldoTotal = parseFloat(responseBody.saldo_total);
                         let row: any = {
                             CPF: cpf,
@@ -377,34 +385,35 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
 
     const worksheet = XLSX.utils.json_to_sheet(results);
     
-    const firstRow = results[0];
-    const header = Object.keys(firstRow);
-    worksheet['!cols'] = header.map(key => ({
-        wch: Math.max(15, key.length + 2) 
-    }));
-    
-    // Formatting currency
-    const formatCurrencyCells = (colName: string) => {
-        const colIndex = header.indexOf(colName);
-        if (colIndex !== -1) {
-            results.forEach((_, index) => {
-                const cellRef = XLSX.utils.encode_cell({c: colIndex, r: index + 1});
-                 if (worksheet[cellRef] && typeof worksheet[cellRef].v === 'number') {
-                    worksheet[cellRef].z = '"R$"#,##0.00';
-                }
-            });
+    if (results.length > 0) {
+        const firstRow = results[0];
+        const header = Object.keys(firstRow);
+        worksheet['!cols'] = header.map(key => ({
+            wch: Math.max(15, key.length + 2) 
+        }));
+        
+        // Formatting currency
+        const formatCurrencyCells = (colName: string) => {
+            const colIndex = header.indexOf(colName);
+            if (colIndex !== -1) {
+                results.forEach((_, index) => {
+                    const cellRef = XLSX.utils.encode_cell({c: colIndex, r: index + 1});
+                     if (worksheet[cellRef] && typeof worksheet[cellRef].v === 'number') {
+                        worksheet[cellRef].z = '"R$"#,##0.00';
+                    }
+                });
+            }
+        };
+        
+        if (mainProvider === 'facta') {
+            formatCurrencyCells('Saldo Total');
+            for (let i = 1; i <= 12; i++) {
+                formatCurrencyCells(`Valor ${i}`);
+            }
+        } else { // v8
+            formatCurrencyCells('Saldo');
         }
-    };
-    
-    if (provider === 'facta') {
-        formatCurrencyCells('Saldo Total');
-        for (let i = 1; i <= 12; i++) {
-            formatCurrencyCells(`Valor ${i}`);
-        }
-    } else { // v8
-        formatCurrencyCells('Saldo');
     }
-
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Resultados FGTS');
@@ -415,7 +424,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
     const date = new Date(createdAt);
     const formattedDate = date.toLocaleDateString('pt-BR').replace(/\//g, '-');
     const formattedTime = date.toTimeString().split(' ')[0].replace(/:/g, '-');
-    const fileName = `HIGIENIZACAO_FGTS${provider.toUpperCase()}_${originalFileName.replace(/\.xlsx?$/i, '')}_${formattedDate}_${formattedTime}.xlsx`;
+    const fileName = `HIGIENIZACAO_FGTS${finalProvider.toUpperCase()}_${originalFileName.replace(/\.xlsx?$/i, '')}_${formattedDate}_${formattedTime}.xlsx`;
 
     const fileContent = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64String}`;
 

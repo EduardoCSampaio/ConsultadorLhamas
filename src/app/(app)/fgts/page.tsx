@@ -14,16 +14,19 @@ import { UploadCloud, File, Loader2, ArrowRight } from 'lucide-react';
 import { processarLoteFgts } from '@/app/actions/batch';
 import { useUser } from '@/firebase';
 import Link from 'next/link';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 
 type Provider = 'v8' | 'facta';
+type V8Provider = 'qi' | 'bms';
 
 export default function FgtsBatchPage() {
     const { toast } = useToast();
     const { user } = useUser();
     const [file, setFile] = useState<File | null>(null);
     const [cpfs, setCpfs] = useState<string[]>([]);
-    const [selectedProviders, setSelectedProviders] = useState<Provider[]>(['v8', 'facta']);
+    const [selectedProviders, setSelectedProviders] = useState<Provider[]>([]);
+    const [v8Provider, setV8Provider] = useState<V8Provider>('qi');
     const [isProcessing, setIsProcessing] = useState(false);
     
     const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -45,7 +48,7 @@ export default function FgtsBatchPage() {
                 const sheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[sheetName];
                 const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                const extractedCpfs = json.flat().map(String).filter(cpf => cpf && /^\d{11}$/.test(cpf));
+                const extractedCpfs = json.flat().map(String).filter(cpf => cpf && /^\d{11}$/.test(cpf.trim()));
                 setCpfs(extractedCpfs);
                 if (extractedCpfs.length === 0) {
                     toast({
@@ -89,6 +92,7 @@ export default function FgtsBatchPage() {
                 userId: user.uid,
                 userEmail: user.email!,
                 fileName: file.name,
+                v8Provider: provider === 'v8' ? v8Provider : undefined,
             });
 
             if (result.status === 'success' && result.batch) {
@@ -106,6 +110,7 @@ export default function FgtsBatchPage() {
         }
         setFile(null);
         setCpfs([]);
+        setSelectedProviders([]);
         setIsProcessing(false);
          toast({
             title: "Lotes enviados!",
@@ -155,15 +160,32 @@ export default function FgtsBatchPage() {
                     <CardTitle>2. Selecionar Provedores</CardTitle>
                     <CardDescription>Escolha em quais provedores a consulta de FGTS será realizada.</CardDescription>
                 </CardHeader>
-                <CardContent className="flex items-center space-x-6">
-                    <div className="flex items-center space-x-2">
-                        <Checkbox id="v8" checked={selectedProviders.includes('v8')} onCheckedChange={() => handleProviderChange('v8')} />
-                        <Label htmlFor="v8" className='text-base'>V8 (Webhook)</Label>
+                <CardContent className="flex flex-col gap-6">
+                    <div className="flex items-center space-x-6">
+                        <div className="flex items-center space-x-2">
+                            <Checkbox id="v8" checked={selectedProviders.includes('v8')} onCheckedChange={() => handleProviderChange('v8')} />
+                            <Label htmlFor="v8" className='text-base'>V8 (Webhook)</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <Checkbox id="facta" checked={selectedProviders.includes('facta')} onCheckedChange={() => handleProviderChange('facta')} />
+                            <Label htmlFor="facta" className='text-base'>Facta (Síncrono)</Label>
+                        </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                        <Checkbox id="facta" checked={selectedProviders.includes('facta')} onCheckedChange={() => handleProviderChange('facta')} />
-                        <Label htmlFor="facta" className='text-base'>Facta (Síncrono)</Label>
-                    </div>
+                    {selectedProviders.includes('v8') && (
+                        <div className='space-y-3 p-4 border rounded-lg'>
+                            <Label className='text-base'>Parceiro V8</Label>
+                            <RadioGroup defaultValue="qi" value={v8Provider} onValueChange={(value: V8Provider) => setV8Provider(value)}>
+                                <div className="flex items-center space-x-2">
+                                    <RadioGroupItem value="qi" id="qi" />
+                                    <Label htmlFor="qi">QI Tech</Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <RadioGroupItem value="bms" id="bms" />
+                                    <Label htmlFor="bms">Cartos/BMS</Label>
+                                </div>
+                            </RadioGroup>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
 
