@@ -36,6 +36,10 @@ const deleteBatchSchema = z.object({
     batchId: z.string(),
 });
 
+const reprocessBatchSchema = z.object({
+    batchId: z.string(),
+});
+
 
 export type BatchJob = {
     id: string;
@@ -48,6 +52,7 @@ export type BatchJob = {
     createdAt: string; // ISO String
     message?: string;
     userId: string;
+    userEmail: string;
 };
 
 
@@ -55,6 +60,12 @@ type ProcessActionResult = {
   status: 'success' | 'error';
   message?: string;
   batch?: BatchJob;
+};
+
+type ReprocessActionResult = {
+  status: 'success' | 'error';
+  message: string;
+  newBatch?: BatchJob;
 };
 
 type ReportActionResult = {
@@ -111,6 +122,7 @@ export async function getBatches(input?: { batchId: string }): Promise<{ status:
                 createdAt: toISODate(data.createdAt),
                 message: data.message,
                 userId: data.userId,
+                userEmail: data.userEmail,
             } as BatchJob;
         };
 
@@ -204,7 +216,7 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
   const batchId = `batch-${finalProvider}-${Date.now()}-${userId.substring(0, 5)}`;
   const batchRef = firestore.collection('batches').doc(batchId);
 
-  const batchData: Omit<BatchJob, 'createdAt' | 'id'> & { createdAt: FieldValue; userEmail: string; } = {
+  const batchData: Omit<BatchJob, 'createdAt' | 'id'> & { createdAt: FieldValue } = {
       fileName: fileName,
       provider: finalProvider,
       status: 'pending', // Start as pending, background process will change it
@@ -254,7 +266,7 @@ async function processV8BatchInBackground(batchId: string) {
         const batchDoc = await batchRef.get();
         if (!batchDoc.exists) throw new Error(`Lote ${batchId} não encontrado.`);
 
-        const batchData = batchDoc.data() as BatchJob & { userEmail: string };
+        const batchData = batchDoc.data() as BatchJob;
         await batchRef.update({ status: 'processing' });
         
         const { cpfs, provider: finalProvider, userId, userEmail } = batchData;
@@ -268,17 +280,19 @@ async function processV8BatchInBackground(batchId: string) {
         
         const subProvider = finalProvider.split('-')[1] as V8Provider;
         
+        // Mark all as sent immediately for V8
+        await batchRef.update({ 
+            processedCpfs: cpfs.length,
+        });
+
         for (const cpf of cpfs) {
-            // Since V8 is webhook-based, we can't reliably update progress here.
-            // We just send the request. Progress will depend on webhook responses.
+            // Since V8 is webhook-based, we just send the request. 
+            // We can't reliably update real-time progress here.
             await consultarSaldoV8({ documentNumber: cpf, userId, userEmail, token: authToken, provider: subProvider });
         }
         
         // For V8, "completed" just means all requests were sent. Actual results depend on webhooks.
-        // We will not mark as completed here. We'll need another mechanism to track webhook returns.
-        // For simplicity, let's assume all were processed for progress bar purposes.
         await batchRef.update({ 
-            processedCpfs: cpfs.length,
             status: 'completed', 
             message: 'Todas as solicitações V8 foram enviadas. Os resultados chegarão via webhook.' 
         });
@@ -289,6 +303,71 @@ async function processV8BatchInBackground(batchId: string) {
         await batchRef.update({ status: 'error', message: message });
     }
 }
+
+export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatchSchema>): Promise<ReprocessActionResult> {
+    const validation = reprocessBatchSchema.safeParse(input);
+    if (!validation.success) {
+        return { status: 'error', message: 'ID do lote inválido.' };
+    }
+
+    const { batchId } = validation.data;
+    const firestore = getFirestore();
+
+    try {
+        const originalBatchRef = firestore.collection('batches').doc(batchId);
+        const originalBatchDoc = await originalBatchRef.get();
+
+        if (!originalBatchDoc.exists) {
+            return { status: 'error', message: 'Lote original não encontrado.' };
+        }
+
+        const originalBatchData = originalBatchDoc.data() as BatchJob;
+
+        if (originalBatchData.status !== 'error') {
+            return { status: 'error', message: 'Apenas lotes com status "erro" podem ser reprocessados.' };
+        }
+
+        const responsesSnapshot = await firestore.collection('webhookResponses').get();
+        const processedCpfIds = new Set(responsesSnapshot.docs.map(doc => doc.id));
+        
+        const mainProvider = originalBatchData.provider.split('-')[0];
+        const cpfsToReprocess = originalBatchData.cpfs.filter(cpf => {
+            const docId = mainProvider === 'v8' ? cpf : `facta-${cpf}`;
+            return !processedCpfIds.has(docId);
+        });
+
+        if (cpfsToReprocess.length === 0) {
+            return { status: 'error', message: 'Não há CPFs pendentes para reprocessar.' };
+        }
+        
+        const subProvider = originalBatchData.provider.split('-')[1] as V8Provider | undefined;
+
+        const result = await processarLoteFgts({
+            cpfs: cpfsToReprocess,
+            provider: mainProvider as Provider,
+            userId: originalBatchData.userId,
+            userEmail: originalBatchData.userEmail,
+            fileName: `REPROCESS_${originalBatchData.fileName}`,
+            v8Provider: subProvider,
+        });
+
+        if (result.status === 'error') {
+            return { status: 'error', message: result.message || 'Falha ao iniciar o lote de reprocessamento.' };
+        }
+
+        return { 
+            status: 'success', 
+            message: 'Lote de reprocessamento criado.',
+            newBatch: result.batch
+        };
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro desconhecido ao tentar reprocessar o lote.";
+        console.error(`[Reprocess Batch] Error:`, error);
+        return { status: 'error', message };
+    }
+}
+
 
 export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchema>): Promise<ReportActionResult> {
     const validation = reportActionSchema.safeParse(input);
@@ -335,7 +414,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                         let row: any = {
                             CPF: cpf,
                             'Saldo Total': isNaN(saldoTotal) ? '0.00' : saldoTotal,
-                            Mensagem: 'Sucesso',
+                            Mensagem: responseBody.msg || 'Sucesso',
                             'Data Saldo': responseBody.data_saldo,
                         };
                         // Flatten the response with all repasse data

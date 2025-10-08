@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Download, RefreshCw, AlertCircle, Inbox, Trash2, Play } from 'lucide-react';
-import { getBatches, deleteBatch, type BatchJob, gerarRelatorioLote } from '@/app/actions/batch';
+import { getBatches, deleteBatch, type BatchJob, gerarRelatorioLote, reprocessarLoteComErro } from '@/app/actions/batch';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -28,6 +28,7 @@ export default function EsteiraPage() {
     const { toast } = useToast();
     const [batches, setBatches] = useState<BatchJob[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isReprocessing, setIsReprocessing] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     const fetchBatches = useCallback(async (showLoading = true) => {
@@ -88,6 +89,25 @@ export default function EsteiraPage() {
         } else {
             toast({ variant: 'destructive', title: 'Erro ao excluir lote', description: message });
         }
+    };
+
+    const handleReprocessBatch = async (batchId: string) => {
+        setIsReprocessing(batchId);
+        const result = await reprocessarLoteComErro({ batchId });
+        if (result.status === 'success' && result.newBatch) {
+            toast({
+                title: 'Reprocessamento iniciado!',
+                description: `Um novo lote foi criado para os CPFs restantes: ${result.newBatch.fileName}`
+            });
+            await fetchBatches(false);
+        } else {
+            toast({
+                variant: 'destructive',
+                title: 'Erro ao reprocessar',
+                description: result.message
+            });
+        }
+        setIsReprocessing(null);
     };
 
     const getStatusVariant = (status: BatchJob['status']) => {
@@ -228,6 +248,12 @@ export default function EsteiraPage() {
                                         <Button onClick={() => handleDownloadReport(batch)} size="sm">
                                             <Download className="mr-2 h-4 w-4" />
                                             Baixar Relatório
+                                        </Button>
+                                    )}
+                                    {batch.status === 'error' && (
+                                        <Button onClick={() => handleReprocessBatch(batch.id)} size="sm" variant="outline" disabled={isReprocessing === batch.id}>
+                                            {isReprocessing === batch.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+                                            Tentar Novamente
                                         </Button>
                                     )}
                                 </div>
