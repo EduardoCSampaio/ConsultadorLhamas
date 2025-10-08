@@ -18,7 +18,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 
 type Provider = 'v8' | 'facta';
-type V8Provider = 'qi' | 'bms';
+type V8Provider = 'qi' | 'cartos' | 'bms';
 
 export default function FgtsBatchPage() {
     const { toast } = useToast();
@@ -180,8 +180,12 @@ export default function FgtsBatchPage() {
                                     <Label htmlFor="qi">QI Tech</Label>
                                 </div>
                                 <div className="flex items-center space-x-2">
+                                    <RadioGroupItem value="cartos" id="cartos" />
+                                    <Label htmlFor="cartos">CARTOS</Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
                                     <RadioGroupItem value="bms" id="bms" />
-                                    <Label htmlFor="bms">Cartos/BMS</Label>
+                                    <Label htmlFor="bms">BMS</Label>
                                 </div>
                             </RadioGroup>
                         </div>

@@ -9,7 +9,7 @@ import type { ApiCredentials } from './users';
 const actionSchema = z.object({
   documentNumber: z.string(),
   token: z.string().optional(),
-  provider: z.enum(['qi', 'bms']),
+  provider: z.enum(['qi', 'cartos', 'bms']),
   // For logging purposes
   userId: z.string(), 
   userEmail: z.string(),

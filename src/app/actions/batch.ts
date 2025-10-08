@@ -10,7 +10,7 @@ import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import type { ApiCredentials } from './users';
 
 type Provider = "v8" | "facta";
-type V8Provider = 'qi' | 'bms';
+type V8Provider = 'qi' | 'cartos' | 'bms';
 
 const processActionSchema = z.object({
   cpfs: z.array(z.string()),
@@ -18,14 +18,14 @@ const processActionSchema = z.object({
   userId: z.string(),
   userEmail: z.string(),
   fileName: z.string(),
-  v8Provider: z.enum(['qi', 'bms']).optional(),
+  v8Provider: z.enum(['qi', 'cartos', 'bms']).optional(),
 });
 
 const reportActionSchema = z.object({
   cpfs: z.array(z.string()),
   fileName: z.string(),
   createdAt: z.string(),
-  provider: z.string(), // Can be v8-qi, v8-bms, facta
+  provider: z.string(), // Can be v8-qi, v8-bms, v8-cartos, facta
 });
 
 const getBatchStatusSchema = z.object({
@@ -39,7 +39,7 @@ const deleteBatchSchema = z.object({
 export type BatchJob = {
     id: string;
     fileName: string;
-    provider: string, // Now can be 'v8-qi', 'v8-bms', 'facta'
+    provider: string, // Now can be 'v8-qi', 'v8-cartos', 'v8-bms', 'facta'
     status: 'processing' | 'completed' | 'error';
     totalCpfs: number;
     processedCpfs: number;
