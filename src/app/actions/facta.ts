@@ -54,8 +54,8 @@ export type ConsultaFactaResult = {
   data?: FactaOffer[];
 };
 
-const FACTA_API_BASE_URL_HOMOL = 'https://webservice-homol.facta.com.br';
-// const FACTA_API_BASE_URL_PROD = 'https://webservice.facta.com.br';
+// const FACTA_API_BASE_URL_HOMOL = 'https://webservice-homol.facta.com.br';
+const FACTA_API_BASE_URL_PROD = 'https://webservice.facta.com.br';
 
 async function getFactaUserCredentials(userId: string): Promise<{ credentials: ApiCredentials | null; error: string | null }> {
     if (!userId) {
@@ -101,7 +101,7 @@ async function getFactaToken(credentials: ApiCredentials): Promise<{ token: stri
   const encodedCreds = Buffer.from(`${facta_username}:${facta_password}`).toString('base64');
   
   try {
-    const response = await fetch(`${FACTA_API_BASE_URL_HOMOL}/gera-token`, {
+    const response = await fetch(`${FACTA_API_BASE_URL_PROD}/gera-token`, {
       method: 'GET',
       headers: {
         'Authorization': `Basic ${encodedCreds}`,
@@ -145,7 +145,7 @@ export async function consultarOfertasFacta(input: z.infer<typeof consultaSchema
 
     // 3. Consult Offers
     try {
-        const url = new URL(`${FACTA_API_BASE_URL_HOMOL}/consignado-trabalhador/consulta-ofertas`);
+        const url = new URL(`${FACTA_API_BASE_URL_PROD}/consignado-trabalhador/consulta-ofertas`);
         url.searchParams.append('cpf', cpf);
 
         const response = await fetch(url.toString(), {
