@@ -108,17 +108,16 @@ export async function getUserActivityLogs(input: z.infer<typeof getUserActivityS
     try {
         initializeFirebaseAdmin();
         const firestore = getFirestore();
+        // Query without ordering first to avoid composite index
         const logsSnapshot = await firestore.collection('activityLogs')
             .where('userId', '==', userId)
-            .orderBy('createdAt', 'desc')
-            .limit(limit)
             .get();
 
         if (logsSnapshot.empty) {
             return { logs: [] };
         }
         
-        const logs = logsSnapshot.docs.map(doc => {
+        let logs = logsSnapshot.docs.map(doc => {
             const data = doc.data();
             const createdAt = data.createdAt;
 
@@ -138,8 +137,12 @@ export async function getUserActivityLogs(input: z.infer<typeof getUserActivityS
                 createdAt: serializableCreatedAt,
             } as ActivityLog;
         });
+        
+        // Sort in memory and take the limit
+        logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const limitedLogs = logs.slice(0, limit);
 
-        return { logs };
+        return { logs: limitedLogs };
     } catch (error) {
         const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao buscar os logs do usuário.";
         console.error(`Erro ao buscar logs para o usuário ${userId}:`, message);
