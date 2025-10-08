@@ -41,25 +41,18 @@ export async function exportHistoryToExcel(filters: ExportFilters): Promise<Expo
 
         const { email, provider, dateFrom, dateTo } = validation.data;
 
+        // Apply equality filters first
         if (email) {
             query = query.where('userEmail', '==', email);
         }
         if (provider) {
             query = query.where('provider', '==', provider);
         }
-        if (dateFrom) {
-            query = query.where('createdAt', '>=', new Date(dateFrom));
-        }
-        if (dateTo) {
-            // Firestore date range queries on different fields requires a composite index
-            // For simplicity, we'll filter 'dateTo' in memory if other filters are present.
-            // If no other filters, we can use it.
-            if (!email && !provider && !dateFrom) {
-                query = query.where('createdAt', '<=', new Date(dateTo));
-            }
-        }
         
-        const logsSnapshot = await query.orderBy('createdAt', 'desc').get();
+        // Always order by date
+        query = query.orderBy('createdAt', 'desc');
+
+        const logsSnapshot = await query.get();
 
         let logs = logsSnapshot.docs.map(doc => {
             const data = doc.data();
@@ -81,11 +74,15 @@ export async function exportHistoryToExcel(filters: ExportFilters): Promise<Expo
             } as ActivityLog;
         });
 
-        // Manual 'dateTo' filtering if necessary
-        if (dateTo && (email || provider || dateFrom)) {
+        // Manual date range filtering in memory
+        if (dateFrom) {
+            const fromDate = new Date(dateFrom);
+            fromDate.setHours(0, 0, 0, 0); // Start of the day
+            logs = logs.filter(log => new Date(log.createdAt) >= fromDate);
+        }
+        if (dateTo) {
             const toDate = new Date(dateTo);
-            // Include the whole day
-            toDate.setHours(23, 59, 59, 999);
+            toDate.setHours(23, 59, 59, 999); // End of the day
             logs = logs.filter(log => new Date(log.createdAt) <= toDate);
         }
 
@@ -133,5 +130,3 @@ export async function exportHistoryToExcel(filters: ExportFilters): Promise<Expo
         return { status: 'error', message };
     }
 }
-
-    
