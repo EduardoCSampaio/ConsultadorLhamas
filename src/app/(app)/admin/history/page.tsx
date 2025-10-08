@@ -107,14 +107,14 @@ export default function AdminHistoryPage() {
 
 
     return (
-        <>
+        <Dialog open={isExportModalOpen} onOpenChange={setIsExportModalOpen}>
             <div className="flex flex-col gap-6">
                 <PageHeader
                     title="Histórico de Atividade"
                     description="Visualize e filtre todos os logs de atividade da plataforma."
                 >
                     <DialogTrigger asChild>
-                         <Button onClick={() => setIsExportModalOpen(true)}>
+                         <Button>
                             <Download className="mr-2 h-4 w-4" />
                             Extrair Histórico
                         </Button>
@@ -213,100 +213,95 @@ export default function AdminHistoryPage() {
                 </Card>
             </div>
             
-            <Dialog open={isExportModalOpen} onOpenChange={setIsExportModalOpen}>
-                <DialogContent className="sm:max-w-[480px]">
-                    <DialogHeader>
-                        <DialogTitle>Extrair Histórico de Atividade</DialogTitle>
-                        <DialogDescription>
-                            Selecione os filtros para exportar os logs em uma planilha Excel.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
+            <DialogContent className="sm:max-w-[480px]">
+                <DialogHeader>
+                    <DialogTitle>Extrair Histórico de Atividade</DialogTitle>
+                    <DialogDescription>
+                        Selecione os filtros para exportar os logs em uma planilha Excel.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="email-export" className="text-right">
+                            E-mail
+                        </Label>
+                        <Input 
+                            id="email-export" 
+                            placeholder="Filtrar por e-mail..." 
+                            className="col-span-3"
+                            value={exportEmail}
+                            onChange={(e) => setExportEmail(e.target.value)}
+                        />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="provider-export" className="text-right">
+                            Provedor
+                        </Label>
+                            <Select value={exportProvider} onValueChange={setExportProvider}>
+                            <SelectTrigger className="col-span-3">
+                                <SelectValue placeholder="Filtrar por provedor" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {providers.map(provider => (
+                                    <SelectItem key={provider} value={provider}>
+                                        {provider === 'all' ? 'Todos os Provedores' : provider.toUpperCase()}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
                         <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="email-export" className="text-right">
-                                E-mail
-                            </Label>
-                            <Input 
-                                id="email-export" 
-                                placeholder="Filtrar por e-mail..." 
-                                className="col-span-3"
-                                value={exportEmail}
-                                onChange={(e) => setExportEmail(e.target.value)}
-                            />
-                        </div>
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="provider-export" className="text-right">
-                                Provedor
-                            </Label>
-                             <Select value={exportProvider} onValueChange={setExportProvider}>
-                                <SelectTrigger className="col-span-3">
-                                    <SelectValue placeholder="Filtrar por provedor" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {providers.map(provider => (
-                                        <SelectItem key={provider} value={provider}>
-                                            {provider === 'all' ? 'Todos os Provedores' : provider.toUpperCase()}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                         <div className="grid grid-cols-4 items-center gap-4">
-                            <Label className="text-right">
-                                Período
-                            </Label>
-                            <div className="col-span-3">
-                               <Popover>
-                                    <PopoverTrigger asChild>
-                                    <Button
-                                        id="date"
-                                        variant={"outline"}
-                                        className={cn(
-                                        "w-full justify-start text-left font-normal",
-                                        !exportDateRange && "text-muted-foreground"
-                                        )}
-                                    >
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {exportDateRange?.from ? (
-                                        exportDateRange.to ? (
-                                            <>
-                                            {format(exportDateRange.from, "LLL dd, y")} -{" "}
-                                            {format(exportDateRange.to, "LLL dd, y")}
-                                            </>
-                                        ) : (
-                                            format(exportDateRange.from, "LLL dd, y")
-                                        )
-                                        ) : (
-                                        <span>Selecione o período</span>
-                                        )}
-                                    </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0" align="start">
-                                    <Calendar
-                                        initialFocus
-                                        mode="range"
-                                        defaultMonth={exportDateRange?.from}
-                                        selected={exportDateRange}
-                                        onSelect={setExportDateRange}
-                                        numberOfMonths={2}
-                                    />
-                                    </PopoverContent>
-                                </Popover>
-                            </div>
+                        <Label className="text-right">
+                            Período
+                        </Label>
+                        <div className="col-span-3">
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                <Button
+                                    id="date"
+                                    variant={"outline"}
+                                    className={cn(
+                                    "w-full justify-start text-left font-normal",
+                                    !exportDateRange && "text-muted-foreground"
+                                    )}
+                                >
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {exportDateRange?.from ? (
+                                    exportDateRange.to ? (
+                                        <>
+                                        {format(exportDateRange.from, "LLL dd, y")} -{" "}
+                                        {format(exportDateRange.to, "LLL dd, y")}
+                                        </>
+                                    ) : (
+                                        format(exportDateRange.from, "LLL dd, y")
+                                    )
+                                    ) : (
+                                    <span>Selecione o período</span>
+                                    )}
+                                </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar
+                                    initialFocus
+                                    mode="range"
+                                    defaultMonth={exportDateRange?.from}
+                                    selected={exportDateRange}
+                                    onSelect={setExportDateRange}
+                                    numberOfMonths={2}
+                                />
+                                </PopoverContent>
+                            </Popover>
                         </div>
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsExportModalOpen(false)}>Cancelar</Button>
-                        <Button onClick={handleExport} disabled={isExporting}>
-                             {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-                            Exportar
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsExportModalOpen(false)}>Cancelar</Button>
+                    <Button onClick={handleExport} disabled={isExporting}>
+                            {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                        Exportar
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 }
-
-
-    
