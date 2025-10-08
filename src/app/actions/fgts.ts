@@ -8,8 +8,6 @@ import type { ApiCredentials } from './users';
 
 const actionSchema = z.object({
   documentNumber: z.string(),
-  // provider is hardcoded to 'qi' for V8 but kept for schema consistency
-  provider: z.literal("qi").optional().default("qi"),
   token: z.string().optional(),
   // For logging purposes
   userId: z.string(), 
@@ -67,14 +65,14 @@ export async function getAuthToken(credentials: ApiCredentials): Promise<{token:
   }
 }
 
-export async function consultarSaldoFgts(input: Omit<z.infer<typeof actionSchema>, 'provider'>): Promise<ActionResult> {
-  const validation = actionSchema.safeParse({ ...input, provider: 'qi' });
+export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): Promise<ActionResult> {
+  const validation = actionSchema.safeParse(input);
 
   if (!validation.success) {
     return { status: 'error', stepIndex: 0, message: 'Dados de entrada inválidos.' };
   }
   
-  const { documentNumber, provider, userId, userEmail } = validation.data;
+  const { documentNumber, userId, userEmail } = validation.data;
   let authToken = validation.data.token;
   
   // This function is only for V8, so we get V8 creds.
@@ -112,7 +110,7 @@ export async function consultarSaldoFgts(input: Omit<z.infer<typeof actionSchema
 
   const API_URL_CONSULTA = 'https://bff.v8sistema.com/fgts/balance';
   
-  const requestBody = { documentNumber, provider };
+  const requestBody = { documentNumber, provider: "qi" };
 
   try {
     try {
@@ -149,6 +147,16 @@ export async function consultarSaldoFgts(input: Omit<z.infer<typeof actionSchema
             // ignora se não for JSON
         }
         const errorMessage = `Erro ao enviar consulta V8: ${consultaResponse.status} ${consultaResponse.statusText}. Detalhes: ${errorDetails}`;
+        // Also save this error to webhookResponses for traceability
+        const firestore = getFirestore();
+        await firestore.collection('webhookResponses').doc(documentNumber).set({
+            responseBody: { error: errorMessage },
+            createdAt: FieldValue.serverTimestamp(),
+            status: 'error',
+            message: errorMessage,
+            id: documentNumber.toString(),
+            provider: 'v8',
+        }, { merge: true });
         return { status: 'error', stepIndex: 1, message: errorMessage };
     }
 
@@ -162,6 +170,16 @@ export async function consultarSaldoFgts(input: Omit<z.infer<typeof actionSchema
   } catch (error) {
     console.error("[V8 API] Erro de comunicação na consulta de saldo:", error);
     const message = error instanceof Error ? error.message : 'Ocorreu um erro de comunicação com a API.';
+     // Also save this error to webhookResponses for traceability
+    const firestore = getFirestore();
+    await firestore.collection('webhookResponses').doc(documentNumber).set({
+        responseBody: { error: message },
+        createdAt: FieldValue.serverTimestamp(),
+        status: 'error',
+        message: message,
+        id: documentNumber.toString(),
+        provider: 'v8',
+    }, { merge: true });
     return { status: 'error', stepIndex: 1, message };
   }
 }

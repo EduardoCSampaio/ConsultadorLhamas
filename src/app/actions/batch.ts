@@ -226,8 +226,8 @@ async function processBatchInBackground(batchId: string) {
             return;
         }
 
-        const batchData = batchDoc.data() as Omit<BatchJob, 'createdAt' | 'id'> & { userId: string };
-        const { cpfs, provider, userId } = batchData;
+        const batchData = batchDoc.data() as Omit<BatchJob, 'createdAt' | 'id'> & { userId: string, userEmail: string };
+        const { cpfs, provider, userId, userEmail } = batchData;
         
         console.log(`[Batch ${batchId}] Starting background processing for ${cpfs.length} CPFs via ${provider}.`);
 
@@ -265,7 +265,7 @@ async function processBatchInBackground(batchId: string) {
             console.log(`[Batch ${batchId}] Processing CPF: ${cpf}`);
             
             if (provider === 'v8') {
-                await consultarSaldoV8({ documentNumber: cpf, userId, userEmail: userDoc.data()?.email, token: authToken });
+                await consultarSaldoV8({ documentNumber: cpf, userId, userEmail, token: authToken });
             } else if (provider === 'facta') {
                 const result = await consultarSaldoFgtsFacta({ cpf, userId, token: authToken });
                 
@@ -320,7 +320,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
     initializeFirebaseAdmin();
     const firestore = getFirestore();
     
-    const results: { CPF: string; Saldo?: string | number; Mensagem: string, [key: string]: any }[] = [];
+    const results: any[] = [];
 
     for (const cpf of cpfs) {
         try {
@@ -371,32 +371,38 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         }
     }
 
+    if (results.length === 0) {
+        return { status: 'error', fileName: '', fileContent: '', message: 'Nenhum dado para gerar relatório.' };
+    }
+
     const worksheet = XLSX.utils.json_to_sheet(results);
-    // Auto-size columns
-    const cols = Object.keys(results[0] || {}).map(key => ({ wch: Math.max(15, key.length + 2) }));
-    worksheet['!cols'] = cols;
     
-    // Formatting currency for saldo total in facta
-    if (provider === 'facta') {
-        const saldoIndex = Object.keys(results[0] || {}).indexOf('Saldo Total');
-        if(saldoIndex !== -1){
+    const firstRow = results[0];
+    const header = Object.keys(firstRow);
+    worksheet['!cols'] = header.map(key => ({
+        wch: Math.max(15, key.length + 2) 
+    }));
+    
+    // Formatting currency
+    const formatCurrencyCells = (colName: string) => {
+        const colIndex = header.indexOf(colName);
+        if (colIndex !== -1) {
             results.forEach((_, index) => {
-                const cellRef = XLSX.utils.encode_cell({c: saldoIndex, r: index + 1});
+                const cellRef = XLSX.utils.encode_cell({c: colIndex, r: index + 1});
                  if (worksheet[cellRef] && typeof worksheet[cellRef].v === 'number') {
                     worksheet[cellRef].z = '"R$"#,##0.00';
                 }
             });
         }
-    } else {
-         const saldoIndex = Object.keys(results[0] || {}).indexOf('Saldo');
-         if(saldoIndex !== -1){
-            results.forEach((_, index) => {
-                const cellRef = XLSX.utils.encode_cell({c: saldoIndex, r: index + 1});
-                 if (worksheet[cellRef] && typeof worksheet[cellRef].v === 'number') {
-                    worksheet[cellRef].z = '"R$"#,##0.00';
-                }
-            });
-         }
+    };
+    
+    if (provider === 'facta') {
+        formatCurrencyCells('Saldo Total');
+        for (let i = 1; i <= 12; i++) {
+            formatCurrencyCells(`Valor ${i}`);
+        }
+    } else { // v8
+        formatCurrencyCells('Saldo');
     }
 
 
