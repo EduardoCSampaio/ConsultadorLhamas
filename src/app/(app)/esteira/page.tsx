@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Download, RefreshCw, AlertCircle, Inbox, Trash2, Play } from 'lucide-react';
-import { getBatches, deleteBatch, type BatchJob, processFactaCpf, getBatchProcessedCpfs } from '@/app/actions/batch';
+import { getBatches, deleteBatch, type BatchJob, gerarRelatorioLote } from '@/app/actions/batch';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -29,10 +29,10 @@ export default function EsteiraPage() {
     const [batches, setBatches] = useState<BatchJob[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [processingBatchId, setProcessingBatchId] = useState<string | null>(null);
 
     const fetchBatches = useCallback(async (showLoading = true) => {
         if(showLoading) setIsLoading(true);
+        setError(null);
         const { batches: fetchedBatches, error: fetchError } = await getBatches();
         if (fetchError) {
             setError(fetchError);
@@ -46,6 +46,10 @@ export default function EsteiraPage() {
 
     useEffect(() => {
         fetchBatches();
+        // Set up an interval to refresh the batches every 30 seconds
+        const intervalId = setInterval(() => fetchBatches(false), 30000);
+        // Clear interval on component unmount
+        return () => clearInterval(intervalId);
     }, [fetchBatches]);
 
     const handleRefreshStatus = async (batchId: string) => {
@@ -86,44 +90,6 @@ export default function EsteiraPage() {
         }
     };
 
-    const handleProcessFactaBatch = async (batch: BatchJob) => {
-        if (!batch.provider.startsWith('facta') || batch.status !== 'processing') return;
-
-        setProcessingBatchId(batch.id);
-        toast({ title: `Processando Lote Facta: ${batch.fileName}`, description: "Isso pode levar alguns minutos. Não feche esta aba." });
-
-        let processedCount = batch.processedCpfs;
-
-        // Get already processed CPFs to avoid re-processing
-        const processedResult = await getBatchProcessedCpfs({ batchId: batch.id });
-        const processedCpfsSet = new Set(processedResult.cpfs || []);
-        
-        processedCount = processedCpfsSet.size;
-
-        // Update progress bar initially
-        setBatches(prev => prev.map(b => b.id === batch.id ? { ...b, processedCpfs: processedCount } : b));
-
-
-        const cpfsToProcess = batch.cpfs.filter(cpf => !processedCpfsSet.has(cpf));
-
-        for (const cpf of cpfsToProcess) {
-            const result = await processFactaCpf({ batchId: batch.id, cpf });
-            if (result.status === 'success') {
-                processedCount++;
-                // Update progress bar on the fly
-                setBatches(prev => prev.map(b => b.id === batch.id ? { ...b, processedCpfs: processedCount } : b));
-            } else {
-                toast({ variant: 'destructive', title: `Erro ao processar CPF ${cpf}`, description: result.message, duration: 5000 });
-                // We can decide to stop or continue on error. For now, we continue.
-            }
-        }
-
-        toast({ title: "Processamento Concluído!", description: `Todos os CPFs do lote ${batch.fileName} foram processados.` });
-        setProcessingBatchId(null);
-        await handleRefreshStatus(batch.id); // Final refresh to get 'completed' status from server
-    };
-
-
     const getStatusVariant = (status: BatchJob['status']) => {
         switch (status) {
             case 'completed': return 'default';
@@ -132,6 +98,16 @@ export default function EsteiraPage() {
             default: return 'outline';
         }
     };
+    
+    const getStatusText = (status: BatchJob['status']) => {
+        switch (status) {
+            case 'completed': return 'Completo';
+            case 'processing': return 'Processando';
+            case 'error': return 'Erro';
+            default: return 'Pendente';
+        }
+    }
+
 
     return (
         <div className="flex flex-col gap-6">
@@ -203,7 +179,7 @@ export default function EsteiraPage() {
                                         </p>
                                     </div>
                                     <div className='flex items-center gap-2'>
-                                        <Badge variant={getStatusVariant(batch.status)} className="capitalize">{batch.status}</Badge>
+                                        <Badge variant={getStatusVariant(batch.status)} className="capitalize">{getStatusText(batch.status)}</Badge>
                                         <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleRefreshStatus(batch.id)}>
                                             <RefreshCw className="h-4 w-4" />
                                         </Button>
@@ -252,12 +228,6 @@ export default function EsteiraPage() {
                                         <Button onClick={() => handleDownloadReport(batch)} size="sm">
                                             <Download className="mr-2 h-4 w-4" />
                                             Baixar Relatório
-                                        </Button>
-                                    )}
-                                     {batch.provider.startsWith('facta') && batch.status === 'processing' && (
-                                        <Button onClick={() => handleProcessFactaBatch(batch)} size="sm" variant="outline" disabled={processingBatchId === batch.id}>
-                                            {processingBatchId === batch.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Play className="mr-2 h-4 w-4" />}
-                                            {processingBatchId === batch.id ? 'Processando...' : 'Iniciar Processamento'}
                                         </Button>
                                     )}
                                 </div>
