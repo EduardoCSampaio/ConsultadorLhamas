@@ -2,8 +2,8 @@
 'use server';
 
 import { z } from 'zod';
-import { consultarSaldoFgts as consultarSaldoV8 } from './fgts';
-import { consultarSaldoFgtsFacta } from './facta';
+import { consultarSaldoFgts as consultarSaldoV8, getAuthToken as getV8AuthToken } from './fgts';
+import { consultarSaldoFgtsFacta, getFactaAuthToken } from './facta';
 import * as XLSX from 'xlsx';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
@@ -119,8 +119,7 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
   const batchId = `batch-${provider}-${Date.now()}-${userId.substring(0, 5)}`;
   const batchRef = firestore.collection('batches').doc(batchId);
 
-  const batchData: Omit<BatchJob, 'createdAt'> & { createdAt: FieldValue } = {
-      id: batchId,
+  const batchData: Omit<BatchJob, 'createdAt' | 'id'> & { createdAt: FieldValue; userId: string; } = {
       fileName: fileName,
       provider: provider,
       status: 'processing',
@@ -128,6 +127,7 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
       processedCpfs: 0,
       cpfs: cpfs,
       createdAt: FieldValue.serverTimestamp(),
+      userId: userId,
   };
 
   try {
@@ -138,10 +138,11 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
     return { status: 'error', message };
   }
 
-  processBatchInBackground(batchId, cpfs, provider, userId, userEmail);
+  processBatchInBackground(batchId);
   
   const serializableBatch: BatchJob = {
     ...batchData,
+    id: batchId,
     createdAt: new Date().toISOString(),
   }
 
@@ -152,54 +153,98 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
   };
 }
 
-async function processBatchInBackground(batchId: string, cpfs: string[], provider: Provider, userId: string, userEmail: string) {
-    console.log(`[Batch ${batchId}] Starting background processing for ${cpfs.length} CPFs via ${provider}.`);
+async function processBatchInBackground(batchId: string) {
+    initializeFirebaseAdmin();
     const firestore = getFirestore();
     const batchRef = firestore.collection('batches').doc(batchId);
+    
+    try {
+        const batchDoc = await batchRef.get();
+        if (!batchDoc.exists) {
+            console.error(`[Batch ${batchId}] Batch document not found.`);
+            return;
+        }
 
-    let processedCount = 0;
+        const batchData = batchDoc.data() as Omit<BatchJob, 'createdAt' | 'id'> & { userId: string };
+        const { cpfs, provider, userId } = batchData;
+        
+        console.log(`[Batch ${batchId}] Starting background processing for ${cpfs.length} CPFs via ${provider}.`);
 
-    for (const cpf of cpfs) {
-        console.log(`[Batch ${batchId}] Processing CPF: ${cpf}`);
+        const userDoc = await firestore.collection('users').doc(userId).get();
+        if (!userDoc.exists) {
+            throw new Error(`User with ID ${userId} not found.`);
+        }
+        const userCredentials = userDoc.data() as ApiCredentials;
+        
+        let authToken: string | undefined;
+        let authError: string | null = null;
         
         if (provider === 'v8') {
-            // V8 is webhook based, just trigger it. The webhook will store the result.
-            await consultarSaldoV8({ documentNumber: cpf, userId, userEmail });
+             const v8Creds: ApiCredentials = {
+                v8_username: userCredentials.v8_username,
+                v8_password: userCredentials.v8_password,
+                v8_audience: userCredentials.v8_audience,
+                v8_client_id: userCredentials.v8_client_id,
+             };
+             ({ token: authToken, error: authError } = await getV8AuthToken(v8Creds));
         } else if (provider === 'facta') {
-            // Facta is synchronous, we get the result and store it ourselves.
-            const result = await consultarSaldoFgtsFacta({ cpf, userId });
-            
-            const docId = `facta-${cpf}`;
-            const docRef = firestore.collection('webhookResponses').doc(docId);
-            
-            if (result.success && result.data) {
-                 await docRef.set({
-                    responseBody: result.data,
-                    createdAt: FieldValue.serverTimestamp(),
-                    status: 'success',
-                    message: result.message,
-                    id: docId,
-                    provider: 'facta',
-                 }, { merge: true });
-            } else {
-                 await docRef.set({
-                    responseBody: { error: result.message },
-                    createdAt: FieldValue.serverTimestamp(),
-                    status: 'error',
-                    message: result.message,
-                    id: docId,
-                    provider: 'facta',
-                 }, { merge: true });
-            }
+            const factaCreds: ApiCredentials = {
+                facta_username: userCredentials.facta_username,
+                facta_password: userCredentials.facta_password
+            };
+            ({ token: authToken, error: authError } = await getFactaAuthToken(factaCreds));
+        }
+
+        if (authError || !authToken) {
+            throw new Error(authError || "Failed to get auth token.");
         }
         
-        processedCount++;
-        await batchRef.update({ processedCpfs: processedCount });
-        console.log(`[Batch ${batchId}] Progress: ${processedCount}/${cpfs.length}`);
+        let processedCount = 0;
+        for (const cpf of cpfs) {
+            console.log(`[Batch ${batchId}] Processing CPF: ${cpf}`);
+            
+            if (provider === 'v8') {
+                await consultarSaldoV8({ documentNumber: cpf, userId, userEmail: userDoc.data()?.email, token: authToken });
+            } else if (provider === 'facta') {
+                const result = await consultarSaldoFgtsFacta({ cpf, userId, token: authToken });
+                
+                const docId = `facta-${cpf}`;
+                const docRef = firestore.collection('webhookResponses').doc(docId);
+                
+                if (result.success && result.data) {
+                     await docRef.set({
+                        responseBody: result.data,
+                        createdAt: FieldValue.serverTimestamp(),
+                        status: 'success',
+                        message: result.message,
+                        id: docId,
+                        provider: 'facta',
+                     }, { merge: true });
+                } else {
+                     await docRef.set({
+                        responseBody: { error: result.message },
+                        createdAt: FieldValue.serverTimestamp(),
+                        status: 'error',
+                        message: result.message,
+                        id: docId,
+                        provider: 'facta',
+                     }, { merge: true });
+                }
+            }
+            
+            processedCount++;
+            await batchRef.update({ processedCpfs: processedCount });
+            console.log(`[Batch ${batchId}] Progress: ${processedCount}/${cpfs.length}`);
+        }
+        
+        console.log(`[Batch ${batchId}] Processing complete.`);
+        await batchRef.update({ status: 'completed' });
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "An unknown error occurred.";
+        console.error(`[Batch ${batchId}] FATAL ERROR:`, error);
+        await batchRef.update({ status: 'error', message: message });
     }
-    
-    console.log(`[Batch ${batchId}] Processing complete.`);
-    await batchRef.update({ status: 'completed' });
 }
 
 
@@ -314,3 +359,5 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         message: 'Relatório gerado com sucesso.',
     };
 }
+
+    

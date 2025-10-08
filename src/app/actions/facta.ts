@@ -14,6 +14,7 @@ const cltConsultaSchema = z.object({
 const fgtsConsultaSchema = z.object({
     cpf: z.string().min(11, { message: "CPF deve ter 11 dígitos." }).max(11, { message: "CPF deve ter 11 dígitos." }),
     userId: z.string(),
+    token: z.string().optional(),
 });
 
 
@@ -111,11 +112,11 @@ async function getFactaUserCredentials(userId: string): Promise<{ credentials: A
 }
 
 
-async function getFactaToken(credentials: ApiCredentials): Promise<{ token: string | null; error: string | null }> {
+export async function getFactaAuthToken(credentials: ApiCredentials): Promise<{ token: string | undefined; error: string | null }> {
   const { facta_username, facta_password } = credentials;
 
   if (!facta_username || !facta_password) {
-      return { token: null, error: "Credenciais da Facta não fornecidas." };
+      return { token: undefined, error: "Credenciais da Facta não fornecidas." };
   }
 
   const encodedCreds = Buffer.from(`${facta_username}:${facta_password}`).toString('base64');
@@ -132,14 +133,14 @@ async function getFactaToken(credentials: ApiCredentials): Promise<{ token: stri
 
     if (data.erro || !data.token) {
       console.error(`[FACTA AUTH] Falha ao gerar token: ${data.mensagem}`);
-      return { token: null, error: `Falha ao gerar token da Facta: ${data.mensagem}` };
+      return { token: undefined, error: `Falha ao gerar token da Facta: ${data.mensagem}` };
     }
 
     return { token: data.token, error: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Erro de comunicação ao gerar token da Facta.";
     console.error('[FACTA AUTH] Erro de comunicação:', error);
-    return { token: null, error: message };
+    return { token: undefined, error: message };
   }
 }
 
@@ -180,9 +181,9 @@ export async function consultarOfertasFacta(input: z.infer<typeof cltConsultaSch
         return { success: false, message: credError || "Credenciais não encontradas." };
     }
 
-    const { token, error: tokenError } = await getFactaToken(credentials);
-    if (tokenError) {
-        return { success: false, message: tokenError };
+    const { token, error: tokenError } = await getFactaAuthToken(credentials);
+    if (tokenError || !token) {
+        return { success: false, message: tokenError || "Não foi possível obter o token da Facta" };
     }
     
     await logActivity(userId, cpf, 'Consulta CLT Facta');
@@ -224,16 +225,21 @@ export async function consultarSaldoFgtsFacta(input: z.infer<typeof fgtsConsulta
     }
 
     const { cpf, userId } = validation.data;
+    let { token } = validation.data;
 
-    const { credentials, error: credError } = await getFactaUserCredentials(userId);
-    if (credError || !credentials) {
-        return { success: false, message: credError || "Credenciais não encontradas." };
+    if (!token) {
+        const { credentials, error: credError } = await getFactaUserCredentials(userId);
+        if (credError || !credentials) {
+            return { success: false, message: credError || "Credenciais não encontradas." };
+        }
+
+        const { token: authToken, error: tokenError } = await getFactaAuthToken(credentials);
+        if (tokenError || !authToken) {
+            return { success: false, message: tokenError || "Não foi possível obter o token da Facta" };
+        }
+        token = authToken;
     }
 
-    const { token, error: tokenError } = await getFactaToken(credentials);
-    if (tokenError) {
-        return { success: false, message: tokenError };
-    }
 
     await logActivity(userId, cpf, 'Consulta FGTS Facta');
 
@@ -262,3 +268,5 @@ export async function consultarSaldoFgtsFacta(input: z.infer<typeof fgtsConsulta
         return { success: false, message };
     }
 }
+
+    
