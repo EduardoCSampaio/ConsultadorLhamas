@@ -57,7 +57,7 @@ export default function AdminHistoryPage() {
     }, []);
 
     const providers = useMemo(() => {
-        const allProviders = logs.map(log => log.provider).filter(Boolean).map(p => p.toLowerCase());
+        const allProviders = logs.map(log => log.provider).filter(Boolean).map(p => p.toUpperCase());
         return ['all', ...Array.from(new Set(allProviders))];
     }, [logs]);
 
@@ -65,14 +65,14 @@ export default function AdminHistoryPage() {
         return logs.filter(log => {
             const emailMatch = log.userEmail.toLowerCase().includes(emailFilter.toLowerCase());
             const documentMatch = log.documentNumber ? log.documentNumber.includes(documentFilter) : documentFilter === "";
-            const providerMatch = providerFilter === 'all' || log.provider?.toLowerCase() === providerFilter;
+            const providerMatch = providerFilter === 'all' || log.provider?.toUpperCase() === providerFilter;
             return emailMatch && documentMatch && providerMatch;
         });
     }, [logs, emailFilter, documentFilter, providerFilter]);
     
     const getProviderVariant = (provider: string = '') => {
-        if (provider.includes('v8')) return 'secondary';
-        if (provider.includes('facta')) return 'default';
+        if (provider.toLowerCase().includes('v8')) return 'secondary';
+        if (provider.toLowerCase().includes('facta')) return 'default';
         return 'outline';
     }
     

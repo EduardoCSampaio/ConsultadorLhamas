@@ -44,7 +44,8 @@ const reprocessBatchSchema = z.object({
 export type BatchJob = {
     id: string;
     fileName: string;
-    provider: string, // Now can be 'v8-qi', 'v8-cartos', 'v8-bms', 'facta'
+    provider: string; // 'V8DIGITAL' or 'facta'
+    v8Provider?: V8Provider; // 'qi', 'cartos', 'bms' if provider is 'V8DIGITAL'
     status: 'processing' | 'completed' | 'error' | 'pending';
     totalCpfs: number;
     processedCpfs: number;
@@ -115,6 +116,7 @@ export async function getBatches(input?: { batchId: string }): Promise<{ status:
                 id: doc.id,
                 fileName: data.fileName,
                 provider: data.provider,
+                v8Provider: data.v8Provider,
                 status: data.status,
                 totalCpfs: data.totalCpfs,
                 processedCpfs: data.processedCpfs,
@@ -212,13 +214,15 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
   initializeFirebaseAdmin();
   const firestore = getFirestore();
   
-  const finalProvider = provider === 'v8' && v8Provider ? `${provider}-${v8Provider}` : provider;
-  const batchId = `batch-${finalProvider}-${Date.now()}-${userId.substring(0, 5)}`;
+  const displayProvider = provider === 'v8' ? 'V8DIGITAL' : provider;
+  
+  const batchId = `batch-${displayProvider}-${v8Provider || ''}-${Date.now()}-${userId.substring(0, 5)}`;
   const batchRef = firestore.collection('batches').doc(batchId);
 
   const batchData: Omit<BatchJob, 'createdAt' | 'id'> & { createdAt: FieldValue } = {
       fileName: fileName,
-      provider: finalProvider,
+      provider: displayProvider,
+      v8Provider: v8Provider,
       status: 'pending', // Start as pending, background process will change it
       totalCpfs: cpfs.length,
       processedCpfs: 0,
@@ -251,7 +255,7 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
 
   return {
     status: 'success',
-    message: `Lote para ${finalProvider.toUpperCase()} criado e pronto para processamento.`,
+    message: `Lote para ${displayProvider.toUpperCase()} criado e pronto para processamento.`,
     batch: serializableBatch
   };
 }
@@ -269,16 +273,18 @@ async function processV8BatchInBackground(batchId: string) {
         const batchData = batchDoc.data() as BatchJob;
         await batchRef.update({ status: 'processing' });
         
-        const { cpfs, provider: finalProvider, userId, userEmail } = batchData;
+        const { cpfs, userId, userEmail, v8Provider } = batchData;
         
+        if (!v8Provider) {
+            throw new Error("V8 sub-provider (qi, cartos, bms) is missing.");
+        }
+
         const userDoc = await firestore.collection('users').doc(userId).get();
         if (!userDoc.exists) throw new Error(`User with ID ${userId} not found.`);
         const userCredentials = userDoc.data() as ApiCredentials;
         
         const { token: authToken, error: authError } = await getV8AuthToken(userCredentials);
         if (authError || !authToken) throw new Error(authError || "Failed to get V8 auth token.");
-        
-        const subProvider = finalProvider.split('-')[1] as V8Provider;
         
         // Mark all as sent immediately for V8
         await batchRef.update({ 
@@ -288,7 +294,7 @@ async function processV8BatchInBackground(batchId: string) {
         for (const cpf of cpfs) {
             // Since V8 is webhook-based, we just send the request. 
             // We can't reliably update real-time progress here.
-            await consultarSaldoV8({ documentNumber: cpf, userId, userEmail, token: authToken, provider: subProvider });
+            await consultarSaldoV8({ documentNumber: cpf, userId, userEmail, token: authToken, provider: v8Provider });
         }
         
         // For V8, "completed" just means all requests were sent. Actual results depend on webhooks.
@@ -330,7 +336,8 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
         const responsesSnapshot = await firestore.collection('webhookResponses').get();
         const processedCpfIds = new Set(responsesSnapshot.docs.map(doc => doc.id));
         
-        const mainProvider = originalBatchData.provider.split('-')[0];
+        const mainProvider = originalBatchData.provider.toLowerCase() === 'v8digital' ? 'v8' : 'facta';
+        
         const cpfsToReprocess = originalBatchData.cpfs.filter(cpf => {
             const docId = mainProvider === 'v8' ? cpf : `facta-${cpf}`;
             return !processedCpfIds.has(docId);
@@ -340,15 +347,13 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
             return { status: 'error', message: 'Não há CPFs pendentes para reprocessar.' };
         }
         
-        const subProvider = originalBatchData.provider.split('-')[1] as V8Provider | undefined;
-
         const result = await processarLoteFgts({
             cpfs: cpfsToReprocess,
             provider: mainProvider as Provider,
             userId: originalBatchData.userId,
             userEmail: originalBatchData.userEmail,
             fileName: `REPROCESS_${originalBatchData.fileName}`,
-            v8Provider: subProvider,
+            v8Provider: originalBatchData.v8Provider,
         });
 
         if (result.status === 'error') {
@@ -376,8 +381,8 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         return { status: 'error', fileName: '', fileContent: '', message: 'Dados de entrada para o relatório são inválidos.' };
     }
 
-    const { cpfs, fileName: originalFileName, createdAt, provider: finalProvider } = validation.data;
-    const mainProvider = finalProvider.split('-')[0];
+    const { cpfs, fileName: originalFileName, createdAt, provider: displayProvider } = validation.data;
+    const mainProvider = displayProvider.toLowerCase() === 'v8digital' ? 'v8' : 'facta';
 
     initializeFirebaseAdmin();
     const firestore = getFirestore();
@@ -499,7 +504,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
     const date = new Date(createdAt);
     const formattedDate = date.toLocaleDateString('pt-BR').replace(/\//g, '-');
     const formattedTime = date.toTimeString().split(' ')[0].replace(/:/g, '-');
-    const fileName = `HIGIENIZACAO_FGTS_${finalProvider.toUpperCase()}_${originalFileName.replace(/\.xlsx?$/i, '')}_${formattedDate}_${formattedTime}.xlsx`;
+    const fileName = `HIGIENIZACAO_FGTS_${displayProvider.toUpperCase()}_${originalFileName.replace(/\.xlsx?$/i, '')}_${formattedDate}_${formattedTime}.xlsx`;
 
     const fileContent = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64String}`;
 

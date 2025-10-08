@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from "react";
@@ -41,8 +42,6 @@ const formatCurrency = (value: string | number | undefined | null) => {
         currency: 'BRL',
     }).format(numberValue);
 };
-
-const v8Providers: V8Provider[] = ['qi', 'cartos', 'bms'];
 
 export default function FgtsManualPage() {
   const { user } = useUser();
@@ -128,11 +127,11 @@ export default function FgtsManualPage() {
                          <div className="flex items-center space-x-6 pt-2">
                             <div className="flex items-center space-x-2">
                                 <Checkbox id="v8" checked={selectedProviders.includes('v8')} onCheckedChange={() => handleProviderChange('v8')} />
-                                <Label htmlFor="v8" className='text-base'>V8 (Webhook)</Label>
+                                <Label htmlFor="v8" className='text-base'>V8DIGITAL</Label>
                             </div>
                             <div className="flex items-center space-x-2">
                                 <Checkbox id="facta" checked={selectedProviders.includes('facta')} onCheckedChange={() => handleProviderChange('facta')} />
-                                <Label htmlFor="facta" className='text-base'>Facta (Síncrono)</Label>
+                                <Label htmlFor="facta" className='text-base'>Facta</Label>
                             </div>
                         </div>
                     </div>
@@ -204,27 +203,24 @@ export default function FgtsManualPage() {
 
     {!isLoading && results && results.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {results.map((result) => {
-                const isV8 = v8Providers.includes(result.provider as V8Provider);
-                return (
-                    <Card key={result.provider} className="p-4 flex flex-col justify-between">
-                        <div className="mb-4">
-                            {isV8 ? (
-                                <>
-                                    <p className="text-xl font-bold uppercase">V8</p>
-                                    <p className="text-sm uppercase text-muted-foreground">{result.provider}</p>
-                                </>
-                            ) : (
+            {results.map((result) => (
+                <Card key={result.provider === 'V8DIGITAL' ? `${result.provider}-${result.v8Provider}` : result.provider} className="p-4 flex flex-col justify-between">
+                    <div className="mb-4">
+                        {result.provider === 'V8DIGITAL' ? (
+                            <>
                                 <p className="text-xl font-bold uppercase">{result.provider}</p>
-                            )}
-                        </div>
-                        <div>
-                            <p className="text-sm text-muted-foreground">Saldo Disponível</p>
-                            <p className="text-2xl font-bold font-headline">{formatCurrency(result.balance)}</p>
-                        </div>
-                    </Card>
-                )
-            })}
+                                <p className="text-sm uppercase text-muted-foreground">{result.v8Provider}</p>
+                            </>
+                        ) : (
+                            <p className="text-xl font-bold uppercase">{result.provider}</p>
+                        )}
+                    </div>
+                    <div>
+                        <p className="text-sm text-muted-foreground">Saldo Disponível</p>
+                        <p className="text-2xl font-bold font-headline">{formatCurrency(result.balance)}</p>
+                    </div>
+                </Card>
+            ))}
         </div>
     )}
 

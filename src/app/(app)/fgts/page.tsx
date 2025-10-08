@@ -97,7 +97,7 @@ export default function FgtsBatchPage() {
 
             if (result.status === 'success' && result.batch) {
                 toast({
-                    title: `Lote para ${provider.toUpperCase()} iniciado`,
+                    title: `Lote para ${result.batch.provider.toUpperCase()} iniciado`,
                     description: `${cpfs.length} CPFs foram enviados para a esteira.`,
                 });
             } else {
@@ -164,11 +164,11 @@ export default function FgtsBatchPage() {
                     <div className="flex items-center space-x-6">
                         <div className="flex items-center space-x-2">
                             <Checkbox id="v8" checked={selectedProviders.includes('v8')} onCheckedChange={() => handleProviderChange('v8')} />
-                            <Label htmlFor="v8" className='text-base'>V8 (Webhook)</Label>
+                            <Label htmlFor="v8" className='text-base'>V8DIGITAL</Label>
                         </div>
                         <div className="flex items-center space-x-2">
                             <Checkbox id="facta" checked={selectedProviders.includes('facta')} onCheckedChange={() => handleProviderChange('facta')} />
-                            <Label htmlFor="facta" className='text-base'>Facta (Síncrono)</Label>
+                            <Label htmlFor="facta" className='text-base'>Facta</Label>
                         </div>
                     </div>
                     {selectedProviders.includes('v8') && (

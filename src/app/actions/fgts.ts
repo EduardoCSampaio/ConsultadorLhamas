@@ -31,7 +31,8 @@ type ActionResult = {
 };
 
 export type FgtsBalance = {
-    provider: 'qi' | 'cartos' | 'bms' | 'facta';
+    provider: 'V8DIGITAL' | 'facta';
+    v8Provider?: 'qi' | 'cartos' | 'bms';
     balance: number;
 };
 
@@ -134,9 +135,9 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
         await firestore.collection('activityLogs').add({
             userId: userId,
             userEmail: userEmail,
-            action: `Consulta FGTS - V8 (${provider})`,
+            action: `Consulta FGTS - V8`,
             documentNumber: documentNumber,
-            provider: `v8-${provider}`,
+            provider: 'V8DIGITAL',
             createdAt: FieldValue.serverTimestamp(),
         });
     } catch (logError) {
@@ -171,7 +172,8 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
             status: 'error',
             message: errorMessage,
             id: documentNumber.toString(),
-            provider: `v8-${provider}`,
+            provider: 'V8DIGITAL',
+            v8Provider: provider,
         }, { merge: true });
         return { status: 'error', stepIndex: 1, message: errorMessage };
     }
@@ -194,13 +196,14 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
         status: 'error',
         message: message,
         id: documentNumber.toString(),
-        provider: `v8-${provider}`,
+        provider: 'V8DIGITAL',
+        v8Provider: provider,
     }, { merge: true });
     return { status: 'error', stepIndex: 1, message };
   }
 }
 
-async function waitForV8Response(cpf: string, timeout = 7000): Promise<number | null> {
+async function waitForV8Response(cpf: string, timeout = 7000): Promise<{ balance: number, v8Provider?: 'qi' | 'cartos' | 'bms' } | null> {
     initializeFirebaseAdmin();
     const firestore = getFirestore();
     const docRef = firestore.collection('webhookResponses').doc(cpf);
@@ -212,7 +215,10 @@ async function waitForV8Response(cpf: string, timeout = 7000): Promise<number | 
                 // Check for success status and a positive balance
                 if (data?.status === 'success' && data.responseBody?.balance > 0) {
                     unsubscribe();
-                    resolve(data.responseBody.balance);
+                    resolve({ 
+                        balance: data.responseBody.balance,
+                        v8Provider: data.v8Provider
+                    });
                 // Also resolve if there is an error to stop waiting
                 } else if (data?.status === 'error') {
                     unsubscribe();
@@ -276,9 +282,13 @@ export async function consultarSaldoManual(input: z.infer<typeof manualActionSch
                 await firestore.collection('webhookResponses').doc(cpf).delete().catch(() => {});
                 
                 await consultarSaldoFgts({ documentNumber: cpf, userId, userEmail, provider: v8Provider, token: v8Token });
-                const balance = await waitForV8Response(cpf); // Wait for webhook
-                if (balance !== null && balance > 0) {
-                    finalBalances.push({ provider: v8Provider, balance });
+                const v8result = await waitForV8Response(cpf); // Wait for webhook
+                if (v8result && v8result.balance > 0) {
+                    finalBalances.push({ 
+                        provider: 'V8DIGITAL', 
+                        balance: v8result.balance,
+                        v8Provider: v8result.v8Provider
+                    });
                 }
                 resolve(null);
             });

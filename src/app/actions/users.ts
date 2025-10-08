@@ -58,6 +58,7 @@ export type ActivityLog = {
     userEmail: string;
     action: string;
     documentNumber?: string;
+    provider?: string;
     createdAt: string; // ISO string
 };
 
@@ -88,6 +89,7 @@ export async function getActivityLogs(): Promise<{logs: ActivityLog[] | null, er
                 userEmail: data.userEmail,
                 action: data.action,
                 documentNumber: data.documentNumber,
+                provider: data.provider,
                 createdAt: serializableCreatedAt,
             } as ActivityLog;
         });

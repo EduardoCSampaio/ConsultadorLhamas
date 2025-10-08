@@ -142,7 +142,7 @@ export async function getFactaAuthToken(username?: string, password?: string): P
   }
 }
 
-async function logActivity(userId: string, cpf: string, action: string) {
+async function logActivity(userId: string, cpf: string, action: string, provider: string) {
     try {
         const firestore = getFirestore();
         const userDoc = await firestore.collection('users').doc(userId).get();
@@ -157,7 +157,7 @@ async function logActivity(userId: string, cpf: string, action: string) {
             userEmail: userEmail,
             action: action,
             documentNumber: cpf,
-            provider: 'facta',
+            provider: provider,
             createdAt: FieldValue.serverTimestamp(),
         });
     } catch (logError) {
@@ -184,7 +184,7 @@ export async function consultarOfertasFacta(input: z.infer<typeof cltConsultaSch
         return { success: false, message: tokenError || "Não foi possível obter o token da Facta" };
     }
     
-    await logActivity(userId, cpf, 'Consulta CLT Facta');
+    await logActivity(userId, cpf, 'Consulta CLT Facta', 'facta');
 
     try {
         const url = new URL(`${FACTA_API_BASE_URL_PROD}/consignado-trabalhador/consulta-ofertas`);
@@ -239,7 +239,7 @@ export async function consultarSaldoFgtsFacta(input: z.infer<typeof fgtsConsulta
     }
 
 
-    await logActivity(userId, cpf, 'Consulta FGTS Facta');
+    await logActivity(userId, cpf, 'Consulta FGTS Facta', 'facta');
 
     try {
         const url = new URL(`${FACTA_API_BASE_URL_PROD}/fgts/saldo`);

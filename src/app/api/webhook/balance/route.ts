@@ -31,8 +31,7 @@ export async function POST(request: NextRequest) {
     
     // The provider should be sent in the webhook payload, e.g. { ..., provider: 'qi' }
     // This allows us to know which V8 partner the response is for.
-    const v8Provider = payload.provider || 'qi'; // Default to 'qi' if not provided
-    const finalProvider = `v8-${v8Provider}`;
+    const v8Partner = payload.provider || 'qi'; // Default to 'qi' if not provided
 
     const docRef = db.collection('webhookResponses').doc(docId.toString());
 
@@ -60,10 +59,11 @@ export async function POST(request: NextRequest) {
       status: status,
       message: statusMessage,
       id: docId.toString(),
-      provider: finalProvider, // Save the specific provider (e.g., 'v8-qi')
+      provider: "V8DIGITAL", // Save the generic provider name
+      v8Provider: v8Partner,  // Save the specific partner
     }, { merge: true });
 
-    console.log(`Payload stored in Firestore with ID: ${docId}. Status: ${status}. Provider: ${finalProvider}`);
+    console.log(`Payload stored in Firestore with ID: ${docId}. Status: ${status}. Provider: V8DIGITAL (${v8Partner})`);
 
     return NextResponse.json({ 
         status: 'success', 
