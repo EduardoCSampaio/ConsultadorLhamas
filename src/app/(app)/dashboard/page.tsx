@@ -6,14 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Users, UserCheck, UserPlus, ArrowRight, Activity, TrendingUp } from "lucide-react";
+import { Users, UserCheck, UserPlus, ArrowRight, Activity, TrendingUp, Settings, Search, CheckCircle, XCircle } from "lucide-react";
 import React from "react";
 import { useFirestore, useMemoFirebase, useUser } from "@/firebase";
 import { doc } from "firebase/firestore";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { UserProfile } from "@/app/actions/users";
-import { getUsers, getActivityLogs, ActivityLog } from "@/app/actions/users";
+import { getUsers, getActivityLogs, getUserActivityLogs, ActivityLog } from "@/app/actions/users";
 import { useDoc } from "@/firebase/firestore/use-doc";
 
 
@@ -212,27 +212,124 @@ function AdminDashboard({
   );
 }
 
-function UserDashboardPlaceholder() {
+function UserDashboard({ userProfile }: { userProfile: UserProfile }) {
+  const [activity, setActivity] = React.useState<ActivityLog[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    async function loadActivity() {
+      setIsLoading(true);
+      const { logs, error: fetchError } = await getUserActivityLogs({ userId: userProfile.uid });
+      if (fetchError) {
+        setError(fetchError);
+      } else {
+        setActivity(logs || []);
+      }
+      setIsLoading(false);
+    }
+    loadActivity();
+  }, [userProfile.uid]);
+
+  const hasV8Creds = userProfile.v8_username && userProfile.v8_password && userProfile.v8_audience && userProfile.v8_client_id;
+  const hasFactaCreds = userProfile.facta_username && userProfile.facta_password;
+
   return (
     <div className="flex flex-col gap-6">
-       <PageHeader 
-        title="Bem-vindo"
-        description="Seu painel está sendo preparado."
-      />
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col items-center justify-center gap-4 text-center h-96 border-2 border-dashed rounded-lg">
-              <h3 className="text-2xl font-bold tracking-tight">
-                  Dashboard em Construção
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                  O seu dashboard pessoal será implementado aqui em breve.
-              </p>
-          </div>
-        </CardContent>
-      </Card>
+      <PageHeader
+        title={`Bem-vindo, ${userProfile.email.split('@')[0]}!`}
+        description="Aqui está um resumo rápido de sua atividade e configurações."
+      >
+        <Button asChild>
+            <Link href="/fgts">
+                Nova Consulta
+                <Search className="ml-2 h-4 w-4" />
+            </Link>
+        </Button>
+      </PageHeader>
+      
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Sua Atividade Recente</CardTitle>
+                    <CardDescription>Suas últimas 5 consultas realizadas.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {isLoading ? (
+                         <div className="space-y-2">
+                            {Array.from({length: 5}).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+                         </div>
+                    ) : error ? (
+                        <div className="text-red-500">{error}</div>
+                    ) : activity.length === 0 ? (
+                        <div className="text-center p-8 text-muted-foreground">
+                            Nenhuma atividade registrada ainda.
+                        </div>
+                    ) : (
+                        <div className="rounded-md border">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Ação</TableHead>
+                                        <TableHead>Documento</TableHead>
+                                        <TableHead className="text-right">Data</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {activity.map(log => (
+                                        <TableRow key={log.id}>
+                                            <TableCell>{log.action}</TableCell>
+                                            <TableCell className="font-mono text-xs">{log.documentNumber}</TableCell>
+                                            <TableCell className="text-right text-xs text-muted-foreground whitespace-nowrap">
+                                                {new Date(log.createdAt).toLocaleString('pt-BR')}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+        </div>
+
+        <div>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Configurações de API</CardTitle>
+                    <CardDescription>Status das suas credenciais.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                     <div className="flex items-center justify-between rounded-lg border p-3">
+                        <span className="font-semibold">API V8</span>
+                        {hasV8Creds ? (
+                            <Badge variant="default"><CheckCircle className="mr-1 h-3 w-3"/>Configurada</Badge>
+                        ) : (
+                            <Badge variant="destructive"><XCircle className="mr-1 h-3 w-3"/>Pendente</Badge>
+                        )}
+                    </div>
+                     <div className="flex items-center justify-between rounded-lg border p-3">
+                        <span className="font-semibold">API Facta</span>
+                        {hasFactaCreds ? (
+                            <Badge variant="default"><CheckCircle className="mr-1 h-3 w-3"/>Configurada</Badge>
+                        ) : (
+                            <Badge variant="destructive"><XCircle className="mr-1 h-3 w-3"/>Pendente</Badge>
+                        )}
+                    </div>
+                    <Button asChild className="w-full">
+                        <Link href="/configuracoes">
+                           <Settings className="mr-2 h-4 w-4" />
+                           Gerenciar Credenciais
+                        </Link>
+                    </Button>
+                </CardContent>
+            </Card>
+        </div>
+
+      </div>
     </div>
-  );
+  )
 }
 
 function AdminDashboardLoader() {
@@ -323,7 +420,10 @@ export default function DashboardPage() {
     return <AdminDashboard initialUsers={adminData.users} activityLogs={adminData.logs} error={adminData.error} />;
   }
 
-  return <UserDashboardPlaceholder />;
-}
+  if (userProfile) {
+    return <UserDashboard userProfile={userProfile} />;
+  }
 
-    
+  // Fallback or loading state if userProfile is not available for some reason.
+  return <AdminDashboardLoader />;
+}

@@ -37,6 +37,11 @@ const setAdminClaimSchema = z.object({
   uid: z.string().min(1, { message: "UID do usuário é obrigatório." }),
 });
 
+const getUserActivitySchema = z.object({
+  userId: z.string().min(1),
+  limit: z.number().optional().default(5),
+});
+
 
 export type UserProfile = {
     uid: string;
@@ -51,6 +56,7 @@ export type ActivityLog = {
     userId: string;
     userEmail: string;
     action: string;
+    documentNumber?: string;
     createdAt: string; // ISO string
 };
 
@@ -80,6 +86,7 @@ export async function getActivityLogs(): Promise<{logs: ActivityLog[] | null, er
                 userId: data.userId,
                 userEmail: data.userEmail,
                 action: data.action,
+                documentNumber: data.documentNumber,
                 createdAt: serializableCreatedAt,
             } as ActivityLog;
         });
@@ -88,6 +95,54 @@ export async function getActivityLogs(): Promise<{logs: ActivityLog[] | null, er
     } catch (error) {
         const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao buscar logs de atividade.";
         console.error("Erro ao buscar logs de atividade:", message);
+        return { logs: null, error: message };
+    }
+}
+
+export async function getUserActivityLogs(input: z.infer<typeof getUserActivitySchema>): Promise<{logs: ActivityLog[] | null, error?: string}> {
+    const validation = getUserActivitySchema.safeParse(input);
+    if (!validation.success) {
+        return { logs: null, error: "Dados de entrada inválidos." };
+    }
+    const { userId, limit } = validation.data;
+    try {
+        initializeFirebaseAdmin();
+        const firestore = getFirestore();
+        const logsSnapshot = await firestore.collection('activityLogs')
+            .where('userId', '==', userId)
+            .orderBy('createdAt', 'desc')
+            .limit(limit)
+            .get();
+
+        if (logsSnapshot.empty) {
+            return { logs: [] };
+        }
+        
+        const logs = logsSnapshot.docs.map(doc => {
+            const data = doc.data();
+            const createdAt = data.createdAt;
+
+            let serializableCreatedAt = new Date().toISOString(); // Default value
+            if (createdAt instanceof Timestamp) {
+                serializableCreatedAt = createdAt.toDate().toISOString();
+            } else if (typeof createdAt === 'string') {
+                serializableCreatedAt = createdAt;
+            }
+
+            return {
+                id: doc.id,
+                userId: data.userId,
+                userEmail: data.userEmail,
+                action: data.action,
+                documentNumber: data.documentNumber,
+                createdAt: serializableCreatedAt,
+            } as ActivityLog;
+        });
+
+        return { logs };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao buscar os logs do usuário.";
+        console.error(`Erro ao buscar logs para o usuário ${userId}:`, message);
         return { logs: null, error: message };
     }
 }
