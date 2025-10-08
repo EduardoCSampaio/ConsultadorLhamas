@@ -11,6 +11,8 @@ export type ApiCredentials = {
   v8_password?: string;
   v8_audience?: string;
   v8_client_id?: string;
+  facta_username?: string;
+  facta_password?: string;
 };
 
 const updateApiCredentialsSchema = z.object({
@@ -20,6 +22,8 @@ const updateApiCredentialsSchema = z.object({
     v8_password: z.string().optional(),
     v8_audience: z.string().optional(),
     v8_client_id: z.string().optional(),
+    facta_username: z.string().optional(),
+    facta_password: z.string().optional(),
   }),
 });
 
@@ -121,6 +125,8 @@ export async function getUsers(): Promise<{users: UserProfile[] | null, error?: 
                 v8_password: data.v8_password,
                 v8_audience: data.v8_audience,
                 v8_client_id: data.v8_client_id,
+                facta_username: data.facta_username,
+                facta_password: data.facta_password,
             } as UserProfile;
         });
 
@@ -194,6 +200,8 @@ export async function updateApiCredentials(input: z.infer<typeof updateApiCreden
             v8_password: credentials.v8_password || null,
             v8_audience: credentials.v8_audience || null,
             v8_client_id: credentials.v8_client_id || null,
+            facta_username: credentials.facta_username || null,
+            facta_password: credentials.facta_password || null,
         });
 
         return { success: true };

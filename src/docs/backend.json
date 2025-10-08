@@ -92,6 +92,14 @@
         "v8_client_id": {
             "type": "string",
             "description": "Client ID for the V8 API integration."
+        },
+        "facta_username": {
+            "type": "string",
+            "description": "Username for the Facta API integration."
+        },
+        "facta_password": {
+            "type": "string",
+            "description": "Password for the Facta API integration (should be stored securely)."
         }
       },
       "required": [
