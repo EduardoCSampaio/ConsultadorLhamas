@@ -31,6 +31,7 @@ import {
   Workflow,
   FileText,
   User,
+  BookMarked,
 } from "lucide-react";
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -47,6 +48,7 @@ const allBaseMenuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard", tooltip: "Dashboard", adminOnly: false },
   // FGTS is now a collapsible menu
   { href: "/esteira", icon: Workflow, label: "Esteira", tooltip: "Acompanhamento de Lotes", adminOnly: true },
+  { href: "/admin/history", icon: BookMarked, label: "Histórico", tooltip: "Histórico de Atividade", adminOnly: true },
 ];
 
 const adminBottomMenuItems = [
