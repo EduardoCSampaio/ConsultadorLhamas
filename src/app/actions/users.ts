@@ -24,7 +24,7 @@ const updateApiCredentialsSchema = z.object({
     v8_client_id: z.string().optional(),
     facta_username: z.string().optional(),
     facta_password: z.string().optional(),
-  }),
+  }).partial(), // Allows partial updates
 });
 
 
@@ -194,15 +194,16 @@ export async function updateApiCredentials(input: z.infer<typeof updateApiCreden
         const firestore = getFirestore();
         const userRef = firestore.collection('users').doc(uid);
         
-        // Use a transaction or a simple update to set the new credentials
-        await userRef.update({
-            v8_username: credentials.v8_username || null,
-            v8_password: credentials.v8_password || null,
-            v8_audience: credentials.v8_audience || null,
-            v8_client_id: credentials.v8_client_id || null,
-            facta_username: credentials.facta_username || null,
-            facta_password: credentials.facta_password || null,
-        });
+        // Filter out undefined values so Firestore doesn't overwrite fields with null
+        const credentialsToUpdate = Object.fromEntries(
+            Object.entries(credentials).filter(([_, value]) => value !== undefined)
+        );
+
+        if (Object.keys(credentialsToUpdate).length === 0) {
+            return { success: true }; // Nothing to update
+        }
+
+        await userRef.update(credentialsToUpdate);
 
         return { success: true };
     } catch (error) {
