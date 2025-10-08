@@ -20,7 +20,6 @@ import { Loader2, Search, AlertCircle, Wallet } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { useUser } from "@/firebase";
 import { consultarSaldoManual, type FgtsBalance } from "@/app/actions/fgts";
-import { QiTechLogo, CartosLogo, BmsLogo } from "@/components/provider-logos";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -42,22 +41,6 @@ const formatCurrency = (value: string | number | undefined | null) => {
         currency: 'BRL',
     }).format(numberValue);
 };
-
-const ProviderLogo = ({ provider }: { provider: string }) => {
-    switch (provider) {
-        case 'qi':
-            return <QiTechLogo className="h-8 w-auto" />;
-        case 'cartos':
-            return <CartosLogo className="h-8 w-auto" />;
-        case 'bms':
-            return <BmsLogo className="h-8 w-auto" />;
-        case 'facta':
-             return <p className="text-2xl font-bold text-blue-600">Facta</p>;
-        default:
-            return <span className="text-sm font-semibold capitalize">{provider}</span>;
-    }
-}
-
 
 export default function FgtsManualPage() {
   const { user } = useUser();
@@ -222,7 +205,7 @@ export default function FgtsManualPage() {
             {results.map((result) => (
                 <Card key={result.provider} className="p-4 flex flex-col justify-between">
                     <div className="mb-4">
-                        <ProviderLogo provider={result.provider} />
+                        <p className="text-xl font-bold uppercase">{result.provider}</p>
                     </div>
                     <div>
                         <p className="text-sm text-muted-foreground">Saldo Disponível</p>
