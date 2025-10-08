@@ -182,7 +182,7 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
   const batchId = `batch-${finalProvider}-${Date.now()}-${userId.substring(0, 5)}`;
   const batchRef = firestore.collection('batches').doc(batchId);
 
-  const batchData: Omit<BatchJob, 'createdAt' | 'id'> & { createdAt: FieldValue; userId: string; } = {
+  const batchData: Omit<BatchJob, 'createdAt' | 'id'> & { createdAt: FieldValue; userId: string; userEmail: string; } = {
       fileName: fileName,
       provider: finalProvider,
       status: 'processing',
@@ -191,6 +191,7 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
       cpfs: cpfs,
       createdAt: FieldValue.serverTimestamp(),
       userId: userId,
+      userEmail: userEmail,
   };
 
   try {
@@ -218,6 +219,7 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
 }
 
 async function processBatchInBackground(batchId: string) {
+    console.log(`[Batch ${batchId}] Starting background processing...`);
     initializeFirebaseAdmin();
     const firestore = getFirestore();
     const batchRef = firestore.collection('batches').doc(batchId);
@@ -232,11 +234,11 @@ async function processBatchInBackground(batchId: string) {
         const batchData = batchDoc.data() as Omit<BatchJob, 'createdAt' | 'id'> & { userId: string, userEmail: string };
         const { cpfs, provider: finalProvider, userId, userEmail } = batchData;
         
-        console.log(`[Batch ${batchId}] Starting background processing for ${cpfs.length} CPFs via ${finalProvider}.`);
+        console.log(`[Batch ${batchId}] Processing for ${cpfs.length} CPFs via ${finalProvider}.`);
 
         const userDoc = await firestore.collection('users').doc(userId).get();
         if (!userDoc.exists) {
-            throw new Error(`User with ID ${userId} not found.`);
+            throw new Error(`[Batch ${batchId}] User with ID ${userId} not found.`);
         }
         const userCredentials = userDoc.data() as ApiCredentials;
         
@@ -246,6 +248,8 @@ async function processBatchInBackground(batchId: string) {
         const mainProvider = finalProvider.split('-')[0];
         const subProvider = finalProvider.split('-')[1] as V8Provider | undefined;
         
+        console.log(`[Batch ${batchId}] Authenticating with provider: ${mainProvider}`);
+
         if (mainProvider === 'v8') {
              const v8Creds: ApiCredentials = {
                 v8_username: userCredentials.v8_username,
@@ -263,16 +267,22 @@ async function processBatchInBackground(batchId: string) {
         }
 
         if (authError || !authToken) {
+            console.error(`[Batch ${batchId}] Authentication failed: ${authError || "Token is undefined."}`);
             throw new Error(authError || "Failed to get auth token.");
         }
+        
+        console.log(`[Batch ${batchId}] Authentication successful. Token received.`);
         
         let processedCount = 0;
         for (const cpf of cpfs) {
             console.log(`[Batch ${batchId}] Processing CPF: ${cpf}`);
             
             if (mainProvider === 'v8' && subProvider) {
+                // This is an async webhook-based call, so we just fire and forget.
+                // The result will be written by the webhook handler.
                 await consultarSaldoV8({ documentNumber: cpf, userId, userEmail, token: authToken, provider: subProvider });
             } else if (mainProvider === 'facta') {
+                // This is a synchronous call.
                 const result = await consultarSaldoFgtsFacta({ cpf, userId, token: authToken });
                 
                 const docId = `facta-${cpf}`;
@@ -332,6 +342,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
 
     for (const cpf of cpfs) {
         try {
+            // V8 provider uses just the CPF as ID. Facta prefixes it.
             const docId = mainProvider === 'v8' ? cpf : `facta-${cpf}`;
             const docRef = firestore.collection('webhookResponses').doc(docId);
             const docSnap = await docRef.get();
@@ -340,11 +351,13 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                 const data = docSnap.data();
                 const responseBody = data?.responseBody;
                 
+                // Unified error checking
                 const providerError = responseBody?.errorMessage || responseBody?.error || data?.message;
                 const isSuccess = data?.status === 'success' && responseBody;
 
                 if (isSuccess) {
                     if (mainProvider === 'v8') {
+                        // V8 has a simple structure
                         const balanceValue = parseFloat(responseBody.balance);
                          results.push({
                             CPF: cpf,
@@ -352,6 +365,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                             Mensagem: 'Sucesso',
                         });
                     } else if (mainProvider === 'facta') {
+                        // Facta has a more complex structure
                         const saldoTotal = parseFloat(responseBody.saldo_total);
                         let row: any = {
                             CPF: cpf,
@@ -359,7 +373,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                             Mensagem: 'Sucesso',
                             'Data Saldo': responseBody.data_saldo,
                         };
-                        // Flatten the response
+                        // Flatten the response with all repasse data
                         for(let i=1; i<=12; i++){
                             if(responseBody[`dataRepasse_${i}`]){
                                 row[`Data Repasse ${i}`] = responseBody[`dataRepasse_${i}`];
@@ -369,34 +383,55 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                         results.push(row);
                     }
                 } else {
-                    results.push({ CPF: cpf, Mensagem: providerError || "Erro no processamento." });
+                    results.push({ CPF: cpf, Saldo: '0.00', 'Saldo Total': '0.00', Mensagem: providerError || "Erro no processamento." });
                 }
             } else {
-                results.push({ CPF: cpf, Mensagem: 'Nenhum resultado encontrado.' });
+                results.push({ CPF: cpf, Saldo: '0.00', 'Saldo Total': '0.00', Mensagem: 'Nenhum resultado encontrado.' });
             }
         } catch (error) {
-             results.push({ CPF: cpf, Mensagem: 'Erro interno ao consultar resultado.' });
+             const message = error instanceof Error ? error.message : 'Erro interno ao consultar resultado.';
+             results.push({ CPF: cpf, Saldo: '0.00', 'Saldo Total': '0.00', Mensagem: message });
         }
     }
 
     if (results.length === 0) {
         return { status: 'error', fileName: '', fileContent: '', message: 'Nenhum dado para gerar relatório.' };
     }
-
-    const worksheet = XLSX.utils.json_to_sheet(results);
     
-    if (results.length > 0) {
-        const firstRow = results[0];
-        const header = Object.keys(firstRow);
+    // Normalize data to have the same columns if mixing providers (not current case but good practice)
+    const finalResults = results.map(r => ({
+        CPF: r.CPF,
+        SALDO: r.Saldo || r['Saldo Total'] || '0.00',
+        MENSAGEM: r.Mensagem,
+        ...(mainProvider === 'facta' && {
+            'DATA_SALDO': r['Data Saldo'],
+            'DATA_REPASSE_1': r['Data Repasse 1'], 'VALOR_1': r['Valor 1'],
+            'DATA_REPASSE_2': r['Data Repasse 2'], 'VALOR_2': r['Valor 2'],
+            'DATA_REPASSE_3': r['Data Repasse 3'], 'VALOR_3': r['Valor 3'],
+            'DATA_REPASSE_4': r['Data Repasse 4'], 'VALOR_4': r['Valor 4'],
+            'DATA_REPASSE_5': r['Data Repasse 5'], 'VALOR_5': r['Valor 5'],
+            'DATA_REPASSE_6': r['Data Repasse 6'], 'VALOR_6': r['Valor 6'],
+            'DATA_REPASSE_7': r['Data Repasse 7'], 'VALOR_7': r['Valor 7'],
+            'DATA_REPASSE_8': r['Data Repasse 8'], 'VALOR_8': r['Valor 8'],
+            'DATA_REPASSE_9': r['Data Repasse 9'], 'VALOR_9': r['Valor 9'],
+            'DATA_REPASSE_10': r['Data Repasse 10'], 'VALOR_10': r['Valor 10'],
+            'DATA_REPASSE_11': r['Data Repasse 11'], 'VALOR_11': r['Valor 11'],
+            'DATA_REPASSE_12': r['Data Repasse 12'], 'VALOR_12': r['Valor 12'],
+        })
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(finalResults);
+    
+    if (finalResults.length > 0) {
+        const header = Object.keys(finalResults[0]);
         worksheet['!cols'] = header.map(key => ({
             wch: Math.max(15, key.length + 2) 
         }));
         
-        // Formatting currency
         const formatCurrencyCells = (colName: string) => {
             const colIndex = header.indexOf(colName);
             if (colIndex !== -1) {
-                results.forEach((_, index) => {
+                finalResults.forEach((_, index) => {
                     const cellRef = XLSX.utils.encode_cell({c: colIndex, r: index + 1});
                      if (worksheet[cellRef] && typeof worksheet[cellRef].v === 'number') {
                         worksheet[cellRef].z = '"R$"#,##0.00';
@@ -405,13 +440,9 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
             }
         };
         
-        if (mainProvider === 'facta') {
-            formatCurrencyCells('Saldo Total');
-            for (let i = 1; i <= 12; i++) {
-                formatCurrencyCells(`Valor ${i}`);
-            }
-        } else { // v8
-            formatCurrencyCells('Saldo');
+        formatCurrencyCells('SALDO');
+        for (let i = 1; i <= 12; i++) {
+            formatCurrencyCells(`VALOR_${i}`);
         }
     }
 
@@ -424,7 +455,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
     const date = new Date(createdAt);
     const formattedDate = date.toLocaleDateString('pt-BR').replace(/\//g, '-');
     const formattedTime = date.toTimeString().split(' ')[0].replace(/:/g, '-');
-    const fileName = `HIGIENIZACAO_FGTS${finalProvider.toUpperCase()}_${originalFileName.replace(/\.xlsx?$/i, '')}_${formattedDate}_${formattedTime}.xlsx`;
+    const fileName = `HIGIENIZACAO_FGTS_${finalProvider.toUpperCase()}_${originalFileName.replace(/\.xlsx?$/i, '')}_${formattedDate}_${formattedTime}.xlsx`;
 
     const fileContent = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64String}`;
 
