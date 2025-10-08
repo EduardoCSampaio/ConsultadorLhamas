@@ -7,9 +7,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { updateUserStatus, getUsers } from "@/app/actions/users";
+import { updateUserStatus, getUsers, exportUsersToExcel } from "@/app/actions/users";
 import { useToast } from "@/hooks/use-toast";
-import { Check, X, Pencil, UserX, UserCheck } from "lucide-react";
+import { Check, X, Pencil, UserX, UserCheck, Download, Loader2 } from "lucide-react";
 import type { UserProfile } from "@/app/actions/users";
 import { useEffect, useState } from "react";
 import {
@@ -37,6 +37,7 @@ export default function AdminUsersPage() {
     const { toast } = useToast();
     const [users, setUsers] = useState<UserProfile[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isExporting, setIsExporting] = useState(false);
     const [updatingId, setUpdatingId] = useState<string | null>(null);
 
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -95,6 +96,24 @@ export default function AdminUsersPage() {
         setIsEditModalOpen(false);
         setSelectedUser(null);
         setNewStatus(null);
+    };
+    
+     const handleExport = async () => {
+        setIsExporting(true);
+        toast({ title: "Gerando relatório...", description: "Aguarde enquanto preparamos o arquivo de usuários." });
+        const result = await exportUsersToExcel();
+        if (result.status === 'success' && result.fileContent && result.fileName) {
+            const link = document.createElement("a");
+            link.href = result.fileContent;
+            link.download = result.fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            toast({ title: "Download iniciado!", description: `O arquivo ${result.fileName} está sendo baixado.` });
+        } else {
+            toast({ variant: "destructive", title: "Erro ao exportar", description: result.message });
+        }
+        setIsExporting(false);
     };
 
     const getStatusVariant = (status: UserStatus) => {
@@ -169,7 +188,12 @@ export default function AdminUsersPage() {
                 <PageHeader
                     title="Gerenciamento de Usuários"
                     description="Aprove, rejeite e gerencie o acesso dos usuários ao sistema."
-                />
+                >
+                     <Button onClick={handleExport} disabled={isExporting || isLoading}>
+                        {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                        Exportar para Excel
+                    </Button>
+                </PageHeader>
                 <Card>
                     <CardHeader>
                         <CardTitle>Lista de Usuários</CardTitle>

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
+import * as XLSX from 'xlsx';
 
 export type ApiCredentials = {
   v8_username?: string;
@@ -268,5 +269,67 @@ export async function updateApiCredentials(input: z.infer<typeof updateApiCreden
         const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao salvar as credenciais.";
         console.error("Erro ao salvar credenciais de API:", message);
         return { success: false, error: message };
+    }
+}
+
+type ExportResult = {
+    status: 'success' | 'error';
+    fileName?: string;
+    fileContent?: string;
+    message?: string;
+};
+
+const getStatusText = (status: UserProfile['status']) => {
+    switch (status) {
+        case 'active': return 'Ativo';
+        case 'pending': return 'Pendente';
+        case 'rejected': return 'Rejeitado';
+        case 'inactive': return 'Inativo';
+        default: return status;
+    }
+};
+
+export async function exportUsersToExcel(): Promise<ExportResult> {
+    try {
+        const { users, error } = await getUsers();
+        if (error || !users) {
+            return { status: 'error', message: error || "Não foi possível buscar os usuários para exportar." };
+        }
+
+        const dataToExport = users.map(user => ({
+            'Email': user.email,
+            'Status': getStatusText(user.status),
+            'Função': user.role === 'admin' ? 'Administrador' : 'Usuário',
+            'Data de Cadastro': new Date(user.createdAt).toLocaleDateString('pt-BR'),
+        }));
+        
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Usuários');
+        
+        // Auto-adjust column widths
+        const header = ['Email', 'Status', 'Função', 'Data de Cadastro'];
+        const colWidths = header.map(h => ({ wch: Math.max(h.length, 20) })); // min width of 20
+        worksheet['!cols'] = colWidths;
+
+
+        const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
+        const base64String = buffer.toString('base64');
+        const fileContent = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64String}`;
+        
+        const formattedDate = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+        const fileName = `Relatorio_Usuarios_${formattedDate}.xlsx`;
+        
+        return {
+            status: 'success',
+            fileName,
+            fileContent,
+            message: 'Relatório de usuários gerado com sucesso.',
+        };
+
+    } catch (exportError) {
+        const message = exportError instanceof Error ? exportError.message : "Ocorreu um erro desconhecido durante a exportação.";
+        console.error("Erro ao exportar usuários:", message);
+        return { status: 'error', message };
     }
 }
