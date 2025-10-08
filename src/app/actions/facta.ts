@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import type { ApiCredentials } from './users';
+import { logActivity } from './users';
 
 const cltConsultaSchema = z.object({
   cpf: z.string().min(11, { message: "CPF deve ter 11 dígitos." }).max(11, { message: "CPF deve ter 11 dígitos." }),
@@ -142,30 +143,6 @@ export async function getFactaAuthToken(username?: string, password?: string): P
   }
 }
 
-async function logActivity(userId: string, cpf: string, action: string, provider: string) {
-    try {
-        const firestore = getFirestore();
-        const userDoc = await firestore.collection('users').doc(userId).get();
-        if (!userDoc.exists) {
-            console.error(`[logActivity] User with ID ${userId} not found.`);
-            return;
-        }
-        const userEmail = userDoc.data()?.email || 'N/A';
-
-        await firestore.collection('activityLogs').add({
-            userId: userId,
-            userEmail: userEmail,
-            action: action,
-            documentNumber: cpf,
-            provider: provider,
-            createdAt: FieldValue.serverTimestamp(),
-        });
-    } catch (logError) {
-        console.error(`Failed to log ${action} activity:`, logError);
-    }
-}
-
-
 export async function consultarOfertasFacta(input: z.infer<typeof cltConsultaSchema>): Promise<ConsultaFactaCltResult> {
     const validation = cltConsultaSchema.safeParse(input);
     if (!validation.success) {
@@ -184,7 +161,7 @@ export async function consultarOfertasFacta(input: z.infer<typeof cltConsultaSch
         return { success: false, message: tokenError || "Não foi possível obter o token da Facta" };
     }
     
-    await logActivity(userId, cpf, 'Consulta CLT Facta', 'facta');
+    await logActivity({ userId, documentNumber: cpf, action: 'Consulta CLT Facta', provider: 'facta' });
 
     try {
         const url = new URL(`${FACTA_API_BASE_URL_PROD}/consignado-trabalhador/consulta-ofertas`);
@@ -239,7 +216,7 @@ export async function consultarSaldoFgtsFacta(input: z.infer<typeof fgtsConsulta
     }
 
 
-    await logActivity(userId, cpf, 'Consulta FGTS Facta', 'facta');
+    await logActivity({ userId, documentNumber: cpf, action: 'Consulta FGTS Facta', provider: 'facta' });
 
     try {
         const url = new URL(`${FACTA_API_BASE_URL_PROD}/fgts/saldo`);

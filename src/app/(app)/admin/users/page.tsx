@@ -29,12 +29,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useUser } from "@/firebase";
 
 
 type UserStatus = UserProfile['status'];
 
 export default function AdminUsersPage() {
     const { toast } = useToast();
+    const { user: adminUser } = useUser();
     const [users, setUsers] = useState<UserProfile[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isExporting, setIsExporting] = useState(false);
@@ -99,9 +101,15 @@ export default function AdminUsersPage() {
     };
     
      const handleExport = async () => {
+        if (!adminUser) {
+            toast({ variant: "destructive", title: "Erro de autenticação" });
+            return;
+        }
         setIsExporting(true);
         toast({ title: "Gerando relatório...", description: "Aguarde enquanto preparamos o arquivo de usuários." });
-        const result = await exportUsersToExcel();
+        
+        const result = await exportUsersToExcel({ userId: adminUser.uid });
+
         if (result.status === 'success' && result.fileContent && result.fileName) {
             const link = document.createElement("a");
             link.href = result.fileContent;

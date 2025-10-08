@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
-import { getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import * as XLSX from 'xlsx';
 
@@ -43,6 +43,10 @@ const getUserActivitySchema = z.object({
   limit: z.number().optional().default(5),
 });
 
+const exportUsersSchema = z.object({
+    userId: z.string(),
+});
+
 
 export type UserProfile = {
     uid: string;
@@ -59,8 +63,37 @@ export type ActivityLog = {
     action: string;
     documentNumber?: string;
     provider?: string;
+    details?: string;
     createdAt: string; // ISO string
 };
+
+type LogActivityInput = {
+    userId: string;
+    action: string;
+    documentNumber?: string;
+    provider?: string;
+    details?: string;
+};
+
+export async function logActivity(input: LogActivityInput) {
+    try {
+        const firestore = getFirestore();
+        const userDoc = await firestore.collection('users').doc(input.userId).get();
+        if (!userDoc.exists) {
+            console.error(`[logActivity] User with ID ${input.userId} not found.`);
+            return;
+        }
+        const userEmail = userDoc.data()?.email || 'N/A';
+
+        await firestore.collection('activityLogs').add({
+            ...input,
+            userEmail: userEmail,
+            createdAt: FieldValue.serverTimestamp(),
+        });
+    } catch (logError) {
+        console.error(`Failed to log activity "${input.action}":`, logError);
+    }
+}
 
 // Action to fetch all activity logs
 export async function getActivityLogs(): Promise<{logs: ActivityLog[] | null, error?: string}> {
@@ -90,6 +123,7 @@ export async function getActivityLogs(): Promise<{logs: ActivityLog[] | null, er
                 action: data.action,
                 documentNumber: data.documentNumber,
                 provider: data.provider,
+                details: data.details,
                 createdAt: serializableCreatedAt,
             } as ActivityLog;
         });
@@ -137,6 +171,7 @@ export async function getUserActivityLogs(input: z.infer<typeof getUserActivityS
                 userEmail: data.userEmail,
                 action: data.action,
                 documentNumber: data.documentNumber,
+                details: data.details,
                 createdAt: serializableCreatedAt,
             } as ActivityLog;
         });
@@ -291,7 +326,17 @@ const getStatusText = (status: UserProfile['status']) => {
     }
 };
 
-export async function exportUsersToExcel(): Promise<ExportResult> {
+export async function exportUsersToExcel(input: z.infer<typeof exportUsersSchema>): Promise<ExportResult> {
+    const validation = exportUsersSchema.safeParse(input);
+    if (!validation.success) {
+        return { status: 'error', message: 'Input inválido.' };
+    }
+    
+    await logActivity({
+        userId: validation.data.userId,
+        action: 'Download Relatório de Usuários',
+    });
+    
     try {
         const { users, error } = await getUsers();
         if (error || !users) {

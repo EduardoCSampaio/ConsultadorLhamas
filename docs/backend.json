@@ -1,35 +1,36 @@
 
+
 {
   "entities": {
     "WebhookResponse": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "WebhookResponse",
       "type": "object",
-      "description": "Represents the response received from a webhook.",
+      "description": "Represents the response received from a webhook or a synchronous API call.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the webhook response."
+          "description": "Unique identifier for the response, typically cpf or provider-cpf."
         },
         "status": {
           "type": "string",
-          "description": "The status of the webhook response (e.g., pending, completed, failed)."
+          "description": "The status of the response (e.g., success, error)."
         },
         "message": {
           "type": "string",
-          "description": "A descriptive message associated with the webhook response."
+          "description": "A descriptive message associated with the response."
         },
-        "initialResponse": {
+        "provider": {
           "type": "string",
-          "description": "The initial response from the service that triggered the webhook."
+          "description": "The API provider that generated this response (e.g., v8, facta)."
         },
         "responseBody": {
           "type": "object",
-          "description": "The full response body received from the webhook endpoint."
+          "description": "The full response body received from the API."
         },
         "createdAt": {
           "type": "string",
-          "description": "Timestamp indicating when the webhook response was received.",
+          "description": "Timestamp indicating when the response was stored.",
           "format": "date-time"
         }
       },
@@ -66,7 +67,8 @@
           "enum": [
             "pending",
             "active",
-            "rejected"
+            "rejected",
+            "inactive"
           ],
           "description": "The current status of the user's account."
         },
@@ -90,6 +92,14 @@
         "v8_client_id": {
             "type": "string",
             "description": "Client ID for the V8 API integration."
+        },
+        "facta_username": {
+            "type": "string",
+            "description": "Username for the Facta API integration."
+        },
+        "facta_password": {
+            "type": "string",
+            "description": "Password for the Facta API integration (should be stored securely)."
         }
       },
       "required": [
@@ -115,7 +125,19 @@
             },
             "action": {
                 "type": "string",
-                "description": "A description of the action performed (e.g., 'Consulta FGTS')."
+                "description": "A description of the action performed (e.g., 'Consulta FGTS - V8')."
+            },
+             "provider": {
+                "type": "string",
+                "description": "The API provider used for the action (e.g., v8, facta)."
+            },
+            "documentNumber": {
+                "type": "string",
+                "description": "The document number (CPF) related to the action."
+            },
+            "details": {
+                "type": "string",
+                "description": "Additional details about the action, such as a filename or error message."
             },
             "createdAt": {
                 "type": "string",
@@ -124,6 +146,96 @@
             }
         },
         "required": ["userId", "userEmail", "action", "createdAt"]
+    },
+    "BatchJob": {
+        "title": "Batch Job",
+        "description": "Represents a batch processing job for FGTS queries.",
+        "type": "object",
+        "properties": {
+            "id": { "type": "string" },
+            "userId": { "type": "string" },
+            "fileName": { "type": "string" },
+            "provider": { "type": "string", "enum": ["v8", "facta"] },
+            "status": { "type": "string", "enum": ["processing", "completed", "error"] },
+            "totalCpfs": { "type": "number" },
+            "processedCpfs": { "type": "number" },
+            "message": { "type": "string" },
+            "createdAt": { "type": "string", "format": "date-time" },
+            "cpfs": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["id", "userId", "provider", "status", "totalCpfs", "processedCpfs", "createdAt"]
+    },
+     "FGTSBalance": {
+        "title": "FGTS Balance",
+        "description": "Represents the result of an FGTS balance check from a single provider.",
+        "type": "object",
+        "properties": {
+            "provider": {
+                "type": "string",
+                "description": "The name of the provider (e.g., 'qi', 'cartos', 'bms', 'facta')."
+            },
+            "balance": {
+                "type": "number",
+                "description": "The available FGTS balance."
+            }
+        },
+        "required": ["provider", "balance"]
+    },
+    "CLTConsent": {
+        "title": "CLT Consent",
+        "description": "Represents the consent term data for a CLT credit consultation.",
+        "type": "object",
+        "properties": {
+            "consultationId": { "type": "string" },
+            "borrowerDocumentNumber": { "type": "string" },
+            "gender": { "type": "string", "enum": ["male", "female"] },
+            "birthDate": { "type": "string", "format": "date" },
+            "signerName": { "type": "string" },
+            "signerEmail": { "type": "string", "format": "email" },
+            "signerPhone": { 
+                "type": "object",
+                "properties": {
+                    "countryCode": { "type": "string" },
+                    "areaCode": { "type": "string" },
+                    "phoneNumber": { "type": "string" }
+                }
+            },
+            "provider": { "type": "string" },
+            "userId": { "type": "string" },
+            "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "required": ["consultationId", "borrowerDocumentNumber", "userId", "createdAt"]
+    },
+    "SimulationConfig": {
+      "title": "Simulation Config",
+      "description": "Configuration for a CLT credit simulation.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "slug": { "type": "string" },
+        "monthly_interest_rate": { "type": "string" },
+        "number_of_installments": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "SimulationResult": {
+      "title": "Simulation Result",
+      "description": "The result of a CLT credit simulation.",
+      "type": "object",
+      "properties": {
+        "id_simulation": { "type": "string" },
+        "installment_value": { "type": "number" },
+        "number_of_installments": { "type": "number" },
+        "operation_amount": { "type": "number" },
+        "disbursement_amount": { "type": "number" },
+        "monthly_interest_rate": { "type": "number" },
+        "disbursement_option": {
+          "type": "object",
+          "properties": {
+            "cet": { "type": "number" },
+            "first_due_date": { "type": "string", "format": "date" }
+          }
+        }
+      }
     }
   },
   "auth": {
@@ -138,11 +250,11 @@
     }
   },
   "firestore": {
-    "/webhookResponses/{webhookResponseId}": {
+    "/webhookResponses/{responseId}": {
       "schema": {
         "$ref": "#/entities/WebhookResponse"
       },
-      "description": "Stores webhook responses. The webhookResponseId is the unique ID for each response."
+      "description": "Stores API responses. The responseId can be a CPF for V8, or a provider-prefixed ID for others."
     },
     "/users/{userId}": {
       "schema": {
@@ -155,6 +267,14 @@
             "$ref": "#/entities/ActivityLog"
         },
         "description": "Stores records of user activities for auditing and dashboard metrics."
+    },
+    "/batches/{batchId}": {
+        "schema": { "$ref": "#/entities/BatchJob" },
+        "description": "Stores the state and progress of a batch processing job."
+    },
+    "/cltConsents/{consentId}": {
+        "schema": { "$ref": "#/entities/CLTConsent" },
+        "description": "Stores generated CLT consent terms."
     }
   }
 }

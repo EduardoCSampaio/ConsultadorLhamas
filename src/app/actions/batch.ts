@@ -7,7 +7,7 @@ import { consultarSaldoFgtsFacta, getFactaAuthToken } from './facta';
 import * as XLSX from 'xlsx';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
-import type { ApiCredentials } from './users';
+import { type ApiCredentials, logActivity } from './users';
 
 type Provider = "v8" | "facta";
 type V8Provider = 'qi' | 'cartos' | 'bms';
@@ -26,6 +26,7 @@ const reportActionSchema = z.object({
   fileName: z.string(),
   createdAt: z.string(),
   provider: z.string(),
+  userId: z.string(),
 });
 
 const getBatchStatusSchema = z.object({
@@ -337,6 +338,13 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
         if (originalBatchData.status !== 'error') {
             return { status: 'error', message: 'Apenas lotes com status "erro" podem ser reprocessados.' };
         }
+        
+        await logActivity({
+            userId: originalBatchData.userId,
+            action: 'Reprocessamento de Lote',
+            provider: originalBatchData.provider,
+            details: `Reprocessando lote: ${originalBatchData.fileName} (ID: ${batchId})`
+        });
 
         const responsesSnapshot = await firestore.collection('webhookResponses').get();
         const processedCpfIds = new Set(responsesSnapshot.docs.map(doc => doc.id));
@@ -386,8 +394,20 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         return { status: 'error', fileName: '', fileContent: '', message: 'Dados de entrada para o relatório são inválidos.' };
     }
 
-    const { cpfs, fileName: originalFileName, createdAt, provider: displayProvider } = validation.data;
+    const { cpfs, fileName: originalFileName, createdAt, provider: displayProvider, userId } = validation.data;
     const mainProvider = displayProvider.toLowerCase() === 'v8digital' ? 'v8' : 'facta';
+    
+    const formattedDate = new Date(createdAt).toLocaleDateString('pt-BR').replace(/\//g, '-');
+    const formattedTime = new Date(createdAt).toTimeString().split(' ')[0].replace(/:/g, '-');
+    const fileName = `HIGIENIZACAO_FGTS_${displayProvider.toUpperCase()}_${originalFileName.replace(/\.xlsx?$/i, '')}_${formattedDate}_${formattedTime}.xlsx`;
+
+    await logActivity({
+        userId: userId,
+        action: 'Download de Relatório de Lote',
+        provider: displayProvider,
+        details: `Arquivo: ${fileName}`
+    });
+
 
     initializeFirebaseAdmin();
     const firestore = getFirestore();
@@ -505,11 +525,6 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
 
     const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
     const base64String = buffer.toString('base64');
-    
-    const date = new Date(createdAt);
-    const formattedDate = date.toLocaleDateString('pt-BR').replace(/\//g, '-');
-    const formattedTime = date.toTimeString().split(' ')[0].replace(/:/g, '-');
-    const fileName = `HIGIENIZACAO_FGTS_${displayProvider.toUpperCase()}_${originalFileName.replace(/\.xlsx?$/i, '')}_${formattedDate}_${formattedTime}.xlsx`;
 
     const fileContent = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64String}`;
 

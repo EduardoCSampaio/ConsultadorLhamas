@@ -175,7 +175,7 @@ function AdminDashboard({
          <Card>
           <CardHeader>
             <CardTitle>Atividade Recente</CardTitle>
-            <CardDescription>As últimas 5 consultas realizadas na plataforma.</CardDescription>
+            <CardDescription>As últimas 5 atividades registradas na plataforma.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="rounded-md border">
@@ -253,7 +253,7 @@ function UserDashboard({ userProfile }: { userProfile: UserProfile }) {
             <Card>
                 <CardHeader>
                     <CardTitle>Sua Atividade Recente</CardTitle>
-                    <CardDescription>Suas últimas 5 consultas realizadas.</CardDescription>
+                    <CardDescription>Suas últimas 5 atividades registradas.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {isLoading ? (
@@ -272,7 +272,7 @@ function UserDashboard({ userProfile }: { userProfile: UserProfile }) {
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>Ação</TableHead>
-                                        <TableHead>Documento</TableHead>
+                                        <TableHead>Detalhes</TableHead>
                                         <TableHead className="text-right">Data</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -280,7 +280,7 @@ function UserDashboard({ userProfile }: { userProfile: UserProfile }) {
                                     {activity.map(log => (
                                         <TableRow key={log.id}>
                                             <TableCell>{log.action}</TableCell>
-                                            <TableCell className="font-mono text-xs">{log.documentNumber}</TableCell>
+                                            <TableCell className="font-mono text-xs">{log.details || log.documentNumber || 'N/A'}</TableCell>
                                             <TableCell className="text-right text-xs text-muted-foreground whitespace-nowrap">
                                                 {new Date(log.createdAt).toLocaleString('pt-BR')}
                                             </TableCell>
@@ -427,5 +427,3 @@ export default function DashboardPage() {
   // Fallback or loading state if userProfile is not available for some reason.
   return <AdminDashboardLoader />;
 }
-
-    

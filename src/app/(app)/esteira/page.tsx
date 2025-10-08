@@ -23,10 +23,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
+import { useUser } from "@/firebase";
 
 export default function EsteiraPage() {
     const { toast } = useToast();
+    const { user } = useUser();
     const [batches, setBatches] = useState<BatchJob[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isReprocessing, setIsReprocessing] = useState<string | null>(null);
@@ -66,10 +68,20 @@ export default function EsteiraPage() {
     };
     
     const handleDownloadReport = async (batch: BatchJob) => {
+        if (!user) {
+            toast({ variant: "destructive", title: "Erro de autenticação" });
+            return;
+        }
         toast({ title: "Gerando relatório...", description: "Aguarde enquanto preparamos seu arquivo." });
-        const result = await gerarRelatorioLote({ cpfs: batch.cpfs, fileName: batch.fileName, createdAt: batch.createdAt, provider: batch.provider });
+        const result = await gerarRelatorioLote({ 
+            cpfs: batch.cpfs, 
+            fileName: batch.fileName, 
+            createdAt: batch.createdAt, 
+            provider: batch.provider,
+            userId: user.uid,
+        });
         
-        if (result.status === 'success') {
+        if (result.status === 'success' && result.fileContent && result.fileName) {
             const link = document.createElement("a");
             link.href = result.fileContent;
             link.download = result.fileName;

@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
-import { ActivityLog } from './users';
+import { ActivityLog, logActivity } from './users';
 import * as XLSX from 'xlsx';
 
 export type ExportFilters = {
@@ -15,10 +15,13 @@ export type ExportFilters = {
 };
 
 const exportHistorySchema = z.object({
-    email: z.string().optional(),
-    provider: z.string().optional(),
-    dateFrom: z.string().optional(),
-    dateTo: z.string().optional(),
+    filters: z.object({
+        email: z.string().optional(),
+        provider: z.string().optional(),
+        dateFrom: z.string().optional(),
+        dateTo: z.string().optional(),
+    }),
+    userId: z.string(),
 });
 
 type ExportResult = {
@@ -28,18 +31,26 @@ type ExportResult = {
     message?: string;
 };
 
-export async function exportHistoryToExcel(filters: ExportFilters): Promise<ExportResult> {
-    const validation = exportHistorySchema.safeParse(filters);
+export async function exportHistoryToExcel(input: z.infer<typeof exportHistorySchema>): Promise<ExportResult> {
+    const validation = exportHistorySchema.safeParse(input);
     if (!validation.success) {
         return { status: 'error', message: 'Filtros inválidos.' };
     }
+
+    const { filters, userId } = validation.data;
+    
+    await logActivity({
+        userId: userId,
+        action: 'Download Histórico',
+        details: `Filtros: ${JSON.stringify(filters)}`,
+    });
 
     try {
         initializeFirebaseAdmin();
         const firestore = getFirestore();
         let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> = firestore.collection('activityLogs');
 
-        const { email, provider, dateFrom, dateTo } = validation.data;
+        const { email, provider, dateFrom, dateTo } = filters;
 
         // Apply equality filters first
         if (email) {
@@ -96,6 +107,7 @@ export async function exportHistoryToExcel(filters: ExportFilters): Promise<Expo
             'Ação': log.action,
             'Documento (CPF)': log.documentNumber || 'N/A',
             'Provedor': log.provider ? log.provider.toUpperCase() : 'N/A',
+            'Detalhes': log.details || 'N/A',
             'Data': new Date(log.createdAt).toLocaleString('pt-BR'),
         }));
         
@@ -103,7 +115,7 @@ export async function exportHistoryToExcel(filters: ExportFilters): Promise<Expo
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Histórico de Atividade');
         
-        const header = ['Usuário', 'Ação', 'Documento (CPF)', 'Provedor', 'Data'];
+        const header = ['Usuário', 'Ação', 'Documento (CPF)', 'Provedor', 'Detalhes', 'Data'];
         const colWidths = header.map(h => ({ wch: Math.max(h.length, 20) }));
         worksheet['!cols'] = colWidths;
 

@@ -6,6 +6,7 @@ import { initializeFirebaseAdmin } from '@/firebase/server-init';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import type { ApiCredentials } from './users';
 import { getFactaAuthToken, consultarSaldoFgtsFacta } from './facta';
+import { logActivity } from './users';
 
 const actionSchema = z.object({
   documentNumber: z.string(),
@@ -130,19 +131,13 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   const requestBody = { documentNumber, provider };
 
   try {
-    try {
-        const firestore = getFirestore();
-        await firestore.collection('activityLogs').add({
-            userId: userId,
-            userEmail: userEmail,
-            action: `Consulta FGTS - V8`,
-            documentNumber: documentNumber,
-            provider: 'V8DIGITAL',
-            createdAt: FieldValue.serverTimestamp(),
-        });
-    } catch (logError) {
-        console.error("Failed to log user activity:", logError);
-    }
+    await logActivity({
+        userId: userId,
+        action: `Consulta FGTS - V8`,
+        documentNumber: documentNumber,
+        provider: 'V8DIGITAL',
+        details: `Parceiro: ${provider}`
+    });
 
     const consultaResponse = await fetch(API_URL_CONSULTA, {
       method: 'POST',
