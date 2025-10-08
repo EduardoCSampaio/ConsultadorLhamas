@@ -1,5 +1,4 @@
 
-
 "use client"
 
 import { PageHeader } from "@/components/page-header";
@@ -10,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Users, UserCheck, UserPlus, ArrowRight, Activity, TrendingUp } from "lucide-react";
 import React from "react";
 import { useFirestore, useMemoFirebase, useUser } from "@/firebase";
-import { collection, doc } from "firebase/firestore";
+import { doc } from "firebase/firestore";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { UserProfile } from "@/app/actions/users";
@@ -51,6 +50,7 @@ function AdminDashboard({
         case 'active': return 'default';
         case 'pending': return 'secondary';
         case 'rejected': return 'destructive';
+        case 'inactive': return 'destructive';
         default: return 'outline';
     }
   };
@@ -60,6 +60,7 @@ function AdminDashboard({
         case 'active': return 'Ativo';
         case 'pending': return 'Pendente';
         case 'rejected': return 'Rejeitado';
+        case 'inactive': return 'Inativo';
         default: return status;
     }
   };
@@ -131,7 +132,7 @@ function AdminDashboard({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{activityLogs?.length || 0}</div>
-            <p className="text-xs text-muted-foreground">Consultas FGTS na plataforma</p>
+            <p className="text-xs text-muted-foreground">Consultas na plataforma</p>
           </CardContent>
         </Card>
       </div>
@@ -313,3 +314,5 @@ export default function DashboardPage() {
 
   return <UserDashboardPlaceholder />;
 }
+
+    

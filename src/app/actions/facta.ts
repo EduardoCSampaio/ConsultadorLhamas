@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import type { ApiCredentials } from './users';
 
 const consultaSchema = z.object({
@@ -122,6 +122,30 @@ async function getFactaToken(credentials: ApiCredentials): Promise<{ token: stri
   }
 }
 
+async function logFactaActivity(userId: string, cpf: string) {
+    try {
+        const firestore = getFirestore();
+        const userDoc = await firestore.collection('users').doc(userId).get();
+        if (!userDoc.exists) {
+            console.error(`[logFactaActivity] User with ID ${userId} not found.`);
+            return;
+        }
+        const userEmail = userDoc.data()?.email || 'N/A';
+
+        await firestore.collection('activityLogs').add({
+            userId: userId,
+            userEmail: userEmail,
+            action: 'Consulta CLT Facta',
+            documentNumber: cpf,
+            provider: 'facta',
+            createdAt: FieldValue.serverTimestamp(),
+        });
+    } catch (logError) {
+        console.error("Failed to log Facta activity:", logError);
+    }
+}
+
+
 export async function consultarOfertasFacta(input: z.infer<typeof consultaSchema>): Promise<ConsultaFactaResult> {
     const validation = consultaSchema.safeParse(input);
     if (!validation.success) {
@@ -141,6 +165,9 @@ export async function consultarOfertasFacta(input: z.infer<typeof consultaSchema
     if (tokenError) {
         return { success: false, message: tokenError };
     }
+    
+    // Log the activity regardless of the outcome of the API call itself.
+    await logFactaActivity(userId, cpf);
 
     // 3. Consult Offers
     try {
@@ -172,3 +199,5 @@ export async function consultarOfertasFacta(input: z.infer<typeof consultaSchema
         return { success: false, message };
     }
 }
+
+    

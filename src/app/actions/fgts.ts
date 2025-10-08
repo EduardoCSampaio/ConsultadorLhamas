@@ -1,3 +1,4 @@
+
 'use server';
 
 import { z } from 'zod';
@@ -113,6 +114,22 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   const requestBody = { documentNumber, provider };
 
   try {
+    // Log activity before sending the request
+    try {
+        const firestore = getFirestore();
+        await firestore.collection('activityLogs').add({
+            userId: userId,
+            userEmail: userEmail,
+            action: `Consulta FGTS - ${provider}`,
+            documentNumber: documentNumber,
+            provider: provider,
+            createdAt: FieldValue.serverTimestamp(),
+        });
+    } catch (logError) {
+        console.error("Failed to log user activity:", logError);
+        // Do not block the main flow if logging fails
+    }
+
     const consultaResponse = await fetch(API_URL_CONSULTA, {
       method: 'POST',
       headers: {
@@ -136,21 +153,6 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
         return { status: 'error', stepIndex: 1, message: errorMessage };
     }
 
-    // Log activity on success
-    try {
-        const firestore = getFirestore();
-        await firestore.collection('activityLogs').add({
-            userId: userId,
-            userEmail: userEmail,
-            action: 'Consulta FGTS',
-            documentNumber: documentNumber,
-            provider: provider,
-            createdAt: FieldValue.serverTimestamp(),
-        });
-    } catch (logError) {
-        console.error("Failed to log user activity:", logError);
-        // Do not block the main flow if logging fails
-    }
    
     return { 
         status: 'success', 
@@ -164,3 +166,5 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
     return { status: 'error', stepIndex: 1, message };
   }
 }
+
+    
