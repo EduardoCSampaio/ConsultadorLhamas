@@ -40,10 +40,9 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from '@/lib/utils';
 
-const baseMenuItems = [
-  { href: "/dashboard", icon: Home, label: "Dashboard", tooltip: "Dashboard" },
-  { href: "/fgts", icon: Search, label: "Consulta FGTS", tooltip: "Consulta FGTS" },
-
+const allBaseMenuItems = [
+  { href: "/dashboard", icon: Home, label: "Dashboard", tooltip: "Dashboard", adminOnly: false },
+  { href: "/fgts", icon: Search, label: "Consulta FGTS", tooltip: "Consulta FGTS", adminOnly: true },
 ];
 
 const adminBottomMenuItems = [
@@ -122,6 +121,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
     );
   }
+
+  const baseMenuItems = allBaseMenuItems.filter(item => 
+    !item.adminOnly || (item.adminOnly && userProfile?.role === 'admin')
+  );
 
   const allBottomMenuItems = [
       ...(userProfile?.role === 'admin' ? adminBottomMenuItems : []),
