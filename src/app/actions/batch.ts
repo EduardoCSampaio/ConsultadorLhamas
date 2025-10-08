@@ -25,7 +25,7 @@ const reportActionSchema = z.object({
   cpfs: z.array(z.string()),
   fileName: z.string(),
   createdAt: z.string(),
-  provider: z.string(), // Can be v8-qi, v8-bms, v8-cartos, facta
+  provider: z.string(),
 });
 
 const getBatchStatusSchema = z.object({
@@ -34,6 +34,15 @@ const getBatchStatusSchema = z.object({
 
 const deleteBatchSchema = z.object({
     batchId: z.string(),
+});
+
+const getBatchProcessedCpfsSchema = z.object({
+    batchId: z.string(),
+});
+
+const processFactaCpfSchema = z.object({
+    batchId: z.string(),
+    cpf: z.string(),
 });
 
 export type BatchJob = {
@@ -46,6 +55,7 @@ export type BatchJob = {
     cpfs: string[];
     createdAt: string; // ISO String
     message?: string;
+    userId: string;
 };
 
 
@@ -91,18 +101,13 @@ export async function deleteBatch(input: z.infer<typeof deleteBatchSchema>): Pro
 }
 
 
-export async function getBatches(): Promise<{ status: 'success' | 'error'; batches?: BatchJob[]; message?: string }> {
+export async function getBatches(input?: { batchId: string }): Promise<{ status: 'success' | 'error'; batches?: BatchJob[]; batch?: BatchJob; message?: string }> {
     try {
         initializeFirebaseAdmin();
         const firestore = getFirestore();
-        const batchesSnapshot = await firestore.collection('batches').orderBy('createdAt', 'desc').get();
-
-        if (batchesSnapshot.empty) {
-            return { status: 'success', batches: [] };
-        }
-
-        const batches = batchesSnapshot.docs.map(doc => {
-            const data = doc.data();
+        
+        const mapDocToBatchJob = (doc: FirebaseFirestore.DocumentSnapshot<FirebaseFirestore.DocumentData>): BatchJob => {
+            const data = doc.data()!;
             return {
                 id: doc.id,
                 fileName: data.fileName,
@@ -113,8 +118,22 @@ export async function getBatches(): Promise<{ status: 'success' | 'error'; batch
                 cpfs: data.cpfs,
                 createdAt: toISODate(data.createdAt),
                 message: data.message,
+                userId: data.userId,
             } as BatchJob;
-        });
+        };
+
+        if (input?.batchId) {
+            const batchDoc = await firestore.collection('batches').doc(input.batchId).get();
+            if (!batchDoc.exists) return { status: 'error', message: 'Lote não encontrado.' };
+            const batch = mapDocToBatchJob(batchDoc);
+            return { status: 'success', batch };
+        }
+
+        const batchesSnapshot = await firestore.collection('batches').orderBy('createdAt', 'desc').get();
+        if (batchesSnapshot.empty) {
+            return { status: 'success', batches: [] };
+        }
+        const batches = batchesSnapshot.docs.map(mapDocToBatchJob);
 
         return { status: 'success', batches };
     } catch (error) {
@@ -123,45 +142,6 @@ export async function getBatches(): Promise<{ status: 'success' | 'error'; batch
         return { status: 'error', message };
     }
 }
-
-
-export async function getBatchStatus(input: z.infer<typeof getBatchStatusSchema>): Promise<{ status: 'success' | 'error'; batch?: BatchJob; message?: string }> {
-    const validation = getBatchStatusSchema.safeParse(input);
-    if (!validation.success) {
-        return { status: 'error', message: 'ID do lote inválido.' };
-    }
-    
-    try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
-        const batchDoc = await firestore.collection('batches').doc(validation.data.batchId).get();
-
-        if (!batchDoc.exists) {
-            return { status: 'error', message: 'Lote não encontrado.' };
-        }
-        
-        const data = batchDoc.data()!;
-        
-        const batch: BatchJob = {
-            id: batchDoc.id,
-            fileName: data.fileName,
-            provider: data.provider,
-            status: data.status,
-            totalCpfs: data.totalCpfs,
-            processedCpfs: data.processedCpfs,
-            cpfs: data.cpfs,
-            createdAt: toISODate(data.createdAt),
-            message: data.message,
-        };
-
-        return { status: 'success', batch };
-    } catch (error) {
-        const message = error instanceof Error ? error.message : "Erro ao buscar status do lote.";
-        console.error("getBatchStatus error:", message);
-        return { status: 'error', message };
-    }
-}
-
 
 export async function processarLoteFgts(input: z.infer<typeof processActionSchema>): Promise<ProcessActionResult> {
   const validation = processActionSchema.safeParse(input);
@@ -182,7 +162,7 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
   const batchId = `batch-${finalProvider}-${Date.now()}-${userId.substring(0, 5)}`;
   const batchRef = firestore.collection('batches').doc(batchId);
 
-  const batchData: Omit<BatchJob, 'createdAt' | 'id'> & { createdAt: FieldValue; userId: string; userEmail: string; } = {
+  const batchData: Omit<BatchJob, 'createdAt' | 'id'> & { createdAt: FieldValue; userEmail: string; } = {
       fileName: fileName,
       provider: finalProvider,
       status: 'processing',
@@ -201,9 +181,12 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
     console.error("Batch init error:", message);
     return { status: 'error', message };
   }
-
-  // Do not await this, let it run in the background
-  processBatchInBackground(batchId);
+  
+  // For V8, the process is asynchronous (webhook-based), so we fire and forget.
+  if (provider === 'v8') {
+    processV8BatchInBackground(batchId);
+  }
+  // For Facta, the client will trigger processing for each CPF.
   
   const serializableBatch: BatchJob = {
     ...batchData,
@@ -213,13 +196,13 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
 
   return {
     status: 'success',
-    message: `Lote para ${finalProvider.toUpperCase()} enviado para processamento.`,
+    message: `Lote para ${finalProvider.toUpperCase()} criado e pronto para processamento.`,
     batch: serializableBatch
   };
 }
 
-async function processBatchInBackground(batchId: string) {
-    console.log(`[Batch ${batchId}] Starting background processing...`);
+async function processV8BatchInBackground(batchId: string) {
+    console.log(`[Batch ${batchId}] Starting V8 background processing...`);
     initializeFirebaseAdmin();
     const firestore = getFirestore();
     const batchRef = firestore.collection('batches').doc(batchId);
@@ -231,86 +214,155 @@ async function processBatchInBackground(batchId: string) {
             return;
         }
 
-        const batchData = batchDoc.data() as Omit<BatchJob, 'createdAt' | 'id'> & { userId: string, userEmail: string };
+        const batchData = batchDoc.data() as BatchJob & { userEmail: string };
         const { cpfs, provider: finalProvider, userId, userEmail } = batchData;
         
-        console.log(`[Batch ${batchId}] Processing for ${cpfs.length} CPFs via ${finalProvider}.`);
+        console.log(`[Batch ${batchId}] Processing ${cpfs.length} CPFs via ${finalProvider}.`);
 
         const userDoc = await firestore.collection('users').doc(userId).get();
         if (!userDoc.exists) {
-            throw new Error(`[Batch ${batchId}] User with ID ${userId} not found.`);
+            throw new Error(`User with ID ${userId} not found.`);
         }
         const userCredentials = userDoc.data() as ApiCredentials;
         
-        let authToken: string | undefined;
-        let authError: string | null = null;
-
-        const mainProvider = finalProvider.split('-')[0];
-        const subProvider = finalProvider.split('-')[1] as V8Provider | undefined;
-        
-        console.log(`[Batch ${batchId}] Authenticating with provider: ${mainProvider}`);
-
-        if (mainProvider === 'v8') {
-             ({ token: authToken, error: authError } = await getV8AuthToken(userCredentials));
-        } else if (mainProvider === 'facta') {
-            ({ token: authToken, error: authError } = await getFactaAuthToken(userCredentials.facta_username, userCredentials.facta_password));
-        }
-
+        const { token: authToken, error: authError } = await getV8AuthToken(userCredentials);
         if (authError || !authToken) {
-            console.error(`[Batch ${batchId}] Authentication failed: ${authError || "Token is undefined."}`);
-            throw new Error(authError || "Failed to get auth token.");
+            throw new Error(authError || "Failed to get V8 auth token.");
         }
         
-        console.log(`[Batch ${batchId}] Authentication successful. Token received.`);
+        const subProvider = finalProvider.split('-')[1] as V8Provider;
         
         let processedCount = 0;
         for (const cpf of cpfs) {
-            console.log(`[Batch ${batchId}] Processing CPF: ${cpf}`);
-            
-            if (mainProvider === 'v8' && subProvider) {
-                // This is an async webhook-based call, so we just fire and forget.
-                // The result will be written by the webhook handler.
-                await consultarSaldoV8({ documentNumber: cpf, userId, userEmail, token: authToken, provider: subProvider });
-            } else if (mainProvider === 'facta') {
-                // This is a synchronous call.
-                const result = await consultarSaldoFgtsFacta({ cpf, userId, token: authToken });
-                
-                const docId = `facta-${cpf}`;
-                const docRef = firestore.collection('webhookResponses').doc(docId);
-                
-                if (result.success && result.data) {
-                     await docRef.set({
-                        responseBody: result.data,
-                        createdAt: FieldValue.serverTimestamp(),
-                        status: 'success',
-                        message: result.message,
-                        id: docId,
-                        provider: 'facta',
-                     }, { merge: true });
-                } else {
-                     await docRef.set({
-                        responseBody: { error: result.message },
-                        createdAt: FieldValue.serverTimestamp(),
-                        status: 'error',
-                        message: result.message,
-                        id: docId,
-                        provider: 'facta',
-                     }, { merge: true });
-                }
-            }
-            
+            // Fire and forget for webhook
+            await consultarSaldoV8({ documentNumber: cpf, userId, userEmail, token: authToken, provider: subProvider });
             processedCount++;
+            // We can't accurately track processedCpfs here because it's webhook-based.
+            // A more complex system (e.g., listening to webhook responses) would be needed.
+            // For now, we update it to show progress, but completion depends on webhook responses.
             await batchRef.update({ processedCpfs: processedCount });
-            console.log(`[Batch ${batchId}] Progress: ${processedCount}/${cpfs.length}`);
         }
         
-        console.log(`[Batch ${batchId}] Processing complete.`);
-        await batchRef.update({ status: 'completed' });
+        // For V8, "completed" just means all requests were sent. Actual results depend on webhooks.
+        await batchRef.update({ status: 'completed', message: 'Todas as solicitações V8 foram enviadas. Os resultados chegarão via webhook.' });
 
     } catch (error) {
         const message = error instanceof Error ? error.message : "An unknown error occurred.";
-        console.error(`[Batch ${batchId}] FATAL ERROR:`, error);
+        console.error(`[Batch ${batchId}] V8 BATCH FATAL ERROR:`, error);
         await batchRef.update({ status: 'error', message: message });
+    }
+}
+
+
+export async function processFactaCpf(input: z.infer<typeof processFactaCpfSchema>): Promise<{status: 'success' | 'error', message: string}> {
+    const validation = processFactaCpfSchema.safeParse(input);
+    if (!validation.success) {
+        return { status: 'error', message: 'Dados de entrada inválidos.' };
+    }
+    
+    const { batchId, cpf } = validation.data;
+    
+    initializeFirebaseAdmin();
+    const firestore = getFirestore();
+    const batchRef = firestore.collection('batches').doc(batchId);
+    const docRef = firestore.collection('webhookResponses').doc(`facta-${cpf}`);
+
+    try {
+        const batchDoc = await batchRef.get();
+        if (!batchDoc.exists) throw new Error("Lote não encontrado.");
+        
+        const batchData = batchDoc.data() as BatchJob;
+        const userDoc = await firestore.collection('users').doc(batchData.userId).get();
+        if (!userDoc.exists) throw new Error("Usuário do lote não encontrado.");
+        
+        const userCredentials = userDoc.data() as ApiCredentials;
+
+        const { token, error: tokenError } = await getFactaAuthToken(userCredentials.facta_username, userCredentials.facta_password);
+        if (tokenError || !token) throw new Error(tokenError || "Falha ao obter token da Facta.");
+
+        const result = await consultarSaldoFgtsFacta({ cpf, userId: batchData.userId, token });
+        
+        if (result.success && result.data) {
+             await docRef.set({
+                responseBody: result.data,
+                createdAt: FieldValue.serverTimestamp(),
+                status: 'success',
+                message: result.message,
+                id: `facta-${cpf}`,
+                provider: 'facta',
+             }, { merge: true });
+        } else {
+             await docRef.set({
+                responseBody: { error: result.message },
+                createdAt: FieldValue.serverTimestamp(),
+                status: 'error',
+                message: result.message,
+                id: `facta-${cpf}`,
+                provider: 'facta',
+             }, { merge: true });
+        }
+        
+        // After processing, update the main batch doc count
+        await batchRef.update({ processedCpfs: FieldValue.increment(1) });
+        
+        // If this was the last one, mark batch as completed
+        const updatedBatch = (await batchRef.get()).data() as BatchJob;
+        if(updatedBatch.processedCpfs >= updatedBatch.totalCpfs) {
+            await batchRef.update({ status: 'completed' });
+        }
+
+        return { status: 'success', message: `CPF ${cpf} processado.` };
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro desconhecido ao processar CPF.";
+        await docRef.set({ status: 'error', message }, { merge: true });
+        return { status: 'error', message };
+    }
+}
+
+
+export async function getBatchProcessedCpfs(input: z.infer<typeof getBatchProcessedCpfsSchema>): Promise<{ status: 'success' | 'error'; cpfs?: string[]; message?: string }> {
+    const validation = getBatchProcessedCpfsSchema.safeParse(input);
+    if (!validation.success) {
+        return { status: 'error', message: 'ID do lote inválido.' };
+    }
+
+    try {
+        initializeFirebaseAdmin();
+        const firestore = getFirestore();
+        const batchDoc = await firestore.collection('batches').doc(validation.data.batchId).get();
+        if (!batchDoc.exists) return { status: 'error', message: 'Lote não encontrado.' };
+        
+        const batchData = batchDoc.data() as BatchJob;
+        const mainProvider = batchData.provider.split('-')[0];
+
+        const processedCpfs: string[] = [];
+        const responseDocs = await firestore.collection('webhookResponses')
+            .where('provider', '==', batchData.provider)
+            .get();
+
+        const batchCpfsSet = new Set(batchData.cpfs);
+
+        responseDocs.forEach(doc => {
+            const docId = doc.id;
+            const cpf = mainProvider === 'v8' ? docId : docId.replace('facta-', '');
+            if (batchCpfsSet.has(cpf)) {
+                processedCpfs.push(cpf);
+            }
+        });
+        
+        // Update the count in Firestore to reflect reality
+        if (batchData.processedCpfs !== processedCpfs.length) {
+            await firestore.collection('batches').doc(validation.data.batchId).update({
+                processedCpfs: processedCpfs.length
+            });
+        }
+
+        return { status: 'success', cpfs: processedCpfs };
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro ao buscar CPFs processados.";
+        return { status: 'error', message };
     }
 }
 

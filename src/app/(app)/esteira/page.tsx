@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useCallback } from "react";
@@ -7,8 +6,8 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Download, RefreshCw, AlertCircle, Inbox, Trash2 } from 'lucide-react';
-import { getBatches, getBatchStatus, gerarRelatorioLote, deleteBatch, type BatchJob } from '@/app/actions/batch';
+import { Loader2, Download, RefreshCw, AlertCircle, Inbox, Trash2, Play } from 'lucide-react';
+import { getBatches, deleteBatch, type BatchJob, processFactaCpf, getBatchProcessedCpfs } from '@/app/actions/batch';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -30,32 +29,35 @@ export default function EsteiraPage() {
     const [batches, setBatches] = useState<BatchJob[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [processingBatchId, setProcessingBatchId] = useState<string | null>(null);
 
-    const fetchBatches = useCallback(async () => {
+    const fetchBatches = useCallback(async (showLoading = true) => {
+        if(showLoading) setIsLoading(true);
         const { batches: fetchedBatches, error: fetchError } = await getBatches();
         if (fetchError) {
             setError(fetchError);
             toast({ variant: 'destructive', title: 'Erro ao buscar lotes', description: fetchError });
+            setBatches([]);
         } else {
             setBatches(fetchedBatches || []);
         }
-        setIsLoading(false);
+        if(showLoading) setIsLoading(false);
     }, [toast]);
 
     useEffect(() => {
-        setIsLoading(true);
         fetchBatches();
     }, [fetchBatches]);
 
-    const handleRefreshStatus = useCallback(async (batchId: string) => {
-        const { status, batch, message } = await getBatchStatus({ batchId });
-        if (status === 'success' && batch) {
-            setBatches(prev => prev.map(b => b.id === batchId ? batch : b));
-            toast({ title: 'Status atualizado!', description: `Lote ${batch.fileName} verificado.`});
-        } else {
-            toast({ variant: 'destructive', title: 'Erro ao atualizar status', description: message });
+    const handleRefreshStatus = async (batchId: string) => {
+        const { batch: refreshedBatch, error: fetchError } = await getBatches({ batchId });
+
+        if (fetchError) {
+             toast({ variant: 'destructive', title: 'Erro ao atualizar lote', description: fetchError });
+        } else if (refreshedBatch) {
+             setBatches(prev => prev.map(b => b.id === batchId ? refreshedBatch : b));
+             toast({ title: 'Status atualizado!', description: `Lote ${refreshedBatch.fileName} verificado.`});
         }
-    }, [toast]);
+    };
     
     const handleDownloadReport = async (batch: BatchJob) => {
         toast({ title: "Gerando relatório...", description: "Aguarde enquanto preparamos seu arquivo." });
@@ -78,11 +80,49 @@ export default function EsteiraPage() {
         const { status, message } = await deleteBatch({ batchId });
         if (status === 'success') {
             toast({ title: 'Lote excluído!', description: message });
-            fetchBatches();
+            await fetchBatches(false); // Refetch without full loading state
         } else {
             toast({ variant: 'destructive', title: 'Erro ao excluir lote', description: message });
         }
     };
+
+    const handleProcessFactaBatch = async (batch: BatchJob) => {
+        if (!batch.provider.startsWith('facta') || batch.status !== 'processing') return;
+
+        setProcessingBatchId(batch.id);
+        toast({ title: `Processando Lote Facta: ${batch.fileName}`, description: "Isso pode levar alguns minutos. Não feche esta aba." });
+
+        let processedCount = batch.processedCpfs;
+
+        // Get already processed CPFs to avoid re-processing
+        const processedResult = await getBatchProcessedCpfs({ batchId: batch.id });
+        const processedCpfsSet = new Set(processedResult.cpfs || []);
+        
+        processedCount = processedCpfsSet.size;
+
+        // Update progress bar initially
+        setBatches(prev => prev.map(b => b.id === batch.id ? { ...b, processedCpfs: processedCount } : b));
+
+
+        const cpfsToProcess = batch.cpfs.filter(cpf => !processedCpfsSet.has(cpf));
+
+        for (const cpf of cpfsToProcess) {
+            const result = await processFactaCpf({ batchId: batch.id, cpf });
+            if (result.status === 'success') {
+                processedCount++;
+                // Update progress bar on the fly
+                setBatches(prev => prev.map(b => b.id === batch.id ? { ...b, processedCpfs: processedCount } : b));
+            } else {
+                toast({ variant: 'destructive', title: `Erro ao processar CPF ${cpf}`, description: result.message, duration: 5000 });
+                // We can decide to stop or continue on error. For now, we continue.
+            }
+        }
+
+        toast({ title: "Processamento Concluído!", description: `Todos os CPFs do lote ${batch.fileName} foram processados.` });
+        setProcessingBatchId(null);
+        await handleRefreshStatus(batch.id); // Final refresh to get 'completed' status from server
+    };
+
 
     const getStatusVariant = (status: BatchJob['status']) => {
         switch (status) {
@@ -99,7 +139,7 @@ export default function EsteiraPage() {
                 title="Esteira de Processamento de Lotes"
                 description="Acompanhe o andamento e baixe os relatórios dos lotes enviados para consulta."
             >
-                <Button variant="outline" onClick={() => { setIsLoading(true); fetchBatches(); }} disabled={isLoading}>
+                <Button variant="outline" onClick={() => fetchBatches()} disabled={isLoading}>
                     <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                     Atualizar
                 </Button>
@@ -207,12 +247,20 @@ export default function EsteiraPage() {
                                         <AlertDescription>{batch.message || "Ocorreu um erro desconhecido durante o processamento."}</AlertDescription>
                                      </Alert>
                                 )}
-                                {batch.status === 'completed' && (
-                                    <Button onClick={() => handleDownloadReport(batch)} size="sm">
-                                        <Download className="mr-2 h-4 w-4" />
-                                        Baixar Relatório
-                                    </Button>
-                                )}
+                                <div className="mt-2 flex gap-2">
+                                    {batch.status === 'completed' && (
+                                        <Button onClick={() => handleDownloadReport(batch)} size="sm">
+                                            <Download className="mr-2 h-4 w-4" />
+                                            Baixar Relatório
+                                        </Button>
+                                    )}
+                                     {batch.provider.startsWith('facta') && batch.status === 'processing' && (
+                                        <Button onClick={() => handleProcessFactaBatch(batch)} size="sm" variant="outline" disabled={processingBatchId === batch.id}>
+                                            {processingBatchId === batch.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Play className="mr-2 h-4 w-4" />}
+                                            {processingBatchId === batch.id ? 'Processando...' : 'Iniciar Processamento'}
+                                        </Button>
+                                    )}
+                                </div>
                             </CardContent>
                         </Card>
                     ))}
