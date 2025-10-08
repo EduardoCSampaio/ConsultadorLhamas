@@ -6,31 +6,31 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "WebhookResponse",
       "type": "object",
-      "description": "Represents the response received from a webhook.",
+      "description": "Represents the response received from a webhook or a synchronous API call.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the webhook response."
+          "description": "Unique identifier for the response, typically cpf or provider-cpf."
         },
         "status": {
           "type": "string",
-          "description": "The status of the webhook response (e.g., pending, completed, failed)."
+          "description": "The status of the response (e.g., success, error)."
         },
         "message": {
           "type": "string",
-          "description": "A descriptive message associated with the webhook response."
+          "description": "A descriptive message associated with the response."
         },
-        "initialResponse": {
+        "provider": {
           "type": "string",
-          "description": "The initial response from the service that triggered the webhook."
+          "description": "The API provider that generated this response (e.g., v8, facta)."
         },
         "responseBody": {
           "type": "object",
-          "description": "The full response body received from the webhook endpoint."
+          "description": "The full response body received from the API."
         },
         "createdAt": {
           "type": "string",
-          "description": "Timestamp indicating when the webhook response was received.",
+          "description": "Timestamp indicating when the response was stored.",
           "format": "date-time"
         }
       },
@@ -125,7 +125,15 @@
             },
             "action": {
                 "type": "string",
-                "description": "A description of the action performed (e.g., 'Consulta FGTS')."
+                "description": "A description of the action performed (e.g., 'Consulta FGTS - V8')."
+            },
+             "provider": {
+                "type": "string",
+                "description": "The API provider used for the action (e.g., v8, facta)."
+            },
+            "documentNumber": {
+                "type": "string",
+                "description": "The document number (CPF) related to the action."
             },
             "createdAt": {
                 "type": "string",
@@ -143,14 +151,15 @@
             "id": { "type": "string" },
             "userId": { "type": "string" },
             "fileName": { "type": "string" },
-            "provider": { "type": "string" },
+            "provider": { "type": "string", "enum": ["v8", "facta"] },
             "status": { "type": "string", "enum": ["processing", "completed", "error"] },
             "totalCpfs": { "type": "number" },
             "processedCpfs": { "type": "number" },
             "message": { "type": "string" },
-            "createdAt": { "type": "string", "format": "date-time" }
+            "createdAt": { "type": "string", "format": "date-time" },
+            "cpfs": { "type": "array", "items": { "type": "string" } }
         },
-        "required": ["id", "userId", "status", "totalCpfs", "processedCpfs", "createdAt"]
+        "required": ["id", "userId", "provider", "status", "totalCpfs", "processedCpfs", "createdAt"]
     },
     "CLTConsent": {
         "title": "CLT Consent",
@@ -221,11 +230,11 @@
     }
   },
   "firestore": {
-    "/webhookResponses/{webhookResponseId}": {
+    "/webhookResponses/{responseId}": {
       "schema": {
         "$ref": "#/entities/WebhookResponse"
       },
-      "description": "Stores webhook responses. The webhookResponseId is the unique ID for each response."
+      "description": "Stores API responses. The responseId can be a CPF for V8, or a provider-prefixed ID for others."
     },
     "/users/{userId}": {
       "schema": {
@@ -249,5 +258,3 @@
     }
   }
 }
-
-    

@@ -2,15 +2,18 @@
 'use server';
 
 import { z } from 'zod';
-import { consultarSaldoFgts, getAuthToken } from './fgts';
+import { consultarSaldoFgts as consultarSaldoV8 } from './fgts';
+import { consultarSaldoFgtsFacta } from './facta';
 import * as XLSX from 'xlsx';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import type { ApiCredentials } from './users';
 
+type Provider = "v8" | "facta";
+
 const processActionSchema = z.object({
   cpfs: z.array(z.string()),
-  provider: z.enum(["cartos", "bms", "qi"]),
+  provider: z.enum(["v8", "facta"]),
   userId: z.string(),
   userEmail: z.string(),
   fileName: z.string(),
@@ -20,6 +23,7 @@ const reportActionSchema = z.object({
   cpfs: z.array(z.string()),
   fileName: z.string(),
   createdAt: z.string(),
+  provider: z.enum(["v8", "facta"]),
 });
 
 const getBatchStatusSchema = z.object({
@@ -29,7 +33,7 @@ const getBatchStatusSchema = z.object({
 export type BatchJob = {
     id: string;
     fileName: string;
-    provider: string;
+    provider: Provider,
     status: 'processing' | 'completed' | 'error';
     totalCpfs: number;
     processedCpfs: number;
@@ -97,10 +101,6 @@ export async function getBatchStatus(input: z.infer<typeof getBatchStatusSchema>
 }
 
 
-/**
- * Action to initiate batch processing. It authenticates once, then loops 
- * through CPFs and starts the balance query for each one using the same token.
- */
 export async function processarLoteFgts(input: z.infer<typeof processActionSchema>): Promise<ProcessActionResult> {
   const validation = processActionSchema.safeParse(input);
 
@@ -116,7 +116,7 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
   initializeFirebaseAdmin();
   const firestore = getFirestore();
   
-  const batchId = `batch-${Date.now()}-${userId.substring(0, 5)}`;
+  const batchId = `batch-${provider}-${Date.now()}-${userId.substring(0, 5)}`;
   const batchRef = firestore.collection('batches').doc(batchId);
 
   const batchData: Omit<BatchJob, 'createdAt'> & { createdAt: FieldValue } = {
@@ -138,63 +138,60 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
     return { status: 'error', message };
   }
 
-  // Do not await the rest of the processing. It will run in the background.
   processBatchInBackground(batchId, cpfs, provider, userId, userEmail);
   
   const serializableBatch: BatchJob = {
     ...batchData,
-    createdAt: new Date().toISOString(), // Return current time as a serializable placeholder
+    createdAt: new Date().toISOString(),
   }
 
   return {
     status: 'success',
-    message: `Lote enviado para processamento em segundo plano.`,
+    message: `Lote para ${provider.toUpperCase()} enviado para processamento.`,
     batch: serializableBatch
   };
 }
 
-async function processBatchInBackground(batchId: string, cpfs: string[], provider: "cartos" | "bms" | "qi", userId: string, userEmail: string) {
-    console.log(`[Batch ${batchId}] Starting background processing for ${cpfs.length} CPFs.`);
+async function processBatchInBackground(batchId: string, cpfs: string[], provider: Provider, userId: string, userEmail: string) {
+    console.log(`[Batch ${batchId}] Starting background processing for ${cpfs.length} CPFs via ${provider}.`);
     const firestore = getFirestore();
     const batchRef = firestore.collection('batches').doc(batchId);
 
-    let userCredentials: ApiCredentials;
-    try {
-        const userDoc = await firestore.collection('users').doc(userId).get();
-        if (!userDoc.exists) throw new Error('Usuário não encontrado.');
-        const userData = userDoc.data()!;
-        userCredentials = {
-            v8_username: userData.v8_username,
-            v8_password: userData.v8_password,
-            v8_audience: userData.v8_audience,
-            v8_client_id: userData.v8_client_id,
-        };
-    } catch (error) {
-        const message = error instanceof Error ? error.message : "Erro ao buscar credenciais.";
-        console.error(`[Batch ${batchId}] Failed to get credentials: ${message}`);
-        await batchRef.update({ status: 'error', message: `Não foi possível carregar as credenciais: ${message}` });
-        return;
-    }
-
-    const { token, error: tokenError } = await getAuthToken(userCredentials);
-    if (tokenError) {
-        console.error(`[Batch ${batchId}] Failed to authenticate: ${tokenError}`);
-        await batchRef.update({ status: 'error', message: `Falha na autenticação do lote: ${tokenError}` });
-        return;
-    }
-    
-    console.log(`[Batch ${batchId}] Authentication successful. Starting CPF loop.`);
-
     let processedCount = 0;
+
     for (const cpf of cpfs) {
         console.log(`[Batch ${batchId}] Processing CPF: ${cpf}`);
-        await consultarSaldoFgts({ 
-            documentNumber: cpf, 
-            provider, 
-            token, // Pass the token here
-            userId,
-            userEmail,
-        });
+        
+        if (provider === 'v8') {
+            // V8 is webhook based, just trigger it. The webhook will store the result.
+            await consultarSaldoV8({ documentNumber: cpf, userId, userEmail });
+        } else if (provider === 'facta') {
+            // Facta is synchronous, we get the result and store it ourselves.
+            const result = await consultarSaldoFgtsFacta({ cpf, userId });
+            
+            const docId = `facta-${cpf}`;
+            const docRef = firestore.collection('webhookResponses').doc(docId);
+            
+            if (result.success && result.data) {
+                 await docRef.set({
+                    responseBody: result.data,
+                    createdAt: FieldValue.serverTimestamp(),
+                    status: 'success',
+                    message: result.message,
+                    id: docId,
+                    provider: 'facta',
+                 }, { merge: true });
+            } else {
+                 await docRef.set({
+                    responseBody: { error: result.message },
+                    createdAt: FieldValue.serverTimestamp(),
+                    status: 'error',
+                    message: result.message,
+                    id: docId,
+                    provider: 'facta',
+                 }, { merge: true });
+            }
+        }
         
         processedCount++;
         await batchRef.update({ processedCpfs: processedCount });
@@ -206,86 +203,96 @@ async function processBatchInBackground(batchId: string, cpfs: string[], provide
 }
 
 
-/**
- * Action to generate the final report. It fetches the results for each CPF
- * from Firestore, where the webhook has saved them.
- */
 export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchema>): Promise<ReportActionResult> {
     const validation = reportActionSchema.safeParse(input);
 
     if (!validation.success) {
-        return { 
-            status: 'error', 
-            fileName: '', 
-            fileContent: '', 
-            message: 'Dados de entrada para o relatório são inválidos.' 
-        };
+        return { status: 'error', fileName: '', fileContent: '', message: 'Dados de entrada para o relatório são inválidos.' };
     }
 
-    const { cpfs, fileName: originalFileName, createdAt } = validation.data;
+    const { cpfs, fileName: originalFileName, createdAt, provider } = validation.data;
     initializeFirebaseAdmin();
     const firestore = getFirestore();
     
-    const results: { CPF: string; Saldo: string | number; Mensagem: string }[] = [];
+    const results: { CPF: string; Saldo?: string | number; Mensagem: string, [key: string]: any }[] = [];
 
     for (const cpf of cpfs) {
         try {
-            const docRef = firestore.collection('webhookResponses').doc(cpf);
+            const docId = provider === 'v8' ? cpf : `facta-${cpf}`;
+            const docRef = firestore.collection('webhookResponses').doc(docId);
             const docSnap = await docRef.get();
 
             if (docSnap.exists) {
                 const data = docSnap.data();
                 const responseBody = data?.responseBody;
                 
-                // Check for explicit error messages within the payload
-                const providerError = responseBody?.errorMessage || responseBody?.error;
-                const isSuccess = data?.status === 'success' && responseBody && typeof responseBody.balance !== 'undefined' && responseBody.balance !== null && !providerError;
+                const providerError = responseBody?.errorMessage || responseBody?.error || data?.message;
+                const isSuccess = data?.status === 'success' && responseBody;
 
                 if (isSuccess) {
-                    const balanceValue = parseFloat(responseBody.balance);
-                    results.push({
-                        CPF: cpf,
-                        Saldo: isNaN(balanceValue) ? '0.00' : balanceValue, 
-                        Mensagem: 'Sucesso',
-                    });
-                } 
-                else {
-                    // Use the most specific error message available
-                    const errorMessage = providerError || data?.message || "Erro no processamento do webhook.";
-                    results.push({
-                        CPF: cpf,
-                        Saldo: 'N/A',
-                        Mensagem: errorMessage,
-                    });
+                    if (provider === 'v8') {
+                        const balanceValue = parseFloat(responseBody.balance);
+                         results.push({
+                            CPF: cpf,
+                            Saldo: isNaN(balanceValue) ? '0.00' : balanceValue, 
+                            Mensagem: 'Sucesso',
+                        });
+                    } else if (provider === 'facta') {
+                        const saldoTotal = parseFloat(responseBody.saldo_total);
+                        let row: any = {
+                            CPF: cpf,
+                            'Saldo Total': isNaN(saldoTotal) ? '0.00' : saldoTotal,
+                            Mensagem: 'Sucesso',
+                            'Data Saldo': responseBody.data_saldo,
+                        };
+                        // Flatten the response
+                        for(let i=1; i<=12; i++){
+                            if(responseBody[`dataRepasse_${i}`]){
+                                row[`Data Repasse ${i}`] = responseBody[`dataRepasse_${i}`];
+                                row[`Valor ${i}`] = parseFloat(responseBody[`valor_${i}`]);
+                            }
+                        }
+                        results.push(row);
+                    }
+                } else {
+                    results.push({ CPF: cpf, Mensagem: providerError || "Erro no processamento." });
                 }
             } else {
-                results.push({
-                    CPF: cpf,
-                    Saldo: 'N/A',
-                    Mensagem: 'Nenhum resultado recebido via webhook.',
-                });
+                results.push({ CPF: cpf, Mensagem: 'Nenhum resultado encontrado.' });
             }
         } catch (error) {
-             results.push({
-                CPF: cpf,
-                Saldo: 'N/A',
-                Mensagem: 'Erro interno ao consultar resultado no Firestore.',
-            });
+             results.push({ CPF: cpf, Mensagem: 'Erro interno ao consultar resultado.' });
         }
     }
 
     const worksheet = XLSX.utils.json_to_sheet(results);
-    worksheet['!cols'] = [
-        { wch: 15 }, // CPF
-        { wch: 15 }, // Saldo
-        { wch: 70 }, // Mensagem
-    ];
-    results.forEach((_, index) => {
-        const cellRef = XLSX.utils.encode_cell({c: 1, r: index + 1});
-        if (worksheet[cellRef] && typeof worksheet[cellRef].v === 'number') {
-            worksheet[cellRef].z = '"R$"#,##0.00';
+    // Auto-size columns
+    const cols = Object.keys(results[0] || {}).map(key => ({ wch: Math.max(15, key.length + 2) }));
+    worksheet['!cols'] = cols;
+    
+    // Formatting currency for saldo total in facta
+    if (provider === 'facta') {
+        const saldoIndex = Object.keys(results[0] || {}).indexOf('Saldo Total');
+        if(saldoIndex !== -1){
+            results.forEach((_, index) => {
+                const cellRef = XLSX.utils.encode_cell({c: saldoIndex, r: index + 1});
+                 if (worksheet[cellRef] && typeof worksheet[cellRef].v === 'number') {
+                    worksheet[cellRef].z = '"R$"#,##0.00';
+                }
+            });
         }
-    });
+    } else {
+         const saldoIndex = Object.keys(results[0] || {}).indexOf('Saldo');
+         if(saldoIndex !== -1){
+            results.forEach((_, index) => {
+                const cellRef = XLSX.utils.encode_cell({c: saldoIndex, r: index + 1});
+                 if (worksheet[cellRef] && typeof worksheet[cellRef].v === 'number') {
+                    worksheet[cellRef].z = '"R$"#,##0.00';
+                }
+            });
+         }
+    }
+
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Resultados FGTS');
@@ -296,7 +303,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
     const date = new Date(createdAt);
     const formattedDate = date.toLocaleDateString('pt-BR').replace(/\//g, '-');
     const formattedTime = date.toTimeString().split(' ')[0].replace(/:/g, '-');
-    const fileName = `HIGIENIZACAO_${originalFileName.replace(/\.xlsx?$/i, '')}_${formattedDate}_${formattedTime}.xlsx`;
+    const fileName = `HIGIENIZACAO_FGTS${provider.toUpperCase()}_${originalFileName.replace(/\.xlsx?$/i, '')}_${formattedDate}_${formattedTime}.xlsx`;
 
     const fileContent = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64String}`;
 

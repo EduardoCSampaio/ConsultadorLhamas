@@ -6,10 +6,16 @@ import { initializeFirebaseAdmin } from '@/firebase/server-init';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import type { ApiCredentials } from './users';
 
-const consultaSchema = z.object({
+const cltConsultaSchema = z.object({
   cpf: z.string().min(11, { message: "CPF deve ter 11 dígitos." }).max(11, { message: "CPF deve ter 11 dígitos." }),
   userId: z.string(),
 });
+
+const fgtsConsultaSchema = z.object({
+    cpf: z.string().min(11, { message: "CPF deve ter 11 dígitos." }).max(11, { message: "CPF deve ter 11 dígitos." }),
+    userId: z.string(),
+});
+
 
 type FactaTokenResponse = {
   erro: boolean;
@@ -48,11 +54,26 @@ export type FactaOffer = {
   };
 };
 
-export type ConsultaFactaResult = {
+export type FactaFgtsBalance = {
+    data_saldo: string;
+    horaSaldo: string;
+    saldo_total: string;
+    [key: `dataRepasse_${number}`]: string;
+    [key: `valor_${number}`]: string;
+}
+
+export type ConsultaFactaCltResult = {
   success: boolean;
   message: string;
   data?: FactaOffer[];
 };
+
+export type ConsultaFactaFgtsResult = {
+  success: boolean;
+  message: string;
+  data?: FactaFgtsBalance;
+};
+
 
 const FACTA_API_BASE_URL_PROD = 'https://webservice.facta.com.br';
 
@@ -122,12 +143,12 @@ async function getFactaToken(credentials: ApiCredentials): Promise<{ token: stri
   }
 }
 
-async function logFactaActivity(userId: string, cpf: string) {
+async function logActivity(userId: string, cpf: string, action: string) {
     try {
         const firestore = getFirestore();
         const userDoc = await firestore.collection('users').doc(userId).get();
         if (!userDoc.exists) {
-            console.error(`[logFactaActivity] User with ID ${userId} not found.`);
+            console.error(`[logActivity] User with ID ${userId} not found.`);
             return;
         }
         const userEmail = userDoc.data()?.email || 'N/A';
@@ -135,41 +156,37 @@ async function logFactaActivity(userId: string, cpf: string) {
         await firestore.collection('activityLogs').add({
             userId: userId,
             userEmail: userEmail,
-            action: 'Consulta CLT Facta',
+            action: action,
             documentNumber: cpf,
             provider: 'facta',
             createdAt: FieldValue.serverTimestamp(),
         });
     } catch (logError) {
-        console.error("Failed to log Facta activity:", logError);
+        console.error(`Failed to log ${action} activity:`, logError);
     }
 }
 
 
-export async function consultarOfertasFacta(input: z.infer<typeof consultaSchema>): Promise<ConsultaFactaResult> {
-    const validation = consultaSchema.safeParse(input);
+export async function consultarOfertasFacta(input: z.infer<typeof cltConsultaSchema>): Promise<ConsultaFactaCltResult> {
+    const validation = cltConsultaSchema.safeParse(input);
     if (!validation.success) {
         return { success: false, message: 'Dados de entrada inválidos.' };
     }
 
     const { cpf, userId } = validation.data;
 
-    // 1. Get Facta Credentials
     const { credentials, error: credError } = await getFactaUserCredentials(userId);
     if (credError || !credentials) {
         return { success: false, message: credError || "Credenciais não encontradas." };
     }
 
-    // 2. Get Facta Token
     const { token, error: tokenError } = await getFactaToken(credentials);
     if (tokenError) {
         return { success: false, message: tokenError };
     }
     
-    // Log the activity regardless of the outcome of the API call itself.
-    await logFactaActivity(userId, cpf);
+    await logActivity(userId, cpf, 'Consulta CLT Facta');
 
-    // 3. Consult Offers
     try {
         const url = new URL(`${FACTA_API_BASE_URL_PROD}/consignado-trabalhador/consulta-ofertas`);
         url.searchParams.append('cpf', cpf);
@@ -200,4 +217,48 @@ export async function consultarOfertasFacta(input: z.infer<typeof consultaSchema
     }
 }
 
-    
+export async function consultarSaldoFgtsFacta(input: z.infer<typeof fgtsConsultaSchema>): Promise<ConsultaFactaFgtsResult> {
+    const validation = fgtsConsultaSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: 'Dados de entrada inválidos.' };
+    }
+
+    const { cpf, userId } = validation.data;
+
+    const { credentials, error: credError } = await getFactaUserCredentials(userId);
+    if (credError || !credentials) {
+        return { success: false, message: credError || "Credenciais não encontradas." };
+    }
+
+    const { token, error: tokenError } = await getFactaToken(credentials);
+    if (tokenError) {
+        return { success: false, message: tokenError };
+    }
+
+    await logActivity(userId, cpf, 'Consulta FGTS Facta');
+
+    try {
+        const url = new URL(`${FACTA_API_BASE_URL_PROD}/fgts/saldo`);
+        url.searchParams.append('cpf', cpf);
+
+        const response = await fetch(url.toString(), {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+        
+        const data = await response.json();
+
+        if (data.erro) {
+            return { success: false, message: data.msg || 'Erro ao consultar saldo FGTS na Facta.' };
+        }
+        
+        return { success: true, message: data.msg, data: data.retorno };
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro de comunicação ao consultar saldo FGTS da Facta.";
+        console.error('[FACTA API] Erro na consulta de saldo FGTS:', error);
+        return { success: false, message };
+    }
+}

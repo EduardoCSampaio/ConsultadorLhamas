@@ -4,12 +4,12 @@
 import { z } from 'zod';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import type { ApiCredentials } from './users';
 
 const actionSchema = z.object({
   documentNumber: z.string(),
-  provider: z.enum(["cartos", "bms", "qi"]),
+  // provider is hardcoded to 'qi' for V8 but kept for schema consistency
+  provider: z.literal("qi").optional().default("qi"),
   token: z.string().optional(),
   // For logging purposes
   userId: z.string(), 
@@ -32,7 +32,7 @@ export async function getAuthToken(credentials: ApiCredentials): Promise<{token:
       !v8_audience && "Audience",
       !v8_client_id && "Client ID"
     ].filter(Boolean).join(', ');
-    return { token: undefined, error: `Credenciais de API incompletas. Faltando: ${missing}. Por favor, configure-as na página de Configurações.` };
+    return { token: undefined, error: `Credenciais da V8 incompletas. Faltando: ${missing}. Por favor, configure-as na página de Configurações.` };
   }
   
   const tokenUrl = 'https://auth.v8sistema.com/oauth/token';
@@ -67,8 +67,8 @@ export async function getAuthToken(credentials: ApiCredentials): Promise<{token:
   }
 }
 
-export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): Promise<ActionResult> {
-  const validation = actionSchema.safeParse(input);
+export async function consultarSaldoFgts(input: Omit<z.infer<typeof actionSchema>, 'provider'>): Promise<ActionResult> {
+  const validation = actionSchema.safeParse({ ...input, provider: 'qi' });
 
   if (!validation.success) {
     return { status: 'error', stepIndex: 0, message: 'Dados de entrada inválidos.' };
@@ -77,6 +77,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   const { documentNumber, provider, userId, userEmail } = validation.data;
   let authToken = validation.data.token;
   
+  // This function is only for V8, so we get V8 creds.
   if (!authToken) {
       let userCredentials: ApiCredentials;
       try {
@@ -114,20 +115,18 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   const requestBody = { documentNumber, provider };
 
   try {
-    // Log activity before sending the request
     try {
         const firestore = getFirestore();
         await firestore.collection('activityLogs').add({
             userId: userId,
             userEmail: userEmail,
-            action: `Consulta FGTS - ${provider}`,
+            action: `Consulta FGTS - V8`,
             documentNumber: documentNumber,
-            provider: provider,
+            provider: 'v8', // Log provider as 'v8'
             createdAt: FieldValue.serverTimestamp(),
         });
     } catch (logError) {
         console.error("Failed to log user activity:", logError);
-        // Do not block the main flow if logging fails
     }
 
     const consultaResponse = await fetch(API_URL_CONSULTA, {
@@ -149,7 +148,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
         } catch (e) {
             // ignora se não for JSON
         }
-        const errorMessage = `Erro ao enviar consulta: ${consultaResponse.status} ${consultaResponse.statusText}. Detalhes: ${errorDetails}`;
+        const errorMessage = `Erro ao enviar consulta V8: ${consultaResponse.status} ${consultaResponse.statusText}. Detalhes: ${errorDetails}`;
         return { status: 'error', stepIndex: 1, message: errorMessage };
     }
 
@@ -157,7 +156,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
     return { 
         status: 'success', 
         stepIndex: 1, 
-        message: 'Consulta de saldo iniciada com sucesso. Aguardando o resultado via webhook.' 
+        message: 'Consulta de saldo (V8) iniciada com sucesso. Aguardando o resultado via webhook.' 
     };
 
   } catch (error) {
@@ -166,5 +165,3 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
     return { status: 'error', stepIndex: 1, message };
   }
 }
-
-    
