@@ -219,18 +219,23 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
   const batchId = `batch-${displayProvider}-${v8Provider || ''}-${Date.now()}-${userId.substring(0, 5)}`;
   const batchRef = firestore.collection('batches').doc(batchId);
 
+  // Firestore does not accept `undefined` values.
+  // We build the object and conditionally add the `v8Provider` field.
   const batchData: Omit<BatchJob, 'createdAt' | 'id'> & { createdAt: FieldValue } = {
       fileName: fileName,
       provider: displayProvider,
-      v8Provider: v8Provider,
-      status: 'pending', // Start as pending, background process will change it
+      status: 'pending',
       totalCpfs: cpfs.length,
       processedCpfs: 0,
       cpfs: cpfs,
       createdAt: FieldValue.serverTimestamp(),
       userId: userId,
       userEmail: userEmail,
-  };
+  } as Omit<BatchJob, 'createdAt' | 'id'> & { createdAt: FieldValue };
+
+  if (provider === 'v8' && v8Provider) {
+      batchData.v8Provider = v8Provider;
+  }
 
   try {
       await batchRef.set(batchData);
