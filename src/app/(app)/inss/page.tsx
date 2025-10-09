@@ -21,18 +21,13 @@ import { Loader2, Search, AlertCircle, CircleDashed, TableIcon } from "lucide-re
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { useUser } from "@/firebase";
 import { consultarOperacoesInssFacta, type InssSimulationResult } from "@/app/actions/facta";
-import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon } from "lucide-react";
-import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
-import { cn } from "@/lib/utils";
+
 
 const formSchema = z.object({
   cpf: z.string().min(11, "CPF deve ter 11 dígitos.").max(11, "CPF deve ter 11 dígitos."),
-  data_nascimento: z.date({
-    required_error: "A data de nascimento é obrigatória.",
+  data_nascimento: z.string().refine((val) => /^\d{2}\/\d{2}\/\d{4}$/.test(val), {
+    message: "Data de nascimento deve estar no formato DD/MM/AAAA.",
   }),
   valor_renda: z.string().min(1, "O valor da renda é obrigatório."),
   valor_desejado: z.string().min(1, "O valor desejado é obrigatório."),
@@ -48,6 +43,18 @@ const formatCurrency = (value: string | number | undefined | null) => {
     }).format(numberValue);
 };
 
+const handleDateMask = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value.replace(/\D/g, '');
+    if (value.length > 8) value = value.substring(0, 8);
+    if (value.length > 4) {
+        value = `${value.substring(0, 2)}/${value.substring(2, 4)}/${value.substring(4)}`;
+    } else if (value.length > 2) {
+        value = `${value.substring(0, 2)}/${value.substring(2)}`;
+    }
+    e.target.value = value;
+};
+
+
 export default function InssFactaPage() {
   const { user } = useUser();
   const [isLoading, setIsLoading] = useState(false);
@@ -59,6 +66,7 @@ export default function InssFactaPage() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       cpf: "",
+      data_nascimento: "",
       valor_renda: "",
       valor_desejado: "",
     },
@@ -77,9 +85,8 @@ export default function InssFactaPage() {
 
     const formattedValues = {
         ...values,
-        data_nascimento: format(values.data_nascimento, 'dd/MM/yyyy'),
-        valor_renda: parseFloat(values.valor_renda.replace(',', '.')),
-        valor_desejado: parseFloat(values.valor_desejado.replace(',', '.')),
+        valor_renda: parseFloat(values.valor_renda.replace('.', '').replace(',', '.')),
+        valor_desejado: parseFloat(values.valor_desejado.replace('.', '').replace(',', '.')),
         userId: user.uid,
     };
 
@@ -127,46 +134,25 @@ export default function InssFactaPage() {
                         )}
                     />
                     <FormField
-                        control={form.control}
-                        name="data_nascimento"
-                        render={({ field }) => (
-                            <FormItem className="flex flex-col">
-                            <FormLabel>Data de Nascimento</FormLabel>
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                <FormControl>
-                                    <Button
-                                    variant={"outline"}
-                                    className={cn(
-                                        "pl-3 text-left font-normal",
-                                        !field.value && "text-muted-foreground"
-                                    )}
-                                    disabled={isLoading}
-                                    >
-                                    {field.value ? (
-                                        format(field.value, "dd/MM/yyyy")
-                                    ) : (
-                                        <span>Selecione a data</span>
-                                    )}
-                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                    </Button>
-                                </FormControl>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0" align="start">
-                                <Calendar
-                                    mode="single"
-                                    selected={field.value}
-                                    onSelect={field.onChange}
-                                    disabled={(date) =>
-                                    date > new Date() || date < new Date("1900-01-01")
-                                    }
-                                    initialFocus
-                                />
-                                </PopoverContent>
-                            </Popover>
-                            <FormMessage />
-                            </FormItem>
-                        )}
+                      control={form.control}
+                      name="data_nascimento"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Data de Nascimento</FormLabel>
+                          <FormControl>
+                            <Input 
+                              placeholder="DD/MM/AAAA" 
+                              {...field} 
+                              onChange={(e) => {
+                                handleDateMask(e);
+                                field.onChange(e.target.value);
+                              }}
+                              disabled={isLoading}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
                      <FormField
                         control={form.control}
