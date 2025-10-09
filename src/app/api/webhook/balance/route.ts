@@ -67,27 +67,51 @@ export async function POST(request: NextRequest) {
     // If the webhook is part of a batch, update the batch progress
     if (batchId) {
         const batchRef = db.collection('batches').doc(batchId);
-        const batchDoc = await batchRef.get();
-        if (batchDoc.exists) {
-            const batchData = batchDoc.data()!;
-            const newProcessedCount = (batchData.processedCpfs || 0) + 1;
-            
-            const updateData: any = {
-                processedCpfs: newProcessedCount
-            };
-            
-            // If all CPFs are processed, mark the batch as completed
-            if (newProcessedCount >= batchData.totalCpfs) {
-                updateData.status = 'completed';
-                updateData.message = 'Processamento concluído via webhooks.';
-                updateData.completedAt = FieldValue.serverTimestamp();
+        
+        try {
+            await db.runTransaction(async (transaction) => {
+                const batchDoc = await transaction.get(batchRef);
+                if (!batchDoc.exists) {
+                    console.warn(`[Webhook Transaction] Batch document ${batchId} not found.`);
+                    return;
+                }
+                
+                const batchData = batchDoc.data()!;
+                const currentProcessedCount = batchData.processedCpfs || 0;
+                const newProcessedCount = currentProcessedCount + 1;
+
+                const updateData: any = {
+                    processedCpfs: FieldValue.increment(1)
+                };
+                
+                transaction.update(batchRef, updateData);
+
+                // After incrementing, check if the batch is complete.
+                if (newProcessedCount >= batchData.totalCpfs) {
+                    // This update must happen outside the main transaction's update logic
+                    // but we can schedule it. We'll do a separate update for status.
+                    console.log(`[Batch ${batchId}] All CPFs processed. Marking as complete.`);
+                }
+            });
+
+             // Separate read to check if batch is complete after increment
+            const updatedBatchDoc = await batchRef.get();
+            if (updatedBatchDoc.exists) {
+                const updatedData = updatedBatchDoc.data()!;
+                if (updatedData.processedCpfs >= updatedData.totalCpfs) {
+                     await batchRef.update({
+                        status: 'completed',
+                        message: 'Processamento concluído via webhooks.',
+                        completedAt: FieldValue.serverTimestamp(),
+                    });
+                }
+                 console.log(`[Batch ${batchId}] Progress updated. Processed count: ${updatedData.processedCpfs}/${updatedData.totalCpfs}`);
             }
-            
-            await batchRef.update(updateData);
-            console.log(`[Batch ${batchId}] Progress updated. Processed count: ${newProcessedCount}/${batchData.totalCpfs}`);
-        } else {
-            console.warn(`[Webhook] Received payload for batchId ${batchId}, but batch document was not found.`);
+
+        } catch (e) {
+            console.error(`[Batch ${batchId}] Transaction failed: `, e);
         }
+
     }
 
 
