@@ -1,3 +1,4 @@
+
 'use server';
 
 import { z } from 'zod';
@@ -21,6 +22,7 @@ const inssGetOperationsSchema = z.object({
     cpf: z.string(),
     data_nascimento: z.string(),
     valor_renda: z.number(),
+    margem_cartao: z.number(),
     userId: z.string(),
 });
 
@@ -332,7 +334,7 @@ export async function getInssOperations(input: z.infer<typeof inssGetOperationsS
         return { success: false, message: 'Dados de entrada inválidos: ' + JSON.stringify(validation.error.flatten()) };
     }
 
-    const { cpf, data_nascimento, valor_renda, userId } = validation.data;
+    const { cpf, data_nascimento, valor_renda, margem_cartao, userId } = validation.data;
     
     const { credentials, error: credError } = await getFactaUserCredentials(userId);
     if (credError || !credentials) {
@@ -353,10 +355,11 @@ export async function getInssOperations(input: z.infer<typeof inssGetOperationsS
         url.searchParams.append('averbador', '3');
         url.searchParams.append('convenio', '3');
         url.searchParams.append('opcao_valor', '2');
+        url.searchParams.append('valor', '');
         url.searchParams.append('cpf', cpf);
         url.searchParams.append('data_nascimento', data_nascimento);
         url.searchParams.append('valor_renda', String(valor_renda));
-        url.searchParams.append('valor', '');
+        url.searchParams.append('margem_cartao', String(margem_cartao));
 
         const response = await fetch(url.toString(), {
             method: 'GET',
