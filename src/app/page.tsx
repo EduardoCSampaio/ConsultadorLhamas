@@ -73,8 +73,17 @@ export default function LoginPage() {
           uid: newUser.uid,
           email: newUser.email,
           role: isAdmin ? 'admin' : 'user',
-          status: isAdmin ? 'active' : 'pending', // Admin is active by default, others are pending
+          status: isAdmin ? 'active' : 'pending',
           createdAt: serverTimestamp(),
+          permissions: isAdmin ? {
+              canViewFGTS: true,
+              canViewCLT: true,
+              canViewINSS: true,
+          } : {
+              canViewFGTS: false,
+              canViewCLT: false,
+              canViewINSS: false,
+          }
         };
 
         await setDoc(doc(firestore, "users", newUser.uid), userProfile);

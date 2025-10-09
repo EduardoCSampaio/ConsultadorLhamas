@@ -44,20 +44,20 @@ import { doc } from 'firebase/firestore';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from '@/lib/utils';
+import type { UserProfile } from '@/app/actions/users';
 
 const allBaseMenuItems = [
-  { href: "/dashboard", icon: Home, label: "Dashboard", tooltip: "Dashboard", adminOnly: false },
-  // FGTS is now a collapsible menu
-  { href: "/esteira", icon: Workflow, label: "Esteira", tooltip: "Acompanhamento de Lotes", adminOnly: true },
-  { href: "/admin/history", icon: BookMarked, label: "Histórico", tooltip: "Histórico de Atividade", adminOnly: true },
+  { href: "/dashboard", icon: Home, label: "Dashboard", permission: 'isLoggedIn' as const },
+  { href: "/esteira", icon: Workflow, label: "Esteira", permission: 'isAdmin' as const },
+  { href: "/admin/history", icon: BookMarked, label: "Histórico", permission: 'isAdmin' as const },
 ];
 
 const adminBottomMenuItems = [
-    { href: "/admin/users", icon: Users, label: "Gerenciar Usuários", tooltip: "Gerenciar Usuários" },
+    { href: "/admin/users", icon: Users, label: "Gerenciar Usuários", permission: 'isAdmin' as const },
 ];
 
 const bottomMenuItems = [
-    { href: "/configuracoes", icon: Cog, label: "Configurações", tooltip: "Configurações" },
+    { href: "/configuracoes", icon: Cog, label: "Configurações", permission: 'isLoggedIn' as const },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -72,7 +72,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return doc(firestore, 'users', user.uid);
   }, [firestore, user]);
 
-  const { data: userProfile, isLoading: isProfileLoading } = useDoc(userProfileRef);
+  const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userProfileRef);
 
   const handleLogout = async () => {
     if (auth) {
@@ -90,29 +90,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // If user is logged in, but profile isn't loaded yet, do nothing.
     if (!userProfile) return;
 
-    // Once profile is loaded, check status
     if (userProfile.status !== 'active') {
         if (auth) {
             signOut(auth);
         }
         router.push(`/?status=${userProfile.status || 'pending'}`);
-        return; // Important to stop execution
+        return;
     }
-
-    // Also check for custom claim for admin role as a fallback/primary truth source
-    getIdTokenResult(user).then((idTokenResult) => {
-        const isAdminClaim = idTokenResult.claims.admin === true;
-
-        // If the profile role is admin but the claim isn't there, something is wrong.
-        // For now, we trust the claim more. If claim is missing, and they try to access admin,
-        // Firestore rules will block them anyway.
-        // This effect mainly handles logging out non-active users.
-    });
-
-
   }, [user, userProfile, isUserLoading, isProfileLoading, router, auth]);
 
 
@@ -120,7 +106,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return email.substring(0, 2).toUpperCase();
   }
 
-  // Show a loading state while user or profile are being loaded.
+  const hasPermission = (permission: 'isAdmin' | 'isLoggedIn' | keyof UserProfile['permissions']) => {
+    if (permission === 'isLoggedIn') return true;
+    if (userProfile?.role === 'admin') return true;
+    if (permission === 'isAdmin') return false;
+    
+    return !!userProfile?.permissions?.[permission];
+  };
+
   if (isUserLoading || isProfileLoading) {
     return (
         <div className="flex min-h-screen items-center justify-center bg-background">
@@ -129,18 +122,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const baseMenuItems = allBaseMenuItems.filter(item => 
-    !item.adminOnly || (item.adminOnly && userProfile?.role === 'admin')
-  );
-
+  const baseMenuItems = allBaseMenuItems.filter(item => hasPermission(item.permission));
   const allBottomMenuItems = [
-      ...(userProfile?.role === 'admin' ? adminBottomMenuItems : []),
-      ...bottomMenuItems,
+      ...adminBottomMenuItems.filter(item => hasPermission(item.permission)),
+      ...bottomMenuItems.filter(item => hasPermission(item.permission)),
   ];
   
-  const isAdmin = userProfile?.role === 'admin';
-
-
   return (
     <SidebarProvider>
       <Sidebar variant="floating" collapsible="icon">
@@ -154,7 +141,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <SidebarMenuButton
                   asChild
                   isActive={pathname.startsWith(item.href)}
-                  tooltip={item.tooltip}
+                  tooltip={item.label}
                 >
                   <Link href={item.href}>
                     <item.icon />
@@ -164,7 +151,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </SidebarMenuItem>
             ))}
 
-            {isAdmin && (
+            {hasPermission('canViewFGTS') && (
                <SidebarMenuItem>
                 <Collapsible>
                   <CollapsibleTrigger asChild>
@@ -202,7 +189,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </SidebarMenuItem>
             )}
 
-            {isAdmin && (
+            {hasPermission('canViewINSS') && (
                 <SidebarMenuItem>
                     <SidebarMenuButton
                         asChild
@@ -217,39 +204,41 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </SidebarMenuItem>
             )}
 
-             <SidebarMenuItem>
-              <Collapsible>
-                <CollapsibleTrigger asChild>
-                  <SidebarMenuButton
-                    className="w-full justify-start"
-                    isActive={pathname.startsWith('/clt')}
-                    tooltip="Crédito CLT"
-                  >
-                    <Briefcase/>
-                    <span>CLT</span>
-                    <ChevronDown className="ml-auto size-4 shrink-0 transition-transform ease-in-out group-data-[state=open]:rotate-180" />
-                  </SidebarMenuButton>
-                </CollapsibleTrigger>
-                <CollapsibleContent asChild>
-                  <SidebarMenuSub>
-                     <SidebarMenuItem>
-                      <SidebarMenuSubButton asChild isActive={pathname === '/clt/v8'}>
-                        <Link href="/clt/v8">
-                          <span>V8</span>
-                        </Link>
-                      </SidebarMenuSubButton>
-                    </SidebarMenuItem>
-                    <SidebarMenuItem>
-                      <SidebarMenuSubButton asChild isActive={pathname === '/clt/facta'}>
-                        <Link href="/clt/facta">
-                          <span>FACTA</span>
-                        </Link>
-                      </SidebarMenuSubButton>
-                    </SidebarMenuItem>
-                  </SidebarMenuSub>
-                </CollapsibleContent>
-              </Collapsible>
-            </SidebarMenuItem>
+             {hasPermission('canViewCLT') && (
+                <SidebarMenuItem>
+                <Collapsible>
+                    <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                        className="w-full justify-start"
+                        isActive={pathname.startsWith('/clt')}
+                        tooltip="Crédito CLT"
+                    >
+                        <Briefcase/>
+                        <span>CLT</span>
+                        <ChevronDown className="ml-auto size-4 shrink-0 transition-transform ease-in-out group-data-[state=open]:rotate-180" />
+                    </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent asChild>
+                    <SidebarMenuSub>
+                        <SidebarMenuItem>
+                        <SidebarMenuSubButton asChild isActive={pathname === '/clt/v8'}>
+                            <Link href="/clt/v8">
+                            <span>V8</span>
+                            </Link>
+                        </SidebarMenuSubButton>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                        <SidebarMenuSubButton asChild isActive={pathname === '/clt/facta'}>
+                            <Link href="/clt/facta">
+                            <span>FACTA</span>
+                            </Link>
+                        </SidebarMenuSubButton>
+                        </SidebarMenuItem>
+                    </SidebarMenuSub>
+                    </CollapsibleContent>
+                </Collapsible>
+                </SidebarMenuItem>
+            )}
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter className="flex-col !gap-1">
@@ -259,7 +248,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     <SidebarMenuButton
                       asChild
                       isActive={pathname.startsWith(item.href)}
-                      tooltip={item.tooltip}
+                      tooltip={item.label}
                     >
                       <Link href={item.href}>
                         <item.icon />

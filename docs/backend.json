@@ -1,5 +1,3 @@
-
-
 {
   "entities": {
     "WebhookResponse": {
@@ -100,6 +98,15 @@
         "facta_password": {
             "type": "string",
             "description": "Password for the Facta API integration (should be stored securely)."
+        },
+        "permissions": {
+          "type": "object",
+          "description": "Granular access control for different app features.",
+          "properties": {
+            "canViewFGTS": { "type": "boolean", "description": "Access to FGTS batch and manual query pages." },
+            "canViewCLT": { "type": "boolean", "description": "Access to CLT credit query pages." },
+            "canViewINSS": { "type": "boolean", "description": "Access to INSS benefit card query pages." }
+          }
         }
       },
       "required": [

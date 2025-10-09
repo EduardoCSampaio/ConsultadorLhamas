@@ -7,10 +7,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { updateUserStatus, getUsers, exportUsersToExcel } from "@/app/actions/users";
+import { updateUserStatus, getUsers, exportUsersToExcel, updateUserPermissions } from "@/app/actions/users";
 import { useToast } from "@/hooks/use-toast";
 import { Check, X, Pencil, UserX, UserCheck, Download, Loader2 } from "lucide-react";
-import type { UserProfile } from "@/app/actions/users";
+import type { UserProfile, UserPermissions } from "@/app/actions/users";
 import { useEffect, useState } from "react";
 import {
   Dialog,
@@ -30,9 +30,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useUser } from "@/firebase";
+import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 
 
 type UserStatus = UserProfile['status'];
+
+const permissionLabels: Record<keyof UserPermissions, string> = {
+    canViewFGTS: "Acesso a Consultas FGTS",
+    canViewCLT: "Acesso a Consultas CLT",
+    canViewINSS: "Acesso a Consultas INSS",
+};
 
 export default function AdminUsersPage() {
     const { toast } = useToast();
@@ -44,7 +52,11 @@ export default function AdminUsersPage() {
 
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
+    
+    // State for editing in modal
     const [newStatus, setNewStatus] = useState<UserStatus | null>(null);
+    const [newPermissions, setNewPermissions] = useState<UserPermissions>({});
+
 
     const fetchUsers = async () => {
         setIsLoading(true);
@@ -74,7 +86,7 @@ export default function AdminUsersPage() {
                 title: "Status do usuário atualizado!",
                 description: `O status do usuário foi alterado com sucesso.`,
             });
-            await fetchUsers();
+            await fetchUsers(); // Refresh data
         } else {
             toast({
                 variant: "destructive",
@@ -88,16 +100,35 @@ export default function AdminUsersPage() {
     const handleOpenEditModal = (user: UserProfile) => {
         setSelectedUser(user);
         setNewStatus(user.status);
+        setNewPermissions(user.permissions || {});
         setIsEditModalOpen(true);
     };
 
     const handleSaveChanges = async () => {
-        if (!selectedUser || !newStatus) return;
+        if (!selectedUser) return;
+        setUpdatingId(selectedUser.uid);
+        
+        let statusUpdated = true;
+        if (newStatus && newStatus !== selectedUser.status) {
+            const statusResult = await updateUserStatus({ uid: selectedUser.uid, status: newStatus });
+            if (!statusResult.success) {
+                toast({ variant: "destructive", title: "Erro ao atualizar status", description: statusResult.error });
+                statusUpdated = false;
+            }
+        }
+        
+        const permsResult = await updateUserPermissions({ uid: selectedUser.uid, permissions: newPermissions });
+        if (!permsResult.success) {
+             toast({ variant: "destructive", title: "Erro ao atualizar permissões", description: permsResult.error });
+        }
 
-        await handleStatusChange(selectedUser.uid, newStatus);
+        if(statusUpdated && permsResult.success) {
+             toast({ title: "Usuário atualizado com sucesso!" });
+        }
+        
         setIsEditModalOpen(false);
-        setSelectedUser(null);
-        setNewStatus(null);
+        setUpdatingId(null);
+        await fetchUsers();
     };
     
      const handleExport = async () => {
@@ -269,46 +300,72 @@ export default function AdminUsersPage() {
             </div>
             
             <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-                <DialogContent className="sm:max-w-[425px]">
+                <DialogContent className="sm:max-w-[480px]">
                     <DialogHeader>
                         <DialogTitle>Editar Usuário</DialogTitle>
                         <DialogDescription>
-                            Altere o status do usuário. Clique em salvar para aplicar as mudanças.
+                            Altere o status e as permissões do usuário.
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="email" className="text-right">
-                                Email
-                            </Label>
-                            <Input id="email" value={selectedUser?.email || ''} readOnly className="col-span-3" />
-                        </div>
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="status" className="text-right">
-                                Status
-                            </Label>
-                            <Select
-                                value={newStatus || ''}
-                                onValueChange={(value) => setNewStatus(value as UserStatus)}
-                            >
-                                <SelectTrigger className="col-span-3">
-                                    <SelectValue placeholder="Selecione um status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="active">Ativo</SelectItem>
-                                    <SelectItem value="pending">Pendente</SelectItem>
-                                    <SelectItem value="inactive">Inativo</SelectItem>
-                                    <SelectItem value="rejected">Rejeitado</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>Cancelar</Button>
-                        <Button onClick={handleSaveChanges} disabled={updatingId === selectedUser?.uid}>
-                            {updatingId === selectedUser?.uid ? "Salvando..." : "Salvar Mudanças"}
-                        </Button>
-                    </DialogFooter>
+                    {selectedUser && (
+                        <>
+                            <div className="grid gap-6 py-4">
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="email" className="text-right">
+                                        Email
+                                    </Label>
+                                    <Input id="email" value={selectedUser.email || ''} readOnly className="col-span-3" />
+                                </div>
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="status" className="text-right">
+                                        Status
+                                    </Label>
+                                    <Select
+                                        value={newStatus || ''}
+                                        onValueChange={(value) => setNewStatus(value as UserStatus)}
+                                    >
+                                        <SelectTrigger className="col-span-3">
+                                            <SelectValue placeholder="Selecione um status" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="active">Ativo</SelectItem>
+                                            <SelectItem value="pending">Pendente</SelectItem>
+                                            <SelectItem value="inactive">Inativo</SelectItem>
+                                            <SelectItem value="rejected">Rejeitado</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                
+                                <Separator />
+
+                                <div>
+                                    <Label className="text-base font-semibold">Permissões de Acesso</Label>
+                                    <div className="space-y-3 mt-4">
+                                        {(Object.keys(permissionLabels) as Array<keyof UserPermissions>).map((key) => (
+                                            <div key={key} className="flex items-center space-x-3">
+                                                <Checkbox
+                                                    id={`perm-${key}`}
+                                                    checked={!!newPermissions[key]}
+                                                    onCheckedChange={(checked) => {
+                                                        setNewPermissions(prev => ({ ...prev, [key]: !!checked }));
+                                                    }}
+                                                />
+                                                <Label htmlFor={`perm-${key}`} className="font-normal text-sm">
+                                                    {permissionLabels[key]}
+                                                </Label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>Cancelar</Button>
+                                <Button onClick={handleSaveChanges} disabled={updatingId === selectedUser?.uid}>
+                                    {updatingId === selectedUser.uid ? "Salvando..." : "Salvar Mudanças"}
+                                </Button>
+                            </DialogFooter>
+                        </>
+                    )}
                 </DialogContent>
             </Dialog>
         </>

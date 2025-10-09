@@ -7,6 +7,12 @@ import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import * as XLSX from 'xlsx';
 
+export type UserPermissions = {
+  canViewFGTS?: boolean;
+  canViewCLT?: boolean;
+  canViewINSS?: boolean;
+};
+
 export type ApiCredentials = {
   v8_username?: string;
   v8_password?: string;
@@ -25,7 +31,16 @@ const updateApiCredentialsSchema = z.object({
     v8_client_id: z.string().optional(),
     facta_username: z.string().optional(),
     facta_password: z.string().optional(),
-  }).partial(), // Allows partial updates
+  }).partial(),
+});
+
+const updateUserPermissionsSchema = z.object({
+  uid: z.string().min(1),
+  permissions: z.object({
+    canViewFGTS: z.boolean().optional(),
+    canViewCLT: z.boolean().optional(),
+    canViewINSS: z.boolean().optional(),
+  }).partial(),
 });
 
 
@@ -53,7 +68,8 @@ export type UserProfile = {
     email: string;
     role: 'admin' | 'user';
     status: 'pending' | 'active' | 'rejected' | 'inactive';
-    createdAt: string; // Changed to string to be serializable
+    createdAt: string;
+    permissions?: UserPermissions;
 } & ApiCredentials;
 
 export type ActivityLog = {
@@ -203,8 +219,7 @@ export async function getUsers(): Promise<{users: UserProfile[] | null, error?: 
             const data = doc.data();
             const createdAt = data.createdAt;
 
-            // Convert Firestore Timestamp to a serializable format (ISO string)
-            let serializableCreatedAt = new Date().toISOString(); // Default value
+            let serializableCreatedAt = new Date().toISOString();
             if (createdAt instanceof Timestamp) {
                 serializableCreatedAt = createdAt.toDate().toISOString();
             } else if (typeof createdAt === 'string') {
@@ -223,6 +238,7 @@ export async function getUsers(): Promise<{users: UserProfile[] | null, error?: 
                 v8_client_id: data.v8_client_id,
                 facta_username: data.facta_username,
                 facta_password: data.facta_password,
+                permissions: data.permissions || {},
             } as UserProfile;
         });
 
@@ -277,6 +293,30 @@ export async function updateUserStatus(input: z.infer<typeof updateUserStatusSch
   }
 }
 
+export async function updateUserPermissions(input: z.infer<typeof updateUserPermissionsSchema>): Promise<{success: boolean, error?: string}> {
+    const validation = updateUserPermissionsSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, error: "Dados de permissão inválidos." };
+    }
+
+    const { uid, permissions } = validation.data;
+
+    try {
+        initializeFirebaseAdmin();
+        const firestore = getFirestore();
+        const userRef = firestore.collection('users').doc(uid);
+        
+        await userRef.update({ permissions });
+
+        return { success: true };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao salvar as permissões.";
+        console.error("Erro ao salvar permissões:", message);
+        return { success: false, error: message };
+    }
+}
+
+
 export async function updateApiCredentials(input: z.infer<typeof updateApiCredentialsSchema>): Promise<{success: boolean, error?: string}> {
     const validation = updateApiCredentialsSchema.safeParse(input);
     if (!validation.success) {
@@ -290,13 +330,12 @@ export async function updateApiCredentials(input: z.infer<typeof updateApiCreden
         const firestore = getFirestore();
         const userRef = firestore.collection('users').doc(uid);
         
-        // Filter out undefined values so Firestore doesn't overwrite fields with null
         const credentialsToUpdate = Object.fromEntries(
             Object.entries(credentials).filter(([_, value]) => value !== undefined)
         );
 
         if (Object.keys(credentialsToUpdate).length === 0) {
-            return { success: true }; // Nothing to update
+            return { success: true };
         }
 
         await userRef.update(credentialsToUpdate);
@@ -354,9 +393,8 @@ export async function exportUsersToExcel(input: z.infer<typeof exportUsersSchema
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Usuários');
         
-        // Auto-adjust column widths
         const header = ['Email', 'Status', 'Função', 'Data de Cadastro'];
-        const colWidths = header.map(h => ({ wch: Math.max(h.length, 20) })); // min width of 20
+        const colWidths = header.map(h => ({ wch: Math.max(h.length, 20) }));
         worksheet['!cols'] = colWidths;
 
 
