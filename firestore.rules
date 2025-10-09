@@ -1,149 +1,183 @@
 /**
- * @file Firestore Security Rules
- * @description This ruleset enforces a strict user-ownership model for user profiles and adopts a public read, owner-write pattern for webhook responses and activity logs.
+ * @fileoverview Firestore Security Rules for Prototyping.
+ *
+ * Core Philosophy:
+ * This ruleset prioritizes secure authorization while allowing flexible data shapes during prototyping.
+ * It focuses on controlling access based on user roles and ownership, but avoids strict data validation.
+ *
  * Data Structure:
- * - /users/{userId}: User profile data, accessible only to the user themselves.
- * - /webhookResponses/{responseId}: API response data, publicly readable but only writable by authenticated users.
- * - /activityLogs/{logId}: Logs of user actions, publicly readable but only writable by authenticated users.
- * - /batches/{batchId}: Batch job status and progress, publicly readable but only writable by authenticated users.
- * - /cltConsents/{consentId}: CLT consent terms, publicly readable but only writable by authenticated users.
+ * - /users/{userId}: Stores user profile information, accessible only to the user themselves and admins.
+ * - /webhookResponses/{responseId}: Stores API responses, accessible only to admins.
+ * - /activityLogs/{logId}: Stores activity logs, accessible only to admins.
+ * - /batches/{batchId}: Stores batch job details, accessible only to admins.
+ * - /cltConsents/{consentId}: Stores CLT consent terms, accessible only to the user who created them.
+ *
  * Key Security Decisions:
- * - User profiles are private and only accessible to the owning user.
- * - Webhook responses and activity logs are publicly readable to facilitate reporting and analysis.
- * - Listing of users is disallowed to prevent enumeration.
- * - Data validation is relaxed to allow for rapid prototyping but critical ownership fields are validated.
+ * - Admin Role: The 'admin' role is managed via custom claims and grants broad access.
+ * - Ownership:  User-specific data is secured using the `isOwner(userId)` function.
+ * - No Public Listing: List operations are restricted for sensitive collections.
+ *
+ * Denormalization for Authorization:
+ *  - User profile data includes a 'role' field, avoiding the need for separate role lookup.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Checks if the request is made by the owner of the resource.
-     * @param {string} userId - The user ID to compare with the request's authentication UID.
-     * @return {boolean} - True if the user is the owner, false otherwise.
-     */
-    function isOwner(userId) {
-      return request.auth != null && request.auth.uid == userId;
-    }
-
-    /**
-     * @description Checks if the request is made by an existing owner of the resource.
-     * @param {string} userId - The user ID to compare with the resource's data and the request's authentication UID.
-     * @return {boolean} - True if the user is the owner and the resource exists, false otherwise.
-     */
-    function isExistingOwner(userId) {
-      return isOwner(userId) && resource != null;
-    }
-
-    /**
-     * @description Checks if the user is signed in.
-     * @return {boolean} True if the user is signed in, false otherwise.
+     * @description Checks if the current user is signed in.
      */
     function isSignedIn() {
       return request.auth != null;
     }
 
     /**
-     * @description Rules for the /webhookResponses collection.
-     * @path /webhookResponses/{responseId}
-     * @allow (get, list): Any user can read webhook responses.
-     * @allow (create): Any authenticated user can create webhook responses.
-     * @allow (update, delete): Only the user who created the response can modify or delete it.
-     * @deny (create): An unauthenticated user cannot create webhook responses.
-     * @deny (update): An unauthenticated user cannot update webhook responses.
-     * @deny (delete): An unauthenticated user cannot delete webhook responses.
-     * @principle Allows public read access, restricts writes to authenticated users.
+     * @description Checks if the current user's UID matches the requested userId.
+     * @param {string} userId - The user ID to compare against.
      */
-    match /webhookResponses/{responseId} {
-      allow get, list: if true;
-      allow create: if isSignedIn();
-      allow update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
     }
 
     /**
-     * @description Rules for the /users collection.
+     * @description Checks if the current user is an admin.
+     */
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
+
+    /**
+     * @description Checks if the current user is the owner and the document exists.
+     * @param {string} userId - The user ID to compare against.
+     */
+    function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+    }
+
+    /**
+     * @description Rules for /users/{userId} documents.
      * @path /users/{userId}
-     * @allow (get, list): Only the user with the matching userId can access their profile.
-     * @allow (create): A user can create their own profile if the userId matches their auth UID.
-     * @allow (update, delete): Only the user with the matching userId can update or delete their profile.
-     * @deny (create): A user cannot create a profile with a userId that doesn't match their auth UID.
-     * @deny (update): A user cannot update a profile if the userId doesn't match their auth UID.
-     * @deny (delete): A user cannot delete a profile if the userId doesn't match their auth UID.
-     * @principle Enforces strict user-ownership for user profiles.
+     * @allow (get) User with matching userId can read their profile.
+     * @allow (create) User can create their profile if the userId matches their auth UID.
+     * @allow (update) User with matching userId can update their profile.
+     * @allow (delete) User with matching userId can delete their profile.
+     * @deny (get) User trying to read another user's profile.
+     * @deny (create) User trying to create a profile with a mismatched userId.
+     * @deny (update) User trying to update another user's profile.
+     * @deny (delete) User trying to delete another user's profile.
+     * @principle Enforces user-ownership for profile data.
      */
     match /users/{userId} {
-      allow get: if isOwner(userId);
+      allow get: if isOwner(userId) || isAdmin();
       allow list: if false;
-      allow create: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.uid == userId;
       allow update: if isExistingOwner(userId);
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Rules for the /activityLogs collection.
+     * @description Rules for /webhookResponses/{responseId} documents.
+     * @path /webhookResponses/{responseId}
+     * @allow (get) Admins can read webhook responses.
+     * @allow (create) Admins can create webhook responses.
+     * @allow (update) Admins can update webhook responses.
+     * @allow (delete) Admins can delete webhook responses.
+     * @deny (get) Non-admins trying to read webhook responses.
+     * @deny (create) Non-admins trying to create webhook responses.
+     * @deny (update) Non-admins trying to update webhook responses.
+     * @deny (delete) Non-admins trying to delete webhook responses.
+     * @principle Restricts access to webhook responses to admins only.
+     */
+    match /webhookResponses/{responseId} {
+      allow get: if isAdmin();
+      allow list: if false;
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    /**
+     * @description Rules for /activityLogs/{logId} documents.
      * @path /activityLogs/{logId}
-     * @allow (get, list): Any user can read activity logs.
-     * @allow (create): Any authenticated user can create activity logs.
-     * @allow (update, delete): Only the user who created the log can modify or delete it.
-     * @deny (create): An unauthenticated user cannot create activity logs.
-     * @deny (update): An unauthenticated user cannot update activity logs.
-     * @deny (delete): An unauthenticated user cannot delete activity logs.
-     * @principle Allows public read access, restricts writes to authenticated users.
+     * @allow (get) Admins can read activity logs.
+     * @allow (create) Admins can create activity logs.
+     * @allow (update) Admins can update activity logs.
+     * @allow (delete) Admins can delete activity logs.
+     * @deny (get) Non-admins trying to read activity logs.
+     * @deny (create) Non-admins trying to create activity logs.
+     * @deny (update) Non-admins trying to update activity logs.
+     * @deny (delete) Non-admins trying to delete activity logs.
+     * @principle Restricts access to activity logs to admins only.
      */
     match /activityLogs/{logId} {
-      allow get, list: if true;
-      allow create: if isSignedIn();
-      allow update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow get: if isAdmin();
+      allow list: if false;
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     /**
-     * @description Rules for the /batches collection.
+     * @description Rules for /batches/{batchId} documents.
      * @path /batches/{batchId}
-     * @allow (get, list): Any user can read batch job status.
-     * @allow (create): Any authenticated user can create batch jobs.
-     * @allow (update, delete): Only the user who created the batch job can modify or delete it.
-     * @deny (create): An unauthenticated user cannot create batch jobs.
-     * @deny (update): An unauthenticated user cannot update batch jobs.
-     * @deny (delete): An unauthenticated user cannot delete batch jobs.
-     * @principle Allows public read access, restricts writes to authenticated users.
+     * @allow (get) Admins can read batch job details.
+     * @allow (create) Admins can create batch job details.
+     * @allow (update) Admins can update batch job details.
+     * @allow (delete) Admins can delete batch job details.
+     * @deny (get) Non-admins trying to read batch job details.
+     * @deny (create) Non-admins trying to create batch job details.
+     * @deny (update) Non-admins trying to update batch job details.
+     * @deny (delete) Non-admins trying to delete batch job details.
+     * @principle Restricts access to batch job details to admins only.
      */
     match /batches/{batchId} {
-      allow get, list: if true;
-      allow create: if isSignedIn();
-      allow update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      allow get: if isAdmin();
+      allow list: if false;
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
-    /**
-     * @description Rules for the /cltConsents collection.
-     * @path /cltConsents/{consentId}
-     * @allow (get, list): Any user can read CLT consent terms.
-     * @allow (create): Any authenticated user can create CLT consent terms.
-     * @allow (update, delete): Only the user who created the consent term can modify or delete it.
-     * @deny (create): An unauthenticated user cannot create CLT consent terms.
-     * @deny (update): An unauthenticated user cannot update CLT consent terms.
-     * @deny (delete): An unauthenticated user cannot delete CLT consent terms.
-     * @principle Allows public read access, restricts writes to authenticated users.
-     */
-    match /cltConsents/{consentId} {
-      allow get, list: if true;
-      allow create: if isSignedIn();
-      allow update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
-    }
+      /**
+       * @description Rules for /cltConsents/{consentId} documents.
+       * @path /cltConsents/{consentId}
+       * @allow (get) User with matching userId can read their own consent forms.
+       * @allow (create) User can create consent forms if the userId matches their auth UID.
+       * @allow (update) User with matching userId can update their consent forms.
+       * @allow (delete) User with matching userId can delete their consent forms.
+       * @deny (get) User trying to read another user's consent forms.
+       * @deny (create) User trying to create a consent form with a mismatched userId.
+       * @deny (update) User trying to update another user's consent forms.
+       * @deny (delete) User trying to delete another user's consent forms.
+       * @principle Enforces user-ownership for consent form data.
+       */
+      match /cltConsents/{consentId} {
+        allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+        allow list: if false;
+        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+        allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
+        allow delete: if isSignedIn() && resource.data.userId == request.auth.uid && resource != null;
+      }
 
-    /**
-     * @description Rules for the /tickets/{ticketId}/messages collection.
-     * @path /tickets/{ticketId}/messages/{messageId}
-     * @allow (get, list): Authenticated user can read messages.
-     * @allow (create): Any authenticated user can create messages.
-     * @allow (update, delete): Only the user who created the message can modify or delete it.
-     * @deny (create): An unauthenticated user cannot create messages.
-     * @deny (update): An unauthenticated user cannot update messages.
-     * @deny (delete): An unauthenticated user cannot delete messages.
-     */
-    match /tickets/{ticketId}/messages/{messageId} {
-        allow get, list: if isSignedIn();
-        allow create: if isSignedIn();
-        allow update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
-    }
+      /**
+       * @description Rules for /tickets/{ticketId} documents.
+       * @path /tickets/{ticketId}
+       * @allow (get) Any signed-in user can read tickets.
+       * @allow (create) No one can create tickets.
+       * @allow (update) No one can update tickets.
+       * @allow (delete) No one can delete tickets.
+       * @deny (get) Not applicable
+       * @deny (create) Not applicable
+       * @deny (update) Not applicable
+       * @deny (delete) Not applicable
+       * @principle Allows any authenticated user to read tickets.
+       */
+      match /tickets/{ticketId} {
+        allow get: if isSignedIn();
+        allow list: if false;
+        allow create: if false;
+        allow update: if false;
+        allow delete: if false;
+      }
   }
 }
