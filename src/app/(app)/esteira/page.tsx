@@ -50,9 +50,7 @@ export default function EsteiraPage() {
 
     useEffect(() => {
         fetchBatches();
-        // Set up an interval to refresh the batches every 30 seconds
         const intervalId = setInterval(() => fetchBatches(false), 30000);
-        // Clear interval on component unmount
         return () => clearInterval(intervalId);
     }, [fetchBatches]);
 
@@ -98,7 +96,7 @@ export default function EsteiraPage() {
         const { status, message } = await deleteBatch({ batchId });
         if (status === 'success') {
             toast({ title: 'Lote excluído!', description: message });
-            await fetchBatches(false); // Refetch without full loading state
+            await fetchBatches(false); 
         } else {
             toast({ variant: 'destructive', title: 'Erro ao excluir lote', description: message });
         }
@@ -107,10 +105,12 @@ export default function EsteiraPage() {
     const handleReprocessBatch = async (batchId: string) => {
         setIsReprocessing(batchId);
         const result = await reprocessarLoteComErro({ batchId });
-        if (result.status === 'success' && result.newBatch) {
+        if (result.status === 'success') {
             toast({
                 title: 'Reprocessamento iniciado!',
-                description: `Um novo lote foi criado para os CPFs restantes: ${result.newBatch.fileName}`
+                description: result.newBatch 
+                    ? `Um novo lote foi criado para os CPFs restantes: ${result.newBatch.fileName}`
+                    : result.message,
             });
             await fetchBatches(false);
         } else {
@@ -213,7 +213,7 @@ export default function EsteiraPage() {
                                     </div>
                                     <div className='flex items-center gap-2'>
                                         <Badge variant={getStatusVariant(batch.status)} className="capitalize">{getStatusText(batch.status)}</Badge>
-                                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleRefreshStatus(batch.id)}>
+                                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => fetchBatches(false)}>
                                             <RefreshCw className="h-4 w-4" />
                                         </Button>
                                         <AlertDialog>
@@ -263,10 +263,10 @@ export default function EsteiraPage() {
                                             Baixar Relatório
                                         </Button>
                                     )}
-                                    {batch.status === 'error' && (
+                                    {batch.status !== 'completed' && (
                                         <Button onClick={() => handleReprocessBatch(batch.id)} size="sm" variant="outline" disabled={isReprocessing === batch.id}>
                                             {isReprocessing === batch.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-                                            Tentar Novamente
+                                            {batch.provider === 'facta' ? 'Processar Próximo' : 'Tentar Novamente'}
                                         </Button>
                                     )}
                                 </div>

@@ -161,7 +161,29 @@ async function processFactaBatchInBackground(batchId: string) {
         if (!batchDoc.exists) throw new Error(`Lote ${batchId} não encontrado.`);
         
         const batchData = batchDoc.data() as BatchJob;
+        
+        if (batchData.status === 'completed') {
+            console.log(`[Batch ${batchId}] Batch already completed.`);
+            return;
+        }
+
         await batchRef.update({ status: 'processing' });
+        
+        // Find the next CPF to process
+        const processedCpfsSnapshot = await firestore.collection('webhookResponses')
+            .where('provider', '==', 'facta')
+            .get();
+        const processedCpfIds = new Set(processedCpfsSnapshot.docs.map(doc => doc.id.replace('facta-', '')));
+        
+        const nextCpf = batchData.cpfs.find(cpf => !processedCpfIds.has(cpf));
+
+        if (!nextCpf) {
+            await batchRef.update({ status: 'completed', processedCpfs: batchData.totalCpfs });
+            console.log(`[Batch ${batchId}] All CPFs processed. Batch completed.`);
+            return;
+        }
+
+        console.log(`[Batch ${batchId}] Processing CPF: ${nextCpf}`);
 
         const userDoc = await firestore.collection('users').doc(batchData.userId).get();
         if (!userDoc.exists) throw new Error("Usuário do lote não encontrado.");
@@ -171,27 +193,29 @@ async function processFactaBatchInBackground(batchId: string) {
         const { token, error: tokenError } = await getFactaAuthToken(userCredentials.facta_username, userCredentials.facta_password);
         if (tokenError || !token) throw new Error(tokenError || "Falha ao obter token da Facta.");
 
-        for (const cpf of batchData.cpfs) {
-            const docRef = firestore.collection('webhookResponses').doc(`facta-${cpf}`);
-            try {
-                const result = await consultarSaldoFgtsFacta({ cpf, userId: batchData.userId, token });
-                const responseData = {
-                    responseBody: result.data || { error: result.message },
-                    createdAt: FieldValue.serverTimestamp(),
-                    status: result.success ? 'success' : 'error',
-                    message: result.message || (result.success ? 'Sucesso' : 'Erro desconhecido'),
-                    id: `facta-${cpf}`,
-                    provider: 'facta',
-                };
-                await docRef.set(responseData, { merge: true });
-            } catch (cpfError) {
-                const message = cpfError instanceof Error ? cpfError.message : "Erro desconhecido ao processar CPF.";
-                await docRef.set({ status: 'error', message }, { merge: true });
-            } finally {
-                await batchRef.update({ processedCpfs: FieldValue.increment(1) });
-            }
+        const docRef = firestore.collection('webhookResponses').doc(`facta-${nextCpf}`);
+        try {
+            const result = await consultarSaldoFgtsFacta({ cpf: nextCpf, userId: batchData.userId, token });
+            const responseData = {
+                responseBody: result.data || { error: result.message },
+                createdAt: FieldValue.serverTimestamp(),
+                status: result.success ? 'success' : 'error',
+                message: result.message || (result.success ? 'Sucesso' : 'Erro desconhecido'),
+                id: `facta-${nextCpf}`,
+                provider: 'facta',
+            };
+            await docRef.set(responseData, { merge: true });
+        } catch (cpfError) {
+            const message = cpfError instanceof Error ? cpfError.message : "Erro desconhecido ao processar CPF.";
+            await docRef.set({ status: 'error', message }, { merge: true });
+        } finally {
+            await batchRef.update({ processedCpfs: FieldValue.increment(1) });
         }
-        await batchRef.update({ status: 'completed' });
+
+        const updatedBatch = (await batchRef.get()).data();
+        if(updatedBatch?.processedCpfs === updatedBatch?.totalCpfs) {
+             await batchRef.update({ status: 'completed' });
+        }
 
     } catch (error) {
         const message = error instanceof Error ? error.message : "An unknown error occurred.";
@@ -215,13 +239,11 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
   initializeFirebaseAdmin();
   const firestore = getFirestore();
   
-  const displayProvider = provider === 'v8' ? 'V8DIGITAL' : provider;
+  const displayProvider = provider === 'v8' ? 'V8DIGITAL' : 'facta';
   
   const batchId = `batch-${displayProvider}-${v8Provider || ''}-${Date.now()}-${userId.substring(0, 5)}`;
   const batchRef = firestore.collection('batches').doc(batchId);
 
-  // Firestore does not accept `undefined` values.
-  // We build the object and conditionally add the `v8Provider` field.
   const batchData: Omit<BatchJob, 'createdAt' | 'id'> & { createdAt: FieldValue } = {
       fileName: fileName,
       provider: displayProvider,
@@ -232,11 +254,8 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
       createdAt: FieldValue.serverTimestamp(),
       userId: userId,
       userEmail: userEmail,
-  } as Omit<BatchJob, 'createdAt' | 'id'> & { createdAt: FieldValue };
-
-  if (provider === 'v8' && v8Provider) {
-      batchData.v8Provider = v8Provider;
-  }
+      ...(provider === 'v8' && v8Provider && { v8Provider }),
+  };
 
   try {
       await batchRef.set(batchData);
@@ -246,7 +265,6 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
     return { status: 'error', message };
   }
   
-  // Fire and forget background processing
   if (provider === 'v8') {
     processV8BatchInBackground(batchId);
   } else if (provider === 'facta') {
@@ -292,18 +310,14 @@ async function processV8BatchInBackground(batchId: string) {
         const { token: authToken, error: authError } = await getV8AuthToken(userCredentials);
         if (authError || !authToken) throw new Error(authError || "Failed to get V8 auth token.");
         
-        // Mark all as sent immediately for V8
         await batchRef.update({ 
             processedCpfs: cpfs.length,
         });
 
         for (const cpf of cpfs) {
-            // Since V8 is webhook-based, we just send the request. 
-            // We can't reliably update real-time progress here.
             await consultarSaldoV8({ documentNumber: cpf, userId, userEmail, token: authToken, provider: v8Provider });
         }
         
-        // For V8, "completed" just means all requests were sent. Actual results depend on webhooks.
         await batchRef.update({ 
             status: 'completed', 
             message: 'Todas as solicitações V8 foram enviadas. Os resultados chegarão via webhook.' 
@@ -335,10 +349,6 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
 
         const originalBatchData = originalBatchDoc.data() as BatchJob;
 
-        if (originalBatchData.status !== 'error') {
-            return { status: 'error', message: 'Apenas lotes com status "erro" podem ser reprocessados.' };
-        }
-        
         await logActivity({
             userId: originalBatchData.userId,
             action: 'Reprocessamento de Lote',
@@ -346,38 +356,42 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
             details: `Reprocessando lote: ${originalBatchData.fileName} (ID: ${batchId})`
         });
 
-        const responsesSnapshot = await firestore.collection('webhookResponses').get();
-        const processedCpfIds = new Set(responsesSnapshot.docs.map(doc => doc.id));
+        const mainProvider = originalBatchData.provider.toLowerCase();
         
-        const mainProvider = originalBatchData.provider.toLowerCase() === 'v8digital' ? 'v8' : 'facta';
-        
-        const cpfsToReprocess = originalBatchData.cpfs.filter(cpf => {
-            const docId = mainProvider === 'v8' ? cpf : `facta-${cpf}`;
-            return !processedCpfIds.has(docId);
-        });
+        if (mainProvider === 'v8digital') {
+             const responsesSnapshot = await firestore.collection('webhookResponses')
+                .where('provider', '==', 'V8DIGITAL')
+                .get();
+             const processedCpfIds = new Set(responsesSnapshot.docs.map(doc => doc.id));
+             
+             const cpfsToReprocess = originalBatchData.cpfs.filter(cpf => !processedCpfIds.has(cpf));
 
-        if (cpfsToReprocess.length === 0) {
-            return { status: 'error', message: 'Não há CPFs pendentes para reprocessar.' };
+             if (cpfsToReprocess.length === 0) {
+                await originalBatchRef.update({ status: 'completed', message: 'Todos os CPFs foram processados.' });
+                return { status: 'success', message: 'Não há CPFs pendentes para reprocessar. Marcado como completo.' };
+             }
+             
+             const result = await processarLoteFgts({
+                cpfs: cpfsToReprocess,
+                provider: 'v8',
+                userId: originalBatchData.userId,
+                userEmail: originalBatchData.userEmail,
+                fileName: `REPROCESS_${originalBatchData.fileName}`,
+                v8Provider: originalBatchData.v8Provider,
+             });
+
+             if (result.status === 'error') {
+                return { status: 'error', message: result.message || 'Falha ao iniciar o lote de reprocessamento para V8.' };
+             }
+             return { status: 'success', message: 'Lote de reprocessamento V8 criado.', newBatch: result.batch };
+        } 
+        
+        if (mainProvider === 'facta') {
+            await processFactaBatchInBackground(batchId);
+            return { status: 'success', message: 'Processamento do lote Facta foi reiniciado.' };
         }
         
-        const result = await processarLoteFgts({
-            cpfs: cpfsToReprocess,
-            provider: mainProvider as Provider,
-            userId: originalBatchData.userId,
-            userEmail: originalBatchData.userEmail,
-            fileName: `REPROCESS_${originalBatchData.fileName}`,
-            v8Provider: originalBatchData.v8Provider,
-        });
-
-        if (result.status === 'error') {
-            return { status: 'error', message: result.message || 'Falha ao iniciar o lote de reprocessamento.' };
-        }
-
-        return { 
-            status: 'success', 
-            message: 'Lote de reprocessamento criado.',
-            newBatch: result.batch
-        };
+        return { status: 'error', message: 'Tipo de provedor desconhecido para reprocessamento.' };
 
     } catch (error) {
         const message = error instanceof Error ? error.message : "Erro desconhecido ao tentar reprocessar o lote.";
@@ -395,7 +409,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
     }
 
     const { cpfs, fileName: originalFileName, createdAt, provider: displayProvider, userId } = validation.data;
-    const mainProvider = displayProvider.toLowerCase() === 'v8digital' ? 'v8' : 'facta';
+    const mainProvider = displayProvider.toLowerCase();
     
     const formattedDate = new Date(createdAt).toLocaleDateString('pt-BR').replace(/\//g, '-');
     const formattedTime = new Date(createdAt).toTimeString().split(' ')[0].replace(/:/g, '-');
@@ -416,8 +430,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
 
     for (const cpf of cpfs) {
         try {
-            // V8 provider uses just the CPF as ID. Facta prefixes it.
-            const docId = mainProvider === 'v8' ? cpf : `facta-${cpf}`;
+            const docId = mainProvider === 'v8digital' ? cpf : `facta-${cpf}`;
             const docRef = firestore.collection('webhookResponses').doc(docId);
             const docSnap = await docRef.get();
 
@@ -425,13 +438,11 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                 const data = docSnap.data();
                 const responseBody = data?.responseBody;
                 
-                // Unified error checking
                 const providerError = responseBody?.errorMessage || responseBody?.error || data?.message;
                 const isSuccess = data?.status === 'success' && responseBody;
 
                 if (isSuccess) {
-                    if (mainProvider === 'v8') {
-                        // V8 has a simple structure
+                    if (mainProvider === 'v8digital') {
                         const balanceValue = parseFloat(responseBody.balance);
                          results.push({
                             CPF: cpf,
@@ -439,7 +450,6 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                             Mensagem: 'Sucesso',
                         });
                     } else if (mainProvider === 'facta') {
-                        // Facta has a more complex structure
                         const saldoTotal = parseFloat(responseBody.saldo_total);
                         let row: any = {
                             CPF: cpf,
@@ -447,7 +457,6 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                             Mensagem: responseBody.msg || 'Sucesso',
                             'Data Saldo': responseBody.data_saldo,
                         };
-                        // Flatten the response with all repasse data
                         for(let i=1; i<=12; i++){
                             if(responseBody[`dataRepasse_${i}`]){
                                 row[`Data Repasse ${i}`] = responseBody[`dataRepasse_${i}`];
@@ -472,7 +481,6 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         return { status: 'error', fileName: '', fileContent: '', message: 'Nenhum dado para gerar relatório.' };
     }
     
-    // Normalize data to have the same columns if mixing providers (not current case but good practice)
     const finalResults = results.map(r => ({
         CPF: r.CPF,
         SALDO: r.Saldo || r['Saldo Total'] || '0.00',
