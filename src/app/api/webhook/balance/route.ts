@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`Payload stored in Firestore with ID: ${docId}. Status: ${status}. Provider: V8DIGITAL (${v8Partner})`);
     
+    // If a batchId is present, update the batch progress
     if (batchId) {
         const batchRef = db.collection('batches').doc(batchId);
         try {
@@ -74,8 +75,12 @@ export async function POST(request: NextRequest) {
                     return;
                 }
                 const batchData = batchDoc.data()!;
-                const currentProcessedCount = batchData.processedCpfs || 0;
-                const newProcessedCount = currentProcessedCount + 1;
+                // Only increment if not already completed to avoid race conditions
+                if (batchData.status === 'completed') {
+                    return;
+                }
+
+                const newProcessedCount = (batchData.processedCpfs || 0) + 1;
 
                 if (newProcessedCount >= batchData.totalCpfs) {
                     console.log(`[Batch ${batchId}] Final CPF received. Marking as complete.`);
