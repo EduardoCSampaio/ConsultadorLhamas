@@ -21,8 +21,8 @@ const fgtsConsultaSchema = z.object({
 const inssGetOperationsSchema = z.object({
     cpf: z.string(),
     data_nascimento: z.string(),
-    valor_renda: z.number(),
-    margem_cartao: z.number(),
+    valor_renda: z.number().optional(),
+    margem_cartao: z.number().optional(),
     userId: z.string(),
 });
 
@@ -346,7 +346,7 @@ export async function getInssOperations(input: z.infer<typeof inssGetOperationsS
         return { success: false, message: tokenError || "Não foi possível obter o token da Facta" };
     }
     
-    await logActivity({ userId, documentNumber: cpf, action: 'Consulta Cartão INSS Facta', provider: 'facta', details: `Renda: ${valor_renda}` });
+    await logActivity({ userId, documentNumber: cpf, action: 'Consulta Cartão INSS Facta', provider: 'facta', details: `Renda: ${valor_renda}, Margem: ${margem_cartao}` });
 
     try {
         const url = new URL(`${FACTA_API_BASE_URL_PROD}/proposta/operacoes-disponiveis`);
@@ -354,12 +354,19 @@ export async function getInssOperations(input: z.infer<typeof inssGetOperationsS
         url.searchParams.append('tipo_operacao', '33');
         url.searchParams.append('averbador', '3');
         url.searchParams.append('convenio', '3');
-        url.searchParams.append('opcao_valor', '2');
-        url.searchParams.append('valor', '');
         url.searchParams.append('cpf', cpf);
         url.searchParams.append('data_nascimento', data_nascimento);
-        url.searchParams.append('valor_renda', String(valor_renda));
-        url.searchParams.append('margem_cartao', String(margem_cartao));
+
+        if (valor_renda) {
+             url.searchParams.append('opcao_valor', '1');
+             url.searchParams.append('valor_renda', String(valor_renda));
+        } else if (margem_cartao) {
+             url.searchParams.append('opcao_valor', '2');
+             url.searchParams.append('margem_cartao', String(margem_cartao));
+        } else {
+            return { success: false, message: 'É necessário informar o valor da renda ou a margem do cartão.'};
+        }
+
 
         const response = await fetch(url.toString(), {
             method: 'GET',

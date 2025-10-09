@@ -22,15 +22,25 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { useUser } from "@/firebase";
 import { getInssOperations, submitInssSimulation, type InssOperation } from "@/app/actions/facta";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 const formSchema = z.object({
   cpf: z.string().min(11, "CPF deve ter 11 dígitos.").max(11, "CPF deve ter 11 dígitos."),
   data_nascimento: z.string().refine((val) => /^\d{2}\/\d{2}\/\d{4}$/.test(val), {
     message: "Data de nascimento deve estar no formato DD/MM/AAAA.",
   }),
-  valor_renda: z.string().min(1, "O valor da renda é obrigatório."),
-  margem_cartao: z.string().min(1, "A margem do cartão é obrigatória."),
+  calculationType: z.enum(['renda', 'margem']),
+  valor_renda: z.string().optional(),
+  margem_cartao: z.string().optional(),
+}).refine(data => {
+    if (data.calculationType === 'renda') return !!data.valor_renda && parseFloat(data.valor_renda.replace(/\./g, '').replace(',', '.')) > 0;
+    if (data.calculationType === 'margem') return !!data.margem_cartao && parseFloat(data.margem_cartao.replace(/\./g, '').replace(',', '.')) > 0;
+    return false;
+}, {
+    message: "Preencha o valor correspondente ao tipo de cálculo.",
+    path: ['valor_renda'], // Show error message on one of the fields
 });
+
 
 const formatCurrency = (value: string | number | undefined | null) => {
     if (value === undefined || value === null) return 'N/A';
@@ -80,12 +90,14 @@ export default function InssFactaPage() {
     defaultValues: {
       cpf: "",
       data_nascimento: "",
+      calculationType: 'renda',
       valor_renda: "",
       margem_cartao: "",
     },
   });
 
   const formData = useWatch({ control: form.control });
+  const calculationType = useWatch({ control: form.control, name: 'calculationType' });
 
   async function onGetOperations(values: z.infer<typeof formSchema>) {
     if (!user) {
@@ -102,8 +114,8 @@ export default function InssFactaPage() {
 
     const formattedValues = {
         ...values,
-        valor_renda: parseFloat(values.valor_renda.replace(/\./g, '').replace(',', '.')),
-        margem_cartao: parseFloat(values.margem_cartao.replace(/\./g, '').replace(',', '.')),
+        valor_renda: values.valor_renda ? parseFloat(values.valor_renda.replace(/\./g, '').replace(',', '.')) : undefined,
+        margem_cartao: values.margem_cartao ? parseFloat(values.margem_cartao.replace(/\./g, '').replace(',', '.')) : undefined,
         userId: user.uid,
     };
 
@@ -130,11 +142,13 @@ export default function InssFactaPage() {
     setIsSubmitting(true);
     setError(null);
 
+    const valorRenda = formData.valor_renda ? parseFloat(formData.valor_renda.replace(/\./g, '').replace(',', '.')) : 0;
+
     const response = await submitInssSimulation({
         userId: user.uid,
         cpf: formData.cpf,
         data_nascimento: formData.data_nascimento,
-        valor_renda: parseFloat(formData.valor_renda.replace(/\./g, '').replace(',', '.')),
+        valor_renda: valorRenda,
         codigo_tabela: selectedOperation.codigoTabela,
         prazo: selectedOperation.prazo,
         valor_operacao: selectedOperation.contrato,
@@ -200,6 +214,39 @@ export default function InssFactaPage() {
                         </FormItem>
                       )}
                     />
+                </div>
+                 <FormField
+                    control={form.control}
+                    name="calculationType"
+                    render={({ field }) => (
+                        <FormItem className="space-y-3">
+                            <FormLabel>Tipo de Cálculo</FormLabel>
+                            <FormControl>
+                                <RadioGroup
+                                onValueChange={field.onChange}
+                                defaultValue={field.value}
+                                className="flex flex-col space-y-1"
+                                >
+                                <FormItem className="flex items-center space-x-3 space-y-0">
+                                    <FormControl>
+                                        <RadioGroupItem value="renda" />
+                                    </FormControl>
+                                    <FormLabel className="font-normal">Calcular pela Renda (Benefício)</FormLabel>
+                                </FormItem>
+                                <FormItem className="flex items-center space-x-3 space-y-0">
+                                    <FormControl>
+                                        <RadioGroupItem value="margem" />
+                                    </FormControl>
+                                    <FormLabel className="font-normal">Calcular pela Margem do Cartão</FormLabel>
+                                </FormItem>
+                                </RadioGroup>
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                    />
+
+                {calculationType === 'renda' && (
                      <FormField
                         control={form.control}
                         name="valor_renda"
@@ -213,6 +260,8 @@ export default function InssFactaPage() {
                         </FormItem>
                         )}
                     />
+                )}
+                 {calculationType === 'margem' && (
                     <FormField
                         control={form.control}
                         name="margem_cartao"
@@ -226,7 +275,7 @@ export default function InssFactaPage() {
                         </FormItem>
                         )}
                     />
-                </div>
+                 )}
               <Button type="submit" disabled={isLoading}>
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
                 {isLoading ? "Buscando..." : "Buscar Operações"}
