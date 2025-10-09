@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Send, ArrowLeft, AlertCircle, User, MessageSquare } from 'lucide-react';
-import { getTicketById, addMessageToTicket, type Ticket, type TicketMessage } from '@/app/actions/tickets';
+import { getTicketById, addMessageToTicket, markTicketAsRead, type Ticket, type TicketMessage } from '@/app/actions/tickets';
 import { useUser, useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase";
 import { doc, collection, orderBy, query } from 'firebase/firestore';
 import type { UserProfile } from '@/app/actions/users';
@@ -48,25 +48,31 @@ export default function ChamadoDetalhePage() {
     const { data: messages, isLoading: messagesLoading } = useCollection<TicketMessage>(messagesQuery);
     
     useEffect(() => {
-        async function fetchTicket() {
+        async function fetchTicketAndMarkAsRead() {
+            if (!ticketId || !user || !userProfile) return;
+
             setIsLoading(true);
             const { ticket: fetchedTicket, error: fetchError } = await getTicketById({ ticketId });
             if (fetchError) {
                 setError(fetchError);
-            } else if (fetchedTicket) {
-                // Security check: if user is not admin and ticket doesn't belong to them, redirect
+                setIsLoading(false);
+                return;
+            } 
+            
+            if (fetchedTicket) {
+                // Security check
                 if (userProfile?.role !== 'admin' && user?.uid !== fetchedTicket.userId) {
                     toast({ variant: 'destructive', title: 'Acesso Negado' });
                     router.push('/chamados');
                     return;
                 }
                 setTicket(fetchedTicket);
+                // Mark as read after fetching
+                await markTicketAsRead({ ticketId, userId: user.uid });
             }
             setIsLoading(false);
         }
-        if (ticketId && user && userProfile) {
-            fetchTicket();
-        }
+        fetchTicketAndMarkAsRead();
     }, [ticketId, user, userProfile, router, toast]);
 
     useEffect(() => {

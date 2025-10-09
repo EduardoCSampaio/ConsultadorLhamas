@@ -27,6 +27,11 @@ const addMessageSchema = z.object({
     content: z.string().min(1).max(2000),
 });
 
+const markAsReadSchema = z.object({
+    ticketId: z.string().min(1),
+    userId: z.string().min(1),
+});
+
 
 export type Ticket = {
     id: string;
@@ -38,6 +43,8 @@ export type Ticket = {
     createdAt: string; // ISO String
     updatedAt: string; // ISO String
     lastMessage?: string;
+    unreadByUser?: number;
+    unreadByAdmin?: number;
 };
 
 export type TicketMessage = {
@@ -127,6 +134,8 @@ export async function createTicket(input: z.infer<typeof createTicketSchema>): P
             updatedAt: now,
             ticketNumber: ticketNumber,
             lastMessage: input.initialMessage,
+            unreadByAdmin: 1, // First message from user is unread for admin
+            unreadByUser: 0,
         };
 
         const newMessageData = {
@@ -201,6 +210,8 @@ export async function getTicketsForUser(input: z.infer<typeof getTicketsSchema>)
                 createdAt: toISODate(data.createdAt),
                 updatedAt: toISODate(data.updatedAt),
                 lastMessage: data.lastMessage,
+                unreadByAdmin: data.unreadByAdmin,
+                unreadByUser: data.unreadByUser,
             } as Ticket;
         });
         
@@ -278,6 +289,12 @@ export async function addMessageToTicket(input: z.infer<typeof addMessageSchema>
             lastMessage: content,
         };
 
+        if (isAdmin) {
+            ticketUpdates.unreadByUser = FieldValue.increment(1);
+        } else {
+            ticketUpdates.unreadByAdmin = FieldValue.increment(1);
+        }
+
         const ticketDoc = await ticketRef.get();
         if (ticketDoc.exists && ticketDoc.data()?.status === 'aberto' && isAdmin) {
             ticketUpdates.status = 'em_atendimento';
@@ -292,6 +309,52 @@ export async function addMessageToTicket(input: z.infer<typeof addMessageSchema>
     } catch (error) {
         const message = error instanceof Error ? error.message : "Erro ao enviar mensagem.";
         console.error("addMessageToTicket error:", error);
+        return { success: false, message };
+    }
+}
+
+
+export async function markTicketAsRead(input: z.infer<typeof markAsReadSchema>): Promise<{ success: boolean; message?: string }> {
+    const validation = markAsReadSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: "Dados inválidos." };
+    }
+    
+    const { ticketId, userId } = input;
+
+    try {
+        initializeFirebaseAdmin();
+        const firestore = getFirestore();
+        const ticketRef = firestore.collection('tickets').doc(ticketId);
+        const userRef = firestore.collection('users').doc(userId);
+
+        const [ticketDoc, userDoc] = await Promise.all([ticketRef.get(), userRef.get()]);
+
+        if (!ticketDoc.exists) return { success: false, message: "Chamado não encontrado." };
+        if (!userDoc.exists) return { success: false, message: "Usuário não encontrado." };
+
+        const isAdmin = userDoc.data()?.role === 'admin';
+        const ticketData = ticketDoc.data();
+        
+        let updateData = {};
+        if (isAdmin) {
+             if (ticketData?.unreadByAdmin > 0) {
+                updateData = { unreadByAdmin: 0 };
+            }
+        } else {
+            if (ticketData?.unreadByUser > 0) {
+                updateData = { unreadByUser: 0 };
+            }
+        }
+
+        if (Object.keys(updateData).length > 0) {
+            await ticketRef.update(updateData);
+        }
+        
+        return { success: true };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro ao marcar chamado como lido.";
+        console.error("markTicketAsRead error:", error);
         return { success: false, message };
     }
 }

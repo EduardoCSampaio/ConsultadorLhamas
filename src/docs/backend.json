@@ -315,7 +315,9 @@
         },
         "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp when the ticket was created." },
         "updatedAt": { "type": "string", "format": "date-time", "description": "Timestamp for the last update." },
-        "lastMessage": { "type": "string", "description": "A snippet of the last message for quick preview." }
+        "lastMessage": { "type": "string", "description": "A snippet of the last message for quick preview." },
+        "unreadByUser": { "type": "number", "description": "Count of unread messages for the user." },
+        "unreadByAdmin": { "type": "number", "description": "Count of unread messages for the admin." }
       },
       "required": ["id", "userId", "userEmail", "title", "status", "createdAt", "updatedAt"]
     },

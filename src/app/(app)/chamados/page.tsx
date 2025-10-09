@@ -131,6 +131,13 @@ export default function ChamadosPage() {
     
     const isAdmin = userProfile?.role === 'admin';
 
+    const getUnreadCount = (ticket: Ticket) => {
+        if (isAdmin) {
+            return ticket.unreadByAdmin || 0;
+        }
+        return ticket.unreadByUser || 0;
+    };
+
     return (
         <div className="flex flex-col gap-6">
             <PageHeader
@@ -228,30 +235,38 @@ export default function ChamadosPage() {
                         </div>
                     ) : (
                        <div className="space-y-3">
-                           {tickets.map(ticket => (
-                               <div key={ticket.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
-                                   <div className="flex-1 mb-4 sm:mb-0">
-                                       <div className="flex items-center gap-3 mb-2">
-                                            <span className="font-mono text-sm text-muted-foreground">{ticket.ticketNumber}</span>
-                                            <Badge variant={getStatusVariant(ticket.status)}>{getStatusText(ticket.status)}</Badge>
+                           {tickets.map(ticket => {
+                                const unreadCount = getUnreadCount(ticket);
+                                return (
+                                   <div key={ticket.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                                       <div className="flex-1 mb-4 sm:mb-0">
+                                           <div className="flex items-center gap-3 mb-2">
+                                                <span className="font-mono text-sm text-muted-foreground">{ticket.ticketNumber}</span>
+                                                <Badge variant={getStatusVariant(ticket.status)}>{getStatusText(ticket.status)}</Badge>
+                                           </div>
+                                           <div className="flex items-center gap-2">
+                                                <h3 className="font-semibold text-lg">{ticket.title}</h3>
+                                                {unreadCount > 0 && (
+                                                    <Badge className="h-5 w-5 flex items-center justify-center p-0">{unreadCount}</Badge>
+                                                )}
+                                           </div>
+                                            {isAdmin && (
+                                                <p className="text-sm font-medium text-muted-foreground">{ticket.userEmail}</p>
+                                            )}
+                                           <p className="text-sm text-muted-foreground mt-1">
+                                                Última atualização: {new Date(ticket.updatedAt).toLocaleString('pt-BR')}
+                                           </p>
+                                            <p className="text-sm text-muted-foreground line-clamp-1 flex items-center gap-2 mt-1">
+                                                <MessageSquare className="h-3.5 w-3.5" />
+                                                {ticket.lastMessage}
+                                            </p>
                                        </div>
-                                       <h3 className="font-semibold text-lg">{ticket.title}</h3>
-                                        {isAdmin && (
-                                            <p className="text-sm font-medium text-muted-foreground">{ticket.userEmail}</p>
-                                        )}
-                                       <p className="text-sm text-muted-foreground mt-1">
-                                            Última atualização: {new Date(ticket.updatedAt).toLocaleString('pt-BR')}
-                                       </p>
-                                        <p className="text-sm text-muted-foreground line-clamp-1 flex items-center gap-2 mt-1">
-                                            <MessageSquare className="h-3.5 w-3.5" />
-                                            {ticket.lastMessage}
-                                        </p>
+                                       <Button variant="outline" size="sm" asChild>
+                                            <Link href={`/chamados/${ticket.id}`}>Ver Chamado</Link>
+                                       </Button>
                                    </div>
-                                   <Button variant="outline" size="sm" asChild>
-                                        <Link href={`/chamados/${ticket.id}`}>Ver Chamado</Link>
-                                   </Button>
-                               </div>
-                           ))}
+                               );
+                           })}
                        </div>
                     )}
                 </CardContent>
