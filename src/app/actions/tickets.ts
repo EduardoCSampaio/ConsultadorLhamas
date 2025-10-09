@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 
+const ticketStatusEnum = z.enum(["aberto", "em_atendimento", "em_desenvolvimento", "testando", "liberado", "resolvido"]);
+
 const createTicketSchema = z.object({
   userId: z.string().min(1),
   userEmail: z.string().email(),
@@ -32,6 +34,11 @@ const markAsReadSchema = z.object({
     userId: z.string().min(1),
 });
 
+const updateStatusSchema = z.object({
+    ticketId: z.string().min(1),
+    status: ticketStatusEnum,
+});
+
 
 export type Ticket = {
     id: string;
@@ -39,7 +46,7 @@ export type Ticket = {
     userId: string;
     userEmail: string;
     title: string;
-    status: 'aberto' | 'em_atendimento' | 'resolvido';
+    status: z.infer<typeof ticketStatusEnum>;
     createdAt: string; // ISO String
     updatedAt: string; // ISO String
     lastMessage?: string;
@@ -251,6 +258,8 @@ export async function getTicketById(input: z.infer<typeof getTicketByIdSchema>):
             createdAt: toISODate(data.createdAt),
             updatedAt: toISODate(data.updatedAt),
             lastMessage: data.lastMessage,
+            unreadByAdmin: data.unreadByAdmin,
+            unreadByUser: data.unreadByUser,
         };
 
         return { success: true, ticket };
@@ -358,3 +367,30 @@ export async function markTicketAsRead(input: z.infer<typeof markAsReadSchema>):
         return { success: false, message };
     }
 }
+
+
+export async function updateTicketStatus(input: z.infer<typeof updateStatusSchema>): Promise<{ success: boolean; message?: string }> {
+    const validation = updateStatusSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: "Dados de atualização de status inválidos." };
+    }
+    const { ticketId, status } = validation.data;
+
+    try {
+        initializeFirebaseAdmin();
+        const firestore = getFirestore();
+        const ticketRef = firestore.collection('tickets').doc(ticketId);
+
+        await ticketRef.update({
+            status: status,
+            updatedAt: FieldValue.serverTimestamp(),
+        });
+        
+        return { success: true };
+    } catch(error) {
+        const message = error instanceof Error ? error.message : "Erro ao atualizar status do chamado.";
+        console.error("updateTicketStatus error:", error);
+        return { success: false, message };
+    }
+}
+    

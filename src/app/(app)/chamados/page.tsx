@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from 'next/link';
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -42,6 +42,15 @@ const newTicketSchema = z.object({
   message: z.string().min(10, "A mensagem deve ter pelo menos 10 caracteres.").max(1000, "A mensagem deve ter no máximo 1000 caracteres."),
 });
 
+const statusLabels: Record<Ticket['status'], string> = {
+    aberto: "Aberto",
+    em_atendimento: "Em Atendimento",
+    em_desenvolvimento: "Em Desenvolvimento",
+    testando: "Testando com Parceiro",
+    liberado: "Liberação",
+    resolvido: "Resolvido",
+};
+
 export default function ChamadosPage() {
     const { toast } = useToast();
     const { user } = useUser();
@@ -52,6 +61,11 @@ export default function ChamadosPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    
+    // Admin filters
+    const [emailFilter, setEmailFilter] = useState('');
+    const [ticketNumberFilter, setTicketNumberFilter] = useState('');
+
 
     const userProfileRef = useMemoFirebase(() => {
         if (!firestore || !user) return null;
@@ -114,18 +128,14 @@ export default function ChamadosPage() {
      const getStatusVariant = (status: Ticket['status']) => {
         switch (status) {
             case 'aberto': return 'secondary';
-            case 'em_atendimento': return 'default';
-            case 'resolvido': return 'destructive';
+            case 'em_atendimento':
+            case 'em_desenvolvimento':
+                return 'default';
+            case 'resolvido': return 'destructive'; // Assuming this is like a closed state
+            case 'testando':
+            case 'liberado':
+                 return 'outline';
             default: return 'outline';
-        }
-    };
-    
-    const getStatusText = (status: Ticket['status']) => {
-        switch (status) {
-            case 'aberto': return 'Aberto';
-            case 'em_atendimento': return 'Em Atendimento';
-            case 'resolvido': return 'Resolvido';
-            default: return status;
         }
     };
     
@@ -137,12 +147,22 @@ export default function ChamadosPage() {
         }
         return ticket.unreadByUser || 0;
     };
+    
+    const filteredTickets = useMemo(() => {
+        if (!isAdmin) return tickets;
+        return tickets.filter(ticket => {
+            const emailMatch = ticket.userEmail.toLowerCase().includes(emailFilter.toLowerCase());
+            const ticketNumberMatch = ticket.ticketNumber.toLowerCase().includes(ticketNumberFilter.toLowerCase());
+            return emailMatch && ticketNumberMatch;
+        });
+    }, [tickets, emailFilter, ticketNumberFilter, isAdmin]);
+
 
     return (
         <div className="flex flex-col gap-6">
             <PageHeader
                 title={isAdmin ? "Gerenciar Chamados de Suporte" : "Meus Chamados de Suporte"}
-                description={isAdmin ? "Visualize e gerencie todos os chamados dos usuários." : "Visualize seus chamados abertos ou crie uma nova solicitação."}
+                description={isAdmin ? "Visualize, filtre e gerencie todos os chamados dos usuários." : "Visualize seus chamados abertos ou crie uma nova solicitação."}
             >
                 {!isAdmin && (
                     <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
@@ -209,6 +229,26 @@ export default function ChamadosPage() {
                  </Alert>
             )}
 
+            {isAdmin && (
+                 <Card>
+                    <CardHeader>
+                        <CardTitle>Filtros</CardTitle>
+                    </CardHeader>
+                    <CardContent className="grid sm:grid-cols-2 gap-4">
+                         <Input 
+                            placeholder="Filtrar por e-mail do usuário..."
+                            value={emailFilter}
+                            onChange={(e) => setEmailFilter(e.target.value)}
+                         />
+                         <Input 
+                            placeholder="Filtrar por código do chamado..."
+                            value={ticketNumberFilter}
+                            onChange={(e) => setTicketNumberFilter(e.target.value)}
+                         />
+                    </CardContent>
+                </Card>
+            )}
+
             <Card>
                 <CardContent className="pt-6">
                      {isLoading ? (
@@ -223,26 +263,26 @@ export default function ChamadosPage() {
                                 </div>
                             ))}
                         </div>
-                    ) : tickets.length === 0 && !error ? (
+                    ) : filteredTickets.length === 0 && !error ? (
                         <div className="flex flex-col items-center justify-center gap-4 text-center h-60 border-2 border-dashed rounded-lg">
                             <Inbox className="h-12 w-12 text-muted-foreground" />
                             <h3 className="text-2xl font-bold tracking-tight">
                                 Nenhum Chamado Encontrado
                             </h3>
                             <p className="text-sm text-muted-foreground">
-                               {isAdmin ? "Ainda não há chamados de suporte abertos." : "Você ainda não abriu nenhum chamado de suporte."}
+                               {isAdmin ? "Nenhum chamado corresponde aos filtros aplicados." : "Você ainda não abriu nenhum chamado de suporte."}
                             </p>
                         </div>
                     ) : (
                        <div className="space-y-3">
-                           {tickets.map(ticket => {
+                           {filteredTickets.map(ticket => {
                                 const unreadCount = getUnreadCount(ticket);
                                 return (
                                    <div key={ticket.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
                                        <div className="flex-1 mb-4 sm:mb-0">
-                                           <div className="flex items-center gap-3 mb-2">
+                                           <div className="flex items-center gap-3 mb-2 flex-wrap">
                                                 <span className="font-mono text-sm text-muted-foreground">{ticket.ticketNumber}</span>
-                                                <Badge variant={getStatusVariant(ticket.status)}>{getStatusText(ticket.status)}</Badge>
+                                                <Badge variant={getStatusVariant(ticket.status)}>{statusLabels[ticket.status]}</Badge>
                                            </div>
                                            <div className="flex items-center gap-2">
                                                 <h3 className="font-semibold text-lg">{ticket.title}</h3>
@@ -274,3 +314,4 @@ export default function ChamadosPage() {
         </div>
     );
 }
+    

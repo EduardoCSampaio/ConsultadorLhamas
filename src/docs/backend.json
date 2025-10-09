@@ -310,7 +310,7 @@
         "title": { "type": "string", "description": "The subject or title of the ticket." },
         "status": {
           "type": "string",
-          "enum": ["aberto", "em_atendimento", "resolvido"],
+          "enum": ["aberto", "em_atendimento", "em_desenvolvimento", "testando", "liberado", "resolvido"],
           "description": "The current status of the support ticket."
         },
         "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp when the ticket was created." },
@@ -384,3 +384,4 @@
     }
   }
 }
+    

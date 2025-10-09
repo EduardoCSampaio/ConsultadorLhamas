@@ -7,8 +7,8 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Send, ArrowLeft, AlertCircle, User, MessageSquare } from 'lucide-react';
-import { getTicketById, addMessageToTicket, markTicketAsRead, type Ticket, type TicketMessage } from '@/app/actions/tickets';
+import { Loader2, Send, ArrowLeft, AlertCircle } from 'lucide-react';
+import { getTicketById, addMessageToTicket, markTicketAsRead, updateTicketStatus, type Ticket, type TicketMessage } from '@/app/actions/tickets';
 import { useUser, useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase";
 import { doc, collection, orderBy, query } from 'firebase/firestore';
 import type { UserProfile } from '@/app/actions/users';
@@ -18,6 +18,18 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+
+const statusOptions: Ticket['status'][] = ["aberto", "em_atendimento", "em_desenvolvimento", "testando", "liberado", "resolvido"];
+const statusLabels: Record<Ticket['status'], string> = {
+    aberto: "Aberto",
+    em_atendimento: "Em Atendimento",
+    em_desenvolvimento: "Em Desenvolvimento",
+    testando: "Testando com Parceiro",
+    liberado: "Liberação",
+    resolvido: "Resolvido",
+};
 
 
 export default function ChamadoDetalhePage() {
@@ -29,12 +41,17 @@ export default function ChamadoDetalhePage() {
     const ticketId = params.ticketId as string;
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    const [ticket, setTicket] = useState<Ticket | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [newMessage, setNewMessage] = useState("");
 
+    const ticketRef = useMemoFirebase(() => {
+        if (!firestore || !ticketId) return null;
+        return doc(firestore, 'tickets', ticketId);
+    }, [firestore, ticketId]);
+    const { data: ticket, isLoading: ticketLoading } = useDoc<Ticket>(ticketRef);
+    
     const userProfileRef = useMemoFirebase(() => {
         if (!firestore || !user) return null;
         return doc(firestore, 'users', user.uid);
@@ -47,33 +64,26 @@ export default function ChamadoDetalhePage() {
     }, [firestore, ticketId]);
     const { data: messages, isLoading: messagesLoading } = useCollection<TicketMessage>(messagesQuery);
     
-    useEffect(() => {
-        async function fetchTicketAndMarkAsRead() {
-            if (!ticketId || !user || !userProfile) return;
+    const pageIsLoading = ticketLoading || messagesLoading;
+    const isAdmin = userProfile?.role === 'admin';
 
-            setIsLoading(true);
-            const { ticket: fetchedTicket, error: fetchError } = await getTicketById({ ticketId });
-            if (fetchError) {
-                setError(fetchError);
-                setIsLoading(false);
+    useEffect(() => {
+       async function checkAccessAndMarkRead() {
+           if (pageIsLoading || !ticket || !user) return;
+           
+            // Security check
+            if (!isAdmin && user?.uid !== ticket.userId) {
+                toast({ variant: 'destructive', title: 'Acesso Negado' });
+                router.push('/chamados');
                 return;
-            } 
-            
-            if (fetchedTicket) {
-                // Security check
-                if (userProfile?.role !== 'admin' && user?.uid !== fetchedTicket.userId) {
-                    toast({ variant: 'destructive', title: 'Acesso Negado' });
-                    router.push('/chamados');
-                    return;
-                }
-                setTicket(fetchedTicket);
-                // Mark as read after fetching
-                await markTicketAsRead({ ticketId, userId: user.uid });
             }
-            setIsLoading(false);
-        }
-        fetchTicketAndMarkAsRead();
-    }, [ticketId, user, userProfile, router, toast]);
+            
+            // Mark as read after fetching and confirming access
+            await markTicketAsRead({ ticketId, userId: user.uid });
+       }
+       checkAccessAndMarkRead();
+    }, [ticket, user, isAdmin, pageIsLoading, ticketId, router, toast]);
+
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -99,16 +109,24 @@ export default function ChamadoDetalhePage() {
         setIsSubmitting(false);
     };
 
+    const handleStatusChange = async (newStatus: Ticket['status']) => {
+        const result = await updateTicketStatus({ ticketId, status: newStatus });
+        if(result.success) {
+            toast({ title: "Status do chamado atualizado!"});
+        } else {
+            toast({ variant: 'destructive', title: "Erro ao atualizar status", description: result.message });
+        }
+    };
+
     const getInitials = (email = '') => {
         return email.substring(0, 2).toUpperCase();
     };
 
-    if (isLoading) {
+    if (pageIsLoading) {
         return (
             <div className="flex flex-col gap-6">
                  <PageHeader title={<Skeleton className="h-8 w-64" />} description={<Skeleton className="h-5 w-80" />} />
-                 <Card><CardContent className="pt-6"><Skeleton className="h-64 w-full" /></CardContent></Card>
-                 <Card><CardContent className="pt-6"><Skeleton className="h-20 w-full" /></CardContent></Card>
+                 <Card><CardContent className="pt-6"><Skeleton className="h-[65vh] w-full" /></CardContent></Card>
             </div>
         )
     }
@@ -138,12 +156,34 @@ export default function ChamadoDetalhePage() {
                          <Button variant="ghost" size="icon" className="h-8 w-8 mr-2" asChild>
                             <Link href="/chamados"><ArrowLeft /></Link>
                         </Button>
-                        <span>{ticket.title}</span>
+                        <span className="truncate">{ticket.title}</span>
                          <Badge variant="secondary">{ticket.ticketNumber}</Badge>
+                         <Badge variant="outline">{statusLabels[ticket.status]}</Badge>
                     </div>
                 }
-                description={`Aberto por ${ticket.userEmail} em ${new Date(ticket.createdAt).toLocaleDateString('pt-BR')}`}
-            />
+                description={
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
+                        <span>Aberto por {ticket.userEmail}</span>
+                        <span className="hidden sm:inline-block">•</span>
+                        <span>Última atualização em {new Date(ticket.updatedAt).toLocaleString('pt-BR')}</span>
+                    </div>
+                }
+            >
+                {isAdmin && (
+                    <Select value={ticket.status} onValueChange={handleStatusChange}>
+                        <SelectTrigger className="w-[240px]">
+                            <SelectValue placeholder="Mudar status..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {statusOptions.map(status => (
+                                <SelectItem key={status} value={status}>
+                                    {statusLabels[status]}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                )}
+            </PageHeader>
             
             <Card className="flex flex-col h-[65vh]">
                 <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -177,7 +217,7 @@ export default function ChamadoDetalhePage() {
                            </div>
                              {user?.uid === message.senderId && (
                                <Avatar className="h-8 w-8">
-                                   <AvatarImage src={userProfile?.photoURL} />
+                                   <AvatarImage src={userProfile?.photoURL ?? undefined} />
                                    <AvatarFallback>{getInitials(message.senderEmail)}</AvatarFallback>
                                </Avatar>
                            )}
@@ -211,3 +251,4 @@ export default function ChamadoDetalhePage() {
         </div>
     );
 }
+    
