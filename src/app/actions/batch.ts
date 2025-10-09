@@ -155,7 +155,7 @@ async function processFactaBatchInBackground(batchId: string) {
     initializeFirebaseAdmin();
     const firestore = getFirestore();
     const batchRef = firestore.collection('batches').doc(batchId);
-    const CHUNK_SIZE = 5; // Process 5 CPFs per invocation
+    const CHUNK_SIZE = 25; // Process 25 CPFs per invocation
 
     try {
         const batchDoc = await batchRef.get();
@@ -259,7 +259,7 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
   const batchId = `batch-${displayProvider}-${v8Provider || ''}-${Date.now()}-${userId.substring(0, 5)}`;
   const batchRef = firestore.collection('batches').doc(batchId);
   
-  const baseBatchData = {
+  const baseBatchData: Omit<BatchJob, 'id' | 'createdAt' | 'v8Provider'> & { createdAt: FieldValue } = {
       fileName: fileName,
       provider: displayProvider,
       status: 'pending',
@@ -292,7 +292,7 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
   }
   
   const serializableBatch: BatchJob = {
-    ...batchData,
+    ...(batchData as any),
     id: batchId,
     createdAt: new Date().toISOString(),
   }
@@ -552,5 +552,3 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         message: 'Relatório gerado com sucesso.',
     };
 }
-
-    
