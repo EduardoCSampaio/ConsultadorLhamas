@@ -9,7 +9,6 @@ export const metadata: Metadata = {
   description: 'Gestão de crédito e finanças, simplificada.',
   icons: {
     icon: '/favicon.ico',
-    shortcut: '/favicon-16x16.png',
     apple: '/apple-touch-icon.png',
   },
 };
