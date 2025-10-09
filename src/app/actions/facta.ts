@@ -21,6 +21,7 @@ const fgtsConsultaSchema = z.object({
 const inssGetOperationsSchema = z.object({
     cpf: z.string(),
     data_nascimento: z.string(),
+    calculationType: z.enum(['renda', 'margem']),
     valor_renda: z.number().optional(),
     margem_cartao: z.number().optional(),
     userId: z.string(),
@@ -334,7 +335,7 @@ export async function getInssOperations(input: z.infer<typeof inssGetOperationsS
         return { success: false, message: 'Dados de entrada inválidos: ' + JSON.stringify(validation.error.flatten()) };
     }
 
-    const { cpf, data_nascimento, valor_renda, margem_cartao, userId } = validation.data;
+    const { cpf, data_nascimento, calculationType, valor_renda, margem_cartao, userId } = validation.data;
     
     const { credentials, error: credError } = await getFactaUserCredentials(userId);
     if (credError || !credentials) {
@@ -346,7 +347,7 @@ export async function getInssOperations(input: z.infer<typeof inssGetOperationsS
         return { success: false, message: tokenError || "Não foi possível obter o token da Facta" };
     }
     
-    await logActivity({ userId, documentNumber: cpf, action: 'Consulta Cartão INSS Facta', provider: 'facta', details: `Renda: ${valor_renda}, Margem: ${margem_cartao}` });
+    await logActivity({ userId, documentNumber: cpf, action: 'Consulta Cartão INSS Facta', provider: 'facta', details: `Tipo: ${calculationType}, Renda: ${valor_renda}, Margem: ${margem_cartao}` });
 
     try {
         const url = new URL(`${FACTA_API_BASE_URL_PROD}/proposta/operacoes-disponiveis`);
@@ -357,14 +358,14 @@ export async function getInssOperations(input: z.infer<typeof inssGetOperationsS
         url.searchParams.append('cpf', cpf);
         url.searchParams.append('data_nascimento', data_nascimento);
 
-        if (valor_renda) {
+        if (calculationType === 'renda' && valor_renda) {
              url.searchParams.append('opcao_valor', '1');
              url.searchParams.append('valor_renda', String(valor_renda));
-        } else if (margem_cartao) {
+        } else if (calculationType === 'margem' && margem_cartao) {
              url.searchParams.append('opcao_valor', '2');
              url.searchParams.append('margem_cartao', String(margem_cartao));
         } else {
-            return { success: false, message: 'É necessário informar o valor da renda ou a margem do cartão.'};
+            return { success: false, message: 'É necessário informar o valor da renda ou a margem do cartão, de acordo com o tipo de cálculo.'};
         }
 
 
@@ -504,3 +505,5 @@ export async function getInssCreditOperations(input: z.infer<typeof inssGetCredi
         return { success: false, message };
     }
 }
+
+    
