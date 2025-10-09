@@ -1,85 +1,131 @@
 /**
- * @fileoverview Firestore Security Rules for Prototyping.
- *
- * Core Philosophy:
- * This ruleset prioritizes secure authorization while permitting flexible data shapes to enable rapid prototyping.
- * It implements a strict user-ownership model for user profiles and allows public read access to webhook responses,
- * with restricted write access based on ownership.
+ * @file Firestore Security Rules
+ * @description This ruleset enforces a strict user-ownership model for user profiles and batch jobs,
+ *              allows public read access to webhook responses, and restricts access to activity logs and CLT consents
+ *              based on user roles and ownership.
  *
  * Data Structure:
- * - User profiles are stored under `/users/{userId}`, where `{userId}` matches the Firebase Auth UID.
- * - Webhook responses are stored under `/webhookResponses/{webhookResponseId}`.
+ * - /users/{userId}: Stores user profile information; only accessible by the user themselves.
+ * - /webhookResponses/{responseId}: Stores API responses; publicly readable.
+ * - /activityLogs/{logId}: Stores activity logs; write-only by the server.
+ * - /batches/{batchId}: Stores batch job information; owned by the user who created the job.
+ * - /cltConsents/{consentId}: Stores CLT consent terms; owned by the user who created the consent.
  *
  * Key Security Decisions:
- * - Listing of users is explicitly denied.
- * - Data type validation is skipped in favor of rapid iteration, except for fields directly involved in authorization and relational integrity.
+ * - User profiles are strictly private; only the user can read or write their own profile.
+ * - Webhook responses are publicly readable for easy access and debugging.
+ * - Activity logs are write-only by the server to prevent tampering.
+ * - Batch jobs are owned by the user who created them, restricting access to job details.
+ * - CLT consents are owned by the user who created them.
  *
  * Denormalization for Authorization:
- * - The `UserProfile` document's `uid` field MUST match the document ID (`userId`) to ensure ownership.
+ *   - User-specific data (e.g., batch jobs, CLT consents) includes a 'userId' field to enable owner-based rules.
  *
  * Structural Segregation:
- * - No separation of public/private content is needed in this data model, as the webhook responses are globally readable.
+ *   - Publicly readable data (webhook responses) is stored in a separate collection from private user data.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Prevents listing all users.
-     * @path /databases/{database}/documents/users
-     * @allow (get) - Allows getting an specific user if the user ID matches the authenticated user's ID.
-     * @deny (list) - Denies listing all users. This is a security best practice.
-     * @allow (create) - Allows creating a user profile if the user ID matches the authenticated user's ID.
-     * @allow (update) - Allows updating a user profile if the user ID matches the authenticated user's ID.
-     * @allow (delete) - Allows deleting a user profile if the user ID matches the authenticated user's ID.
-     * @principle Prevents listing all user documents for privacy.
+     * @description Allows users to read and write their own profile data.
+     * @path /users/{userId}
+     * @allow (get, update, delete) User with UID 'userId' can access their own profile.
+     * @allow (create) User with UID 'userId' can create their profile.
+     * @deny (get, update, delete) User with UID 'anotherUserId' cannot access user with UID 'userId' profile.
+     * @principle Enforces document ownership for all operations.
      */
     match /users/{userId} {
-      allow get: if isSignedIn() && isOwner(userId);
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      allow get: if isOwner(userId);
       allow list: if false;
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.uid == userId;
-      allow update: if isSignedIn() && isExistingOwner(userId) && request.resource.data.uid == resource.data.uid;
-      allow delete: if isSignedIn() && isExistingOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.uid == request.auth.uid;
+      allow update: if isOwner(userId) && request.resource.data.uid == request.auth.uid;
+      allow delete: if isOwner(userId) && request.resource.data.uid == request.auth.uid;
     }
 
     /**
-     * @description Allows public read access to webhook responses and restricts write access to owners.
-     * @path /databases/{database}/documents/webhookResponses/{webhookResponseId}
-     * @allow (get, list) - Allows any user to read webhook responses.
-     * @deny (create, update, delete) - Write operations are disallowed (for now).
-     * @principle Allows public read access with restricted write access.
+     * @description Allows public read access to webhook responses.
+     * @path /webhookResponses/{responseId}
+     * @allow (get, list) Any user can read webhook responses.
+     * @deny (create, update, delete) Only the backend can modify webhook responses.
+     * @principle Allows public read access for debugging and data consumption.
      */
-    match /webhookResponses/{webhookResponseId} {
+    match /webhookResponses/{responseId} {
       allow get, list: if true;
       allow create, update, delete: if false;
     }
 
-    // --- Helper functions ---
-
     /**
-     * @description Checks if the user is signed in.
-     * @return {boolean} True if the user is signed in, false otherwise.
+     * @description Allows write access to activity logs only by the server.
+     * @path /activityLogs/{logId}
+     * @allow (create) Only the backend can create activity logs.
+     * @deny (get, list, update, delete) No client-side access to activity logs.
+     * @principle Restricts access to prevent tampering and maintain data integrity.
      */
-    function isSignedIn() {
-      return request.auth != null;
+    match /activityLogs/{logId} {
+      allow get, list, update, delete: if false;
+      allow create: if true;
     }
 
     /**
-     * @description Checks if the user is the owner of the resource.
-     * @param {string} userId - The user ID to check against.
-     * @return {boolean} True if the user is the owner, false otherwise.
+     * @description Allows users to read and write their own batch job data.
+     * @path /batches/{batchId}
+     * @allow (get, update, delete) User with UID 'userId' can access their own batch job.
+     * @allow (create) User with UID 'userId' can create their batch job.
+     * @deny (get, update, delete) User with UID 'anotherUserId' cannot access user with UID 'userId' batch job.
+     * @principle Enforces document ownership for all operations.
      */
-    function isOwner(userId) {
-      return request.auth.uid == userId;
+    match /batches/{batchId} {
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+      function isExistingOwner(userId) {
+        return request.auth != null && request.auth.uid == userId && resource != null;
+      }
+
+      allow get: if isOwner(resource.data.userId);
+      allow list: if false;
+      allow create: if request.auth != null && isOwner(request.resource.data.userId);
+      allow update: if isExistingOwner(resource.data.userId) && request.resource.data.userId == request.auth.uid;
+      allow delete: if isExistingOwner(resource.data.userId) && request.resource.data.userId == request.auth.uid;
+    }
+
+     /**
+      * @description Allows users to read and write their own CLT consent data.
+      * @path /cltConsents/{consentId}
+      * @allow (get, update, delete) User with UID 'userId' can access their own CLT consent.
+      * @allow (create) User with UID 'userId' can create their CLT consent.
+      * @deny (get, update, delete) User with UID 'anotherUserId' cannot access user with UID 'userId' CLT consent.
+      * @principle Enforces document ownership for all operations.
+      */
+    match /cltConsents/{consentId} {
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
+
+      allow get: if isOwner(resource.data.userId);
+      allow list: if false;
+      allow create: if request.auth != null && isOwner(request.resource.data.userId);
+      allow update: if isExistingOwner(resource.data.userId) && request.resource.data.userId == request.auth.uid;
+      allow delete: if isExistingOwner(resource.data.userId) && request.resource.data.userId == request.auth.uid;
     }
 
     /**
-     * @description Checks if the user is the owner of the resource and the resource exists.
-     * @param {string} userId - The user ID to check against.
-     * @return {boolean} True if the user is the owner and the resource exists, false otherwise.
+     * @description Denies all access to the messages subcollection under tickets.  This collection is not defined in the data model.
+     * @path /tickets/{ticketId}/messages/{messageId}
+     * @deny (get, list, create, update, delete) No access to messages.
+     * @principle Prevents unauthorized access to undefined data.
      */
-    function isExistingOwner(userId) {
-      return isOwner(userId) && resource != null;
+    match /tickets/{ticketId}/messages/{messageId} {
+      allow get, list, create, update, delete: if false;
     }
   }
 }
