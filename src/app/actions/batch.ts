@@ -52,6 +52,7 @@ export type BatchJob = {
     processedCpfs: number;
     cpfs: string[];
     createdAt: string; // ISO String
+    completedAt?: string; // ISO String for when the job finishes
     message?: string;
     userId: string;
     userEmail: string;
@@ -78,7 +79,8 @@ type ReportActionResult = {
 };
 
 
-function toISODate(timestamp: Timestamp | string | Date): string {
+function toISODate(timestamp: Timestamp | string | Date | undefined): string | undefined {
+    if (!timestamp) return undefined;
     if (timestamp instanceof Timestamp) {
         return timestamp.toDate().toISOString();
     }
@@ -122,7 +124,8 @@ export async function getBatches(input?: { batchId: string }): Promise<{ status:
                 totalCpfs: data.totalCpfs,
                 processedCpfs: data.processedCpfs,
                 cpfs: data.cpfs,
-                createdAt: toISODate(data.createdAt),
+                createdAt: toISODate(data.createdAt)!,
+                completedAt: toISODate(data.completedAt),
                 message: data.message,
                 userId: data.userId,
                 userEmail: data.userEmail,
@@ -163,12 +166,11 @@ async function processFactaBatchInBackground(batchId: string) {
         
         let batchData = batchDoc.data() as BatchJob;
         
-        if (batchData.status === 'completed') {
-            console.log(`[Batch ${batchId}] Batch already completed.`);
+        if (batchData.status === 'completed' || batchData.status === 'error') {
+            console.log(`[Batch ${batchId}] Batch already finished with status: ${batchData.status}.`);
             return;
         }
 
-        // Ensure status is 'processing'
         if (batchData.status !== 'processing') {
             await batchRef.update({ status: 'processing', message: 'Iniciando processamento...' });
         }
@@ -179,24 +181,21 @@ async function processFactaBatchInBackground(batchId: string) {
         const { token, error: tokenError } = await getFactaAuthToken(userCredentials.facta_username, userCredentials.facta_password);
         if (tokenError || !token) throw new Error(tokenError || "Falha ao obter token da Facta.");
 
-        // Find next CPFs to process
         const processedCpfsSnapshot = await firestore.collection('webhookResponses')
-            .where('provider', '==', 'facta')
-            .where('batchId', '==', batchId) // Filter by batchId to get correct count
+            .where('batchId', '==', batchId)
             .get();
         const processedCpfIds = new Set(processedCpfsSnapshot.docs.map(doc => doc.id.replace('facta-', '')));
         
         const cpfsToProcess = batchData.cpfs.filter(cpf => !processedCpfIds.has(cpf)).slice(0, CHUNK_SIZE);
 
         if (cpfsToProcess.length === 0) {
-            await batchRef.update({ status: 'completed', processedCpfs: batchData.totalCpfs, message: "Todos os CPFs foram processados." });
+            await batchRef.update({ status: 'completed', processedCpfs: batchData.totalCpfs, message: "Todos os CPFs foram processados.", completedAt: FieldValue.serverTimestamp() });
             console.log(`[Batch ${batchId}] All CPFs processed. Batch completed.`);
             return;
         }
 
-        console.log(`[Batch ${batchId}] Processing ${cpfsToProcess.length} CPFs in parallel: ${cpfsToProcess.join(', ')}`);
+        console.log(`[Batch ${batchId}] Processing ${cpfsToProcess.length} CPFs in parallel.`);
 
-        // --- Execute queries in parallel ---
         const processingPromises = cpfsToProcess.map(async (cpf) => {
             const docRef = firestore.collection('webhookResponses').doc(`facta-${cpf}`);
             try {
@@ -217,25 +216,23 @@ async function processFactaBatchInBackground(batchId: string) {
             }
         });
 
-        // Wait for all queries in the current chunk to complete
         await Promise.all(processingPromises);
         
         const currentProcessedCount = processedCpfIds.size + cpfsToProcess.length;
         await batchRef.update({ processedCpfs: currentProcessedCount });
 
-        // Check if there are more CPFs to process and recursively call the next chunk
         if (currentProcessedCount < batchData.totalCpfs) {
             console.log(`[Batch ${batchId}] Chunk processed. Triggering next one.`);
-            await processFactaBatchInBackground(batchId); // Auto-trigger next chunk
+            await processFactaBatchInBackground(batchId);
         } else {
-            await batchRef.update({ status: 'completed', message: "Todos os CPFs foram processados." });
+            await batchRef.update({ status: 'completed', message: "Todos os CPFs foram processados.", completedAt: FieldValue.serverTimestamp() });
             console.log(`[Batch ${batchId}] Final chunk processed. Batch completed.`);
         }
 
     } catch (error) {
         const message = error instanceof Error ? error.message : "An unknown error occurred.";
         console.error(`[Batch ${batchId}] FACTA BATCH FATAL ERROR:`, error);
-        await batchRef.update({ status: 'error', message: message });
+        await batchRef.update({ status: 'error', message: message, completedAt: FieldValue.serverTimestamp() });
     }
 }
 
@@ -284,7 +281,6 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
     return { status: 'error', message };
   }
   
-  // Trigger background processing immediately after creation
   if (provider === 'v8') {
     processV8BatchInBackground(batchId);
   } else if (provider === 'facta') {
@@ -335,29 +331,26 @@ async function processV8BatchInBackground(batchId: string) {
         });
 
         for (const cpf of cpfs) {
-            // The actual request is sent, but we don't wait for the webhook here.
-            // The webhook will update the 'webhookResponses' collection independently.
             await consultarSaldoV8({ 
                 documentNumber: cpf, 
                 userId, 
                 userEmail, 
                 token: authToken, 
                 provider: v8Provider,
-                batchId: batchId // Pass batchId to the webhook
+                batchId: batchId
             });
         }
         
-        // V8 processing is "fire and forget". We mark it as completed because all requests have been sent.
-        // The actual results arrive asynchronously.
         await batchRef.update({ 
             status: 'completed', 
-            message: 'Todas as solicitações V8 foram enviadas. Os resultados chegarão via webhook.' 
+            message: 'Todas as solicitações V8 foram enviadas. Os resultados chegarão via webhook.',
+            completedAt: FieldValue.serverTimestamp(),
         });
 
     } catch (error) {
         const message = error instanceof Error ? error.message : "An unknown error occurred.";
         console.error(`[Batch ${batchId}] V8 BATCH FATAL ERROR:`, error);
-        await batchRef.update({ status: 'error', message: message });
+        await batchRef.update({ status: 'error', message: message, completedAt: FieldValue.serverTimestamp() });
     }
 }
 
@@ -389,7 +382,6 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
 
         const mainProvider = originalBatchData.provider.toLowerCase();
         
-        // For both providers, we can now just re-trigger the background processing.
         if (mainProvider === 'v8digital') {
              await processV8BatchInBackground(batchId);
              return { status: 'success', message: 'Reprocessamento do lote V8 foi reiniciado.' };

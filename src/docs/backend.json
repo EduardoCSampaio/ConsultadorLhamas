@@ -135,6 +135,10 @@
                 "type": "string",
                 "description": "The document number (CPF) related to the action."
             },
+            "details": {
+                "type": "string",
+                "description": "Additional details about the action, such as a filename or error message."
+            },
             "createdAt": {
                 "type": "string",
                 "format": "date-time",
@@ -157,6 +161,7 @@
             "processedCpfs": { "type": "number" },
             "message": { "type": "string" },
             "createdAt": { "type": "string", "format": "date-time" },
+            "completedAt": { "type": "string", "format": "date-time", "description": "Timestamp indicating when the job finished (completed or errored)." },
             "cpfs": { "type": "array", "items": { "type": "string" } }
         },
         "required": ["id", "userId", "provider", "status", "totalCpfs", "processedCpfs", "createdAt"]

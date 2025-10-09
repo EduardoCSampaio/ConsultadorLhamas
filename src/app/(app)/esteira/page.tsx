@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Download, RefreshCw, AlertCircle, Inbox, Trash2, Play } from 'lucide-react';
+import { Loader2, Download, RefreshCw, AlertCircle, Inbox, Trash2, Play, Timer, CheckCircle } from 'lucide-react';
 import { getBatches, deleteBatch, type BatchJob, gerarRelatorioLote, reprocessarLoteComErro } from '@/app/actions/batch';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -26,6 +26,18 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useUser } from "@/firebase";
 
+const formatDuration = (ms: number) => {
+    if (ms < 0) ms = 0;
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+
+    if (hours > 0) return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+    return `${seconds}s`;
+};
+
+
 export default function EsteiraPage() {
     const { toast } = useToast();
     const { user } = useUser();
@@ -33,6 +45,7 @@ export default function EsteiraPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isReprocessing, setIsReprocessing] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [_, setTick] = useState(0); // For re-rendering to update timer
 
     const fetchBatches = useCallback(async (showLoading = true) => {
         if(showLoading) setIsLoading(true);
@@ -49,17 +62,17 @@ export default function EsteiraPage() {
     }, [toast]);
 
     useEffect(() => {
-        fetchBatches(true); // Initial fetch with loading state
+        fetchBatches(true);
 
         const intervalId = setInterval(() => {
-            // Only fetch in the background if there are batches currently processing
             setBatches(currentBatches => {
                 if (currentBatches.some(b => b.status === 'processing')) {
-                    fetchBatches(false); 
+                    fetchBatches(false);
                 }
                 return currentBatches;
             });
-        }, 10000); // 10 seconds
+            setTick(t => t + 1); // This will trigger a re-render for the timer
+        }, 10000);
 
         return () => clearInterval(intervalId);
     }, [fetchBatches]);
@@ -209,6 +222,18 @@ export default function EsteiraPage() {
                                         <p className="text-sm text-muted-foreground">
                                             Enviado em: {new Date(batch.createdAt).toLocaleString('pt-BR')}
                                         </p>
+                                          {batch.status === 'processing' && (
+                                            <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                                                <Timer className="h-3.5 w-3.5"/>
+                                                Em andamento por: {formatDuration(Date.now() - new Date(batch.createdAt).getTime())}
+                                            </p>
+                                        )}
+                                        {(batch.status === 'completed' || batch.status === 'error') && batch.completedAt && (
+                                             <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                                                <CheckCircle className="h-3.5 w-3.5"/>
+                                                Concluído em: {formatDuration(new Date(batch.completedAt).getTime() - new Date(batch.createdAt).getTime())}
+                                            </p>
+                                        )}
                                     </div>
                                     <div className='flex items-center gap-2'>
                                         <Badge variant={getStatusVariant(batch.status)} className="capitalize">{getStatusText(batch.status)}</Badge>
