@@ -22,8 +22,6 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { useUser } from "@/firebase";
 import { getInssOperations, submitInssSimulation, type InssOperation } from "@/app/actions/facta";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Separator } from "@/components/ui/separator";
-
 
 const formSchema = z.object({
   cpf: z.string().min(11, "CPF deve ter 11 dígitos.").max(11, "CPF deve ter 11 dígitos."),
@@ -31,7 +29,6 @@ const formSchema = z.object({
     message: "Data de nascimento deve estar no formato DD/MM/AAAA.",
   }),
   valor_renda: z.string().min(1, "O valor da renda é obrigatório."),
-  valor_desejado: z.string().min(1, "O valor desejado é obrigatório."),
 });
 
 const formatCurrency = (value: string | number | undefined | null) => {
@@ -83,7 +80,6 @@ export default function InssFactaPage() {
       cpf: "",
       data_nascimento: "",
       valor_renda: "",
-      valor_desejado: "",
     },
   });
 
@@ -105,7 +101,6 @@ export default function InssFactaPage() {
     const formattedValues = {
         ...values,
         valor_renda: parseFloat(values.valor_renda.replace(/\./g, '').replace(',', '.')),
-        valor_desejado: parseFloat(values.valor_desejado.replace(/\./g, '').replace(',', '.')),
         userId: user.uid,
     };
 
@@ -167,7 +162,7 @@ export default function InssFactaPage() {
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onGetOperations)} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <FormField
                         control={form.control}
                         name="cpf"
@@ -210,19 +205,6 @@ export default function InssFactaPage() {
                             <FormLabel>Valor do Benefício (Renda)</FormLabel>
                             <FormControl>
                             <Input placeholder="1.412,00" {...field} onChange={(e) => { handleCurrencyMask(e); field.onChange(e.target.value); }} disabled={isLoading}/>
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                        )}
-                    />
-                     <FormField
-                        control={form.control}
-                        name="valor_desejado"
-                        render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Valor de Saque Desejado</FormLabel>
-                            <FormControl>
-                            <Input placeholder="2.000,00" {...field} onChange={(e) => { handleCurrencyMask(e); field.onChange(e.target.value); }} disabled={isLoading}/>
                             </FormControl>
                             <FormMessage />
                         </FormItem>

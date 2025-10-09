@@ -22,7 +22,14 @@ const inssGetOperationsSchema = z.object({
     cpf: z.string(),
     data_nascimento: z.string(),
     valor_renda: z.number(),
-    valor_desejado: z.number(),
+    userId: z.string(),
+});
+
+const inssGetCreditOperationsSchema = z.object({
+    cpf: z.string(),
+    data_nascimento: z.string(),
+    valor_contrato: z.number(),
+    tipo_operacao: z.enum(['13', '27']),
     userId: z.string(),
 });
 
@@ -101,6 +108,22 @@ export type InssOperation = {
     parcela: number;
 }
 
+export type InssCreditOffer = {
+    convenio: string;
+    idConvenio: number;
+    averbador: string;
+    tabela: string;
+    taxa: number;
+    prazo: number;
+    tipoop: number;
+    tipoOperacao: string;
+    codigoTabela: number;
+    coeficiente: number;
+    primeiro_vencimento: string | null;
+    contrato: number;
+    parcela: number;
+}
+
 export type InssSubmitResult = {
     id_simulador: string;
 }
@@ -121,6 +144,12 @@ export type GetInssOperationsResult = {
     success: boolean;
     message: string;
     data?: InssOperation[];
+};
+
+export type GetInssCreditResult = {
+    success: boolean;
+    message: string;
+    data?: InssCreditOffer[];
 };
 
 export type SubmitInssSimulationResult = {
@@ -304,7 +333,7 @@ export async function getInssOperations(input: z.infer<typeof inssGetOperationsS
         return { success: false, message: 'Dados de entrada inválidos: ' + JSON.stringify(validation.error.flatten()) };
     }
 
-    const { cpf, data_nascimento, valor_renda, valor_desejado, userId } = validation.data;
+    const { cpf, data_nascimento, valor_renda, userId } = validation.data;
     
     const { credentials, error: credError } = await getFactaUserCredentials(userId);
     if (credError || !credentials) {
@@ -316,7 +345,7 @@ export async function getInssOperations(input: z.infer<typeof inssGetOperationsS
         return { success: false, message: tokenError || "Não foi possível obter o token da Facta" };
     }
     
-    await logActivity({ userId, documentNumber: cpf, action: 'Consulta INSS Facta', provider: 'facta', details: `Valor: ${valor_desejado}` });
+    await logActivity({ userId, documentNumber: cpf, action: 'Consulta Cartão INSS Facta', provider: 'facta', details: `Renda: ${valor_renda}` });
 
     try {
         const url = new URL(`${FACTA_API_BASE_URL_PROD}/proposta/operacoes-disponiveis`);
@@ -325,10 +354,10 @@ export async function getInssOperations(input: z.infer<typeof inssGetOperationsS
         url.searchParams.append('averbador', '3');
         url.searchParams.append('convenio', '3');
         url.searchParams.append('opcao_valor', '1');
-        url.searchParams.append('valor', String(valor_desejado));
         url.searchParams.append('cpf', cpf);
         url.searchParams.append('data_nascimento', data_nascimento);
         url.searchParams.append('valor_renda', String(valor_renda));
+        url.searchParams.append('valor', ''); // Explicitly empty as per correction
 
         const response = await fetch(url.toString(), {
             method: 'GET',
@@ -405,6 +434,64 @@ export async function submitInssSimulation(input: z.infer<typeof inssSubmitSimul
     } catch (error) {
         const message = error instanceof Error ? error.message : "Erro de comunicação ao submeter simulação da Facta.";
         console.error('[FACTA API] Erro na submissão de simulação INSS:', error);
+        return { success: false, message };
+    }
+}
+
+
+export async function getInssCreditOperations(input: z.infer<typeof inssGetCreditOperationsSchema>): Promise<GetInssCreditResult> {
+    const validation = inssGetCreditOperationsSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: 'Dados de entrada inválidos: ' + JSON.stringify(validation.error.flatten()) };
+    }
+
+    const { cpf, data_nascimento, valor_contrato, tipo_operacao, userId } = validation.data;
+
+    const { credentials, error: credError } = await getFactaUserCredentials(userId);
+    if (credError || !credentials) {
+        return { success: false, message: credError || "Credenciais não encontradas." };
+    }
+
+    const { token, error: tokenError } = await getFactaAuthToken(credentials.facta_username, credentials.facta_password);
+    if (tokenError || !token) {
+        return { success: false, message: tokenError || "Não foi possível obter o token da Facta" };
+    }
+    
+    await logActivity({ userId, documentNumber: cpf, action: 'Consulta Crédito Novo INSS Facta', provider: 'facta', details: `Tipo: ${tipo_operacao}, Valor: ${valor_contrato}` });
+
+    try {
+        const url = new URL(`${FACTA_API_BASE_URL_PROD}/proposta/operacoes-disponiveis`);
+        url.searchParams.append('produto', 'D');
+        url.searchParams.append('tipo_operacao', tipo_operacao);
+        url.searchParams.append('averbador', '3');
+        url.searchParams.append('convenio', '3');
+        url.searchParams.append('opcao_valor', '1'); // 1 = contrato
+        url.searchParams.append('valor', String(valor_contrato));
+        url.searchParams.append('cpf', cpf);
+        url.searchParams.append('data_nascimento', data_nascimento);
+
+        const response = await fetch(url.toString(), {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        const data = await response.json();
+        
+        if (data.erro) {
+            return { success: false, message: data.mensagem || 'Erro ao buscar operações de crédito na Facta.' };
+        }
+
+        if (!data.tabelas || data.tabelas.length === 0) {
+            return { success: true, message: 'Nenhuma tabela de crédito encontrada para os dados informados.', data: [] };
+        }
+
+        return { success: true, message: 'Operações de crédito encontradas com sucesso.', data: data.tabelas };
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro de comunicação ao buscar operações de crédito da Facta.";
+        console.error('[FACTA API] Erro na busca de operações de crédito INSS:', error);
         return { success: false, message };
     }
 }

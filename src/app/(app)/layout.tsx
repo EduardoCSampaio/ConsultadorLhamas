@@ -1,6 +1,5 @@
 
-
-"use client"
+'use client';
 
 import * as React from 'react';
 import {
@@ -190,18 +189,39 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             )}
 
             {hasPermission('canViewINSS') && (
-                <SidebarMenuItem>
+              <SidebarMenuItem>
+                <Collapsible>
+                  <CollapsibleTrigger asChild>
                     <SidebarMenuButton
-                        asChild
-                        isActive={pathname.startsWith('/inss')}
-                        tooltip="Cartão Benefício INSS"
+                      className="w-full justify-start"
+                      isActive={pathname.startsWith('/inss')}
+                      tooltip="Consultas INSS"
                     >
-                        <Link href="/inss">
-                            <Landmark />
-                            <span>INSS</span>
-                        </Link>
+                      <Landmark />
+                      <span>INSS</span>
+                      <ChevronDown className="ml-auto size-4 shrink-0 transition-transform ease-in-out group-data-[state=open]:rotate-180" />
                     </SidebarMenuButton>
-                </SidebarMenuItem>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent asChild>
+                    <SidebarMenuSub>
+                      <SidebarMenuItem>
+                        <SidebarMenuSubButton asChild isActive={pathname === '/inss'}>
+                          <Link href="/inss">
+                            <span>Cartão Benefício</span>
+                          </Link>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuItem>
+                      <SidebarMenuItem>
+                        <SidebarMenuSubButton asChild isActive={pathname === '/inss/novo'}>
+                          <Link href="/inss/novo">
+                            <span>Crédito Novo</span>
+                          </Link>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuItem>
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </Collapsible>
+              </SidebarMenuItem>
             )}
 
              {hasPermission('canViewCLT') && (
