@@ -44,7 +44,7 @@ export function ImageUploadDialog({ children }: { children: React.ReactNode }) {
   });
 
   const handleUpload = async () => {
-    if (!file || !user || !auth || !storage || !firestore) {
+    if (!file || !user || !auth?.currentUser || !storage || !firestore) {
       toast({
         variant: 'destructive',
         title: 'Erro',
@@ -56,14 +56,15 @@ export function ImageUploadDialog({ children }: { children: React.ReactNode }) {
     setIsUploading(true);
 
     try {
-      const storageRef = ref(storage, `profile-pictures/${user.uid}/${file.name}`);
+      // Use a simple path with the user's UID as the file name
+      const storageRef = ref(storage, `profile-pictures/${user.uid}`);
 
       // Upload file
       const snapshot = await uploadBytes(storageRef, file);
       const downloadURL = await getDownloadURL(snapshot.ref);
 
       // Update Firebase Auth user profile
-      await updateProfile(user, { photoURL: downloadURL });
+      await updateProfile(auth.currentUser, { photoURL: downloadURL });
       
       // Update Firestore user document
       const userDocRef = doc(firestore, 'users', user.uid);
