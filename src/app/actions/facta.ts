@@ -22,6 +22,7 @@ const inssGetOperationsSchema = z.object({
     cpf: z.string(),
     data_nascimento: z.string(),
     valor_renda: z.number(),
+    valor_desejado: z.number(),
     userId: z.string(),
 });
 
@@ -333,7 +334,7 @@ export async function getInssOperations(input: z.infer<typeof inssGetOperationsS
         return { success: false, message: 'Dados de entrada inválidos: ' + JSON.stringify(validation.error.flatten()) };
     }
 
-    const { cpf, data_nascimento, valor_renda, userId } = validation.data;
+    const { cpf, data_nascimento, valor_renda, valor_desejado, userId } = validation.data;
     
     const { credentials, error: credError } = await getFactaUserCredentials(userId);
     if (credError || !credentials) {
@@ -345,7 +346,7 @@ export async function getInssOperations(input: z.infer<typeof inssGetOperationsS
         return { success: false, message: tokenError || "Não foi possível obter o token da Facta" };
     }
     
-    await logActivity({ userId, documentNumber: cpf, action: 'Consulta Cartão INSS Facta', provider: 'facta', details: `Renda: ${valor_renda}` });
+    await logActivity({ userId, documentNumber: cpf, action: 'Consulta Cartão INSS Facta', provider: 'facta', details: `Renda: ${valor_renda}, Desejado: ${valor_desejado}` });
 
     try {
         const url = new URL(`${FACTA_API_BASE_URL_PROD}/proposta/operacoes-disponiveis`);
@@ -357,7 +358,7 @@ export async function getInssOperations(input: z.infer<typeof inssGetOperationsS
         url.searchParams.append('cpf', cpf);
         url.searchParams.append('data_nascimento', data_nascimento);
         url.searchParams.append('valor_renda', String(valor_renda));
-        url.searchParams.append('valor', ''); // Explicitly empty for this operation type
+        url.searchParams.append('valor', String(valor_desejado)); 
 
         const response = await fetch(url.toString(), {
             method: 'GET',
@@ -392,7 +393,7 @@ export async function submitInssSimulation(input: z.infer<typeof inssSubmitSimul
     }
 
     const { userId, ...formData } = validation.data;
-     const { credentials, error: credError } = await getFactaUserCredentials(userId);
+    const { credentials, error: credError } = await getFactaUserCredentials(userId);
     if (credError || !credentials || !credentials.facta_username) {
         return { success: false, message: credError || "Credenciais não encontradas ou incompletas." };
     }
@@ -495,5 +496,3 @@ export async function getInssCreditOperations(input: z.infer<typeof inssGetCredi
         return { success: false, message };
     }
 }
-
-    
