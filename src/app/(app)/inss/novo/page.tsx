@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from "react";
@@ -27,7 +28,7 @@ const formSchema = z.object({
   data_nascimento: z.string().refine((val) => /^\d{2}\/\d{2}\/\d{4}$/.test(val), {
     message: "Data de nascimento deve estar no formato DD/MM/AAAA.",
   }),
-  valor_contrato: z.string().optional(),
+  valor_parcela: z.string().optional(),
 });
 
 
@@ -76,7 +77,7 @@ export default function InssCreditPage() {
     defaultValues: {
       cpf: "",
       data_nascimento: "",
-      valor_contrato: "",
+      valor_parcela: "",
     },
   });
 
@@ -93,8 +94,7 @@ export default function InssCreditPage() {
 
     const formattedValues = {
         ...values,
-        tipo_operacao: '13', // Hardcoded to "Novo Digital"
-        valor_contrato: values.valor_contrato ? parseFloat(values.valor_contrato.replace(/\./g, '').replace(',', '.')) : undefined,
+        valor_parcela: values.valor_parcela ? parseFloat(values.valor_parcela.replace(/\./g, '').replace(',', '.')) : undefined,
         userId: user.uid,
     };
 
@@ -166,12 +166,12 @@ export default function InssCreditPage() {
 
                 <FormField
                     control={form.control}
-                    name="valor_contrato"
+                    name="valor_parcela"
                     render={({ field }) => (
                     <FormItem>
-                        <FormLabel>Valor do Contrato Desejado (Opcional)</FormLabel>
+                        <FormLabel>Valor da Parcela Desejada (Opcional)</FormLabel>
                         <FormControl>
-                        <Input placeholder="1.000,00" {...field} onChange={(e) => { handleCurrencyMask(e); field.onChange(e.target.value); }} disabled={isLoading}/>
+                        <Input placeholder="100,00" {...field} onChange={(e) => { handleCurrencyMask(e); field.onChange(e.target.value); }} disabled={isLoading}/>
                         </FormControl>
                         <FormMessage />
                     </FormItem>

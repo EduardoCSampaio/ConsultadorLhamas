@@ -25,13 +25,16 @@ const inssGetOperationsSchema = z.object({
     valor_renda: z.number().optional(),
     margem_cartao: z.number().optional(),
     userId: z.string(),
+}).refine(data => data.calculationType === 'renda' ? !!data.valor_renda : !!data.margem_cartao, {
+    message: "O valor correspondente ao tipo de cálculo deve ser preenchido.",
+    path: ["valor_renda"], // Points to a field to show error, can be either
 });
+
 
 const inssGetCreditOperationsSchema = z.object({
     cpf: z.string(),
     data_nascimento: z.string(),
-    valor_contrato: z.number().optional(),
-    tipo_operacao: z.enum(['13', '27']),
+    valor_parcela: z.number().optional(),
     userId: z.string(),
 });
 
@@ -347,7 +350,7 @@ export async function getInssOperations(input: z.infer<typeof inssGetOperationsS
         return { success: false, message: tokenError || "Não foi possível obter o token da Facta" };
     }
     
-    await logActivity({ userId, documentNumber: cpf, action: 'Consulta Cartão INSS Facta', provider: 'facta', details: `Tipo: ${calculationType}, Renda: ${valor_renda}, Margem: ${margem_cartao}` });
+    await logActivity({ userId, documentNumber: cpf, action: 'Consulta Cartão INSS Facta', provider: 'facta', details: `Tipo: ${calculationType}, Valor: ${valor_renda || margem_cartao}` });
 
     try {
         const url = new URL(`${FACTA_API_BASE_URL_PROD}/proposta/operacoes-disponiveis`);
@@ -364,10 +367,7 @@ export async function getInssOperations(input: z.infer<typeof inssGetOperationsS
         } else if (calculationType === 'margem' && margem_cartao) {
              url.searchParams.append('opcao_valor', '2');
              url.searchParams.append('margem_cartao', String(margem_cartao));
-        } else {
-            return { success: false, message: 'É necessário informar o valor da renda ou a margem do cartão.'};
         }
-
 
         const response = await fetch(url.toString(), {
             method: 'GET',
@@ -455,7 +455,7 @@ export async function getInssCreditOperations(input: z.infer<typeof inssGetCredi
         return { success: false, message: 'Dados de entrada inválidos: ' + JSON.stringify(validation.error.flatten()) };
     }
 
-    const { cpf, data_nascimento, valor_contrato, tipo_operacao, userId } = validation.data;
+    const { cpf, data_nascimento, valor_parcela, userId } = validation.data;
 
     const { credentials, error: credError } = await getFactaUserCredentials(userId);
     if (credError || !credentials) {
@@ -467,17 +467,17 @@ export async function getInssCreditOperations(input: z.infer<typeof inssGetCredi
         return { success: false, message: tokenError || "Não foi possível obter o token da Facta" };
     }
     
-    await logActivity({ userId, documentNumber: cpf, action: 'Consulta Crédito Novo INSS Facta', provider: 'facta', details: `Tipo: ${tipo_operacao}, Valor: ${valor_contrato}` });
+    await logActivity({ userId, documentNumber: cpf, action: 'Consulta Crédito Novo INSS Facta', provider: 'facta', details: `Valor Parcela: ${valor_parcela}` });
 
     try {
         const url = new URL(`${FACTA_API_BASE_URL_PROD}/proposta/operacoes-disponiveis`);
         url.searchParams.append('produto', 'D');
-        url.searchParams.append('tipo_operacao', String(parseInt(tipo_operacao, 10)));
+        url.searchParams.append('tipo_operacao', String(13)); // Fixo em Novo Digital
         url.searchParams.append('averbador', '3');
         url.searchParams.append('convenio', '3');
-        url.searchParams.append('opcao_valor', '1'); // 1 = por valor de contrato/saque
-        if (valor_contrato) {
-            url.searchParams.append('valor', String(valor_contrato));
+        url.searchParams.append('opcao_valor', '2'); // 2 = por valor de parcela
+        if (valor_parcela) {
+            url.searchParams.append('valor_parcela', String(valor_parcela));
         }
         url.searchParams.append('cpf', cpf);
         url.searchParams.append('data_nascimento', data_nascimento);
