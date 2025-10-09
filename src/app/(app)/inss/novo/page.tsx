@@ -21,7 +21,6 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { useUser } from "@/firebase";
 import { getInssCreditOperations, type InssCreditOffer } from "@/app/actions/facta";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 const formSchema = z.object({
   cpf: z.string().min(11, "CPF deve ter 11 dígitos.").max(11, "CPF deve ter 11 dígitos."),
@@ -29,9 +28,6 @@ const formSchema = z.object({
     message: "Data de nascimento deve estar no formato DD/MM/AAAA.",
   }),
   valor_contrato: z.string().optional(),
-  tipo_operacao: z.enum(['13', '27'], {
-    required_error: "Selecione o tipo de operação."
-  }),
 });
 
 
@@ -81,7 +77,6 @@ export default function InssCreditPage() {
       cpf: "",
       data_nascimento: "",
       valor_contrato: "",
-      tipo_operacao: "13",
     },
   });
 
@@ -98,6 +93,7 @@ export default function InssCreditPage() {
 
     const formattedValues = {
         ...values,
+        tipo_operacao: '13', // Hardcoded to "Novo Digital"
         valor_contrato: values.valor_contrato ? parseFloat(values.valor_contrato.replace(/\./g, '').replace(',', '.')) : undefined,
         userId: user.uid,
     };
@@ -121,7 +117,7 @@ export default function InssCreditPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Crédito Novo INSS - FACTA"
-        description="Consulte e simule operações de Crédito Novo e Margem Complementar."
+        description="Consulte e simule operações de Crédito Novo Digital."
       />
       <Card>
         <CardHeader>
@@ -181,37 +177,6 @@ export default function InssCreditPage() {
                     </FormItem>
                     )}
                 />
-                 
-                 <FormField
-                    control={form.control}
-                    name="tipo_operacao"
-                    render={({ field }) => (
-                        <FormItem className="space-y-3">
-                            <FormLabel>Tipo de Operação</FormLabel>
-                            <FormControl>
-                                <RadioGroup
-                                onValueChange={field.onChange}
-                                defaultValue={field.value}
-                                className="flex flex-col space-y-1"
-                                >
-                                <FormItem className="flex items-center space-x-3 space-y-0">
-                                    <FormControl>
-                                        <RadioGroupItem value="13" />
-                                    </FormControl>
-                                    <FormLabel className="font-normal">Novo Digital (13)</FormLabel>
-                                </FormItem>
-                                <FormItem className="flex items-center space-x-3 space-y-0">
-                                    <FormControl>
-                                        <RadioGroupItem value="27" />
-                                    </FormControl>
-                                    <FormLabel className="font-normal">Margem Complementar Digital (27)</FormLabel>
-                                </FormItem>
-                                </RadioGroup>
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                    />
 
               <Button type="submit" disabled={isLoading}>
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
