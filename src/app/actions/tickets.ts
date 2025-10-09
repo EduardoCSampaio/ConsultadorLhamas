@@ -133,16 +133,31 @@ export async function getTicketsForUser(input: z.infer<typeof getTicketsSchema>)
     try {
         initializeFirebaseAdmin();
         const firestore = getFirestore();
-        const ticketsSnapshot = await firestore.collection('tickets')
-            .where('userId', '==', input.userId)
-            .orderBy('updatedAt', 'desc')
-            .get();
+        const userRef = firestore.collection('users').doc(input.userId);
+        const userDoc = await userRef.get();
+        
+        if (!userDoc.exists) {
+            return { success: false, error: "Usuário não encontrado." };
+        }
+        
+        const userData = userDoc.data();
+        const isAdmin = userData?.role === 'admin';
+
+        let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> = firestore.collection('tickets');
+
+        // If the user is not an admin, filter tickets by their user ID.
+        if (!isAdmin) {
+            query = query.where('userId', '==', input.userId);
+        }
+        
+        // Fetch without ordering to avoid needing a composite index.
+        const ticketsSnapshot = await query.get();
 
         if (ticketsSnapshot.empty) {
             return { success: true, tickets: [] };
         }
 
-        const tickets = ticketsSnapshot.docs.map(doc => {
+        let tickets = ticketsSnapshot.docs.map(doc => {
             const data = doc.data();
             return {
                 id: doc.id,
@@ -156,6 +171,10 @@ export async function getTicketsForUser(input: z.infer<typeof getTicketsSchema>)
                 lastMessage: data.lastMessage,
             } as Ticket;
         });
+        
+        // Sort in memory after fetching.
+        tickets.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
 
         return { success: true, tickets };
     } catch (error) {

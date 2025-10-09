@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from "react";
@@ -8,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, PlusCircle, Inbox, AlertCircle, MessageSquare } from 'lucide-react';
 import { getTicketsForUser, createTicket, type Ticket } from '@/app/actions/tickets';
-import { useUser } from "@/firebase";
+import { useUser, useDoc, useFirestore, useMemoFirebase } from "@/firebase";
+import { doc } from 'firebase/firestore';
+import type { UserProfile } from '@/app/actions/users';
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -43,11 +44,19 @@ const newTicketSchema = z.object({
 export default function ChamadosPage() {
     const { toast } = useToast();
     const { user } = useUser();
+    const firestore = useFirestore();
+
     const [tickets, setTickets] = useState<Ticket[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+
+    const userProfileRef = useMemoFirebase(() => {
+        if (!firestore || !user) return null;
+        return doc(firestore, 'users', user.uid);
+    }, [firestore, user]);
+    const { data: userProfile } = useDoc<UserProfile>(userProfileRef);
 
     const form = useForm<z.infer<typeof newTicketSchema>>({
         resolver: zodResolver(newTicketSchema),
@@ -91,7 +100,7 @@ export default function ChamadosPage() {
         });
 
         if (result.success) {
-            toast({ title: 'Chamado aberto com sucesso!', description: `Seu chamado #${result.ticket?.ticketNumber} foi criado.` });
+            toast({ title: 'Chamado aberto com sucesso!', description: `Seu chamado ${result.ticket?.ticketNumber} foi criado.` });
             setIsModalOpen(false);
             form.reset();
             await fetchTickets();
@@ -118,66 +127,70 @@ export default function ChamadosPage() {
             default: return status;
         }
     };
+    
+    const isAdmin = userProfile?.role === 'admin';
 
     return (
         <div className="flex flex-col gap-6">
             <PageHeader
-                title="Meus Chamados de Suporte"
-                description="Visualize seus chamados abertos ou crie uma nova solicitação."
+                title={isAdmin ? "Gerenciar Chamados de Suporte" : "Meus Chamados de Suporte"}
+                description={isAdmin ? "Visualize e gerencie todos os chamados dos usuários." : "Visualize seus chamados abertos ou crie uma nova solicitação."}
             >
-                <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-                    <DialogTrigger asChild>
-                        <Button>
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                            Abrir Novo Chamado
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-lg">
-                        <DialogHeader>
-                            <DialogTitle>Abrir Novo Chamado</DialogTitle>
-                            <DialogDescription>
-                                Descreva seu problema ou dúvida. Nossa equipe responderá em breve.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <Form {...form}>
-                            <form onSubmit={form.handleSubmit(handleCreateTicket)} className="space-y-4">
-                                <FormField
-                                    control={form.control}
-                                    name="title"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Assunto</FormLabel>
-                                            <FormControl>
-                                                <Input placeholder="Ex: Dúvida sobre consulta FGTS" {...field} disabled={isSubmitting} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={form.control}
-                                    name="message"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Mensagem</FormLabel>
-                                            <FormControl>
-                                                <Textarea placeholder="Detalhe sua solicitação aqui..." {...field} disabled={isSubmitting} rows={6} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <DialogFooter>
-                                    <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)} disabled={isSubmitting}>Cancelar</Button>
-                                    <Button type="submit" disabled={isSubmitting}>
-                                        {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                        Enviar Chamado
-                                    </Button>
-                                </DialogFooter>
-                            </form>
-                        </Form>
-                    </DialogContent>
-                </Dialog>
+                {!isAdmin && (
+                    <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+                        <DialogTrigger asChild>
+                            <Button>
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                Abrir Novo Chamado
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-lg">
+                            <DialogHeader>
+                                <DialogTitle>Abrir Novo Chamado</DialogTitle>
+                                <DialogDescription>
+                                    Descreva seu problema ou dúvida. Nossa equipe responderá em breve.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <Form {...form}>
+                                <form onSubmit={form.handleSubmit(handleCreateTicket)} className="space-y-4">
+                                    <FormField
+                                        control={form.control}
+                                        name="title"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Assunto</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="Ex: Dúvida sobre consulta FGTS" {...field} disabled={isSubmitting} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="message"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Mensagem</FormLabel>
+                                                <FormControl>
+                                                    <Textarea placeholder="Detalhe sua solicitação aqui..." {...field} disabled={isSubmitting} rows={6} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <DialogFooter>
+                                        <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)} disabled={isSubmitting}>Cancelar</Button>
+                                        <Button type="submit" disabled={isSubmitting}>
+                                            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                            Enviar Chamado
+                                        </Button>
+                                    </DialogFooter>
+                                </form>
+                            </Form>
+                        </DialogContent>
+                    </Dialog>
+                )}
             </PageHeader>
 
             {error && (
@@ -206,10 +219,10 @@ export default function ChamadosPage() {
                         <div className="flex flex-col items-center justify-center gap-4 text-center h-60 border-2 border-dashed rounded-lg">
                             <Inbox className="h-12 w-12 text-muted-foreground" />
                             <h3 className="text-2xl font-bold tracking-tight">
-                                Nenhum Chamado Aberto
+                                Nenhum Chamado Encontrado
                             </h3>
                             <p className="text-sm text-muted-foreground">
-                                Você ainda não abriu nenhum chamado de suporte.
+                               {isAdmin ? "Ainda não há chamados de suporte abertos." : "Você ainda não abriu nenhum chamado de suporte."}
                             </p>
                         </div>
                     ) : (
@@ -217,13 +230,16 @@ export default function ChamadosPage() {
                            {tickets.map(ticket => (
                                <div key={ticket.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
                                    <div className="flex-1 mb-4 sm:mb-0">
-                                       <div className="flex items-center gap-3 mb-1">
+                                       <div className="flex items-center gap-3 mb-2">
                                             <span className="font-mono text-sm text-muted-foreground">{ticket.ticketNumber}</span>
                                             <Badge variant={getStatusVariant(ticket.status)}>{getStatusText(ticket.status)}</Badge>
                                        </div>
                                        <h3 className="font-semibold text-lg">{ticket.title}</h3>
-                                       <p className="text-sm text-muted-foreground line-clamp-1">
-                                            Última atualização em: {new Date(ticket.updatedAt).toLocaleString('pt-BR')}
+                                        {isAdmin && (
+                                            <p className="text-sm font-medium text-muted-foreground">{ticket.userEmail}</p>
+                                        )}
+                                       <p className="text-sm text-muted-foreground mt-1">
+                                            Última atualização: {new Date(ticket.updatedAt).toLocaleString('pt-BR')}
                                        </p>
                                         <p className="text-sm text-muted-foreground line-clamp-1 flex items-center gap-2 mt-1">
                                             <MessageSquare className="h-3.5 w-3.5" />
