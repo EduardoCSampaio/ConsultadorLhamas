@@ -31,6 +31,7 @@ import {
   User,
   BookMarked,
   Landmark,
+  CreditCard,
 } from "lucide-react";
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -189,16 +190,37 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
             {hasPermission('canViewINSS') && (
                 <SidebarMenuItem>
-                    <SidebarMenuButton
-                        asChild
+                  <Collapsible>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton
+                        className="w-full justify-start"
                         isActive={pathname.startsWith('/inss')}
-                        tooltip="INSS - Em Construção"
-                    >
-                        <Link href="/inss">
-                            <Landmark />
-                            <span>INSS</span>
-                        </Link>
-                    </SidebarMenuButton>
+                        tooltip="Consultas INSS"
+                      >
+                        <Landmark/>
+                        <span>INSS</span>
+                        <ChevronDown className="ml-auto size-4 shrink-0 transition-transform ease-in-out group-data-[state=open]:rotate-180" />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent asChild>
+                      <SidebarMenuSub>
+                        <SidebarMenuItem>
+                          <SidebarMenuSubButton asChild isActive={pathname === '/inss/novo'}>
+                            <Link href="/inss/novo">
+                              <span>Crédito Novo</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                          <SidebarMenuSubButton asChild isActive={pathname === '/inss/cartao-beneficio'}>
+                            <Link href="/inss/cartao-beneficio">
+                              <span>Cartão Benefício</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuItem>
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </Collapsible>
                 </SidebarMenuItem>
             )}
 
