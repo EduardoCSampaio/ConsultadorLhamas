@@ -93,11 +93,12 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   const { documentNumber, userId, userEmail, provider, batchId } = validation.data;
   let authToken = validation.data.token;
   
+  initializeFirebaseAdmin();
+  const firestore = getFirestore();
+
   if (!authToken) {
       let userCredentials: ApiCredentials;
       try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
         const userDoc = await firestore.collection('users').doc(userId).get();
         
         if (!userDoc.exists) {
@@ -125,6 +126,20 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       authToken = token;
   }
 
+  // If this is part of a batch, create a placeholder document to link the CPF to the batchId
+  if (batchId) {
+      const webhookResponseRef = firestore.collection('webhookResponses').doc(documentNumber);
+      await webhookResponseRef.set({
+          batchId: batchId,
+          status: 'pending_webhook',
+          provider: 'V8DIGITAL',
+          v8Provider: provider,
+          id: documentNumber,
+          createdAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+  }
+
+
   const API_URL_CONSULTA = 'https://bff.v8sistema.com/fgts/balance';
   
   const requestBody = { 
@@ -142,7 +157,8 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
         details: `Parceiro: ${provider}`
     });
 
-    const consultaResponse = await fetch(API_URL_CONSULTA, {
+    // Fire-and-forget the consultation request
+    fetch(API_URL_CONSULTA, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -150,33 +166,19 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
         'User-Agent': 'insomnia/11.6.1',
       },
       body: JSON.stringify(requestBody),
+    }).catch(fetchError => {
+        // This is a fire-and-forget, but we should log if the initial request fails
+        console.error(`[V8 BATCH] Failed to send request for CPF ${documentNumber} in batch ${batchId}:`, fetchError);
+        // We can optionally write an error to the webhook response doc here too
+        const docRef = firestore.collection('webhookResponses').doc(documentNumber);
+        docRef.set({
+            status: 'error',
+            message: `Falha ao enviar a requisição para a API V8: ${fetchError.message}`,
+            responseBody: { error: fetchError.message }
+        }, { merge: true });
     });
     
-    if (!consultaResponse.ok) {
-        const responseBody = await consultaResponse.text();
-        let errorDetails = responseBody;
-        try {
-            const errorJson = JSON.parse(responseBody);
-            errorDetails = errorJson.error || errorJson.message || responseBody;
-        } catch (e) {
-            // ignora se não for JSON
-        }
-        const errorMessage = `Erro ao enviar consulta V8: ${consultaResponse.status} ${consultaResponse.statusText}. Detalhes: ${errorDetails}`;
-        const firestore = getFirestore();
-        await firestore.collection('webhookResponses').doc(documentNumber).set({
-            responseBody: { error: errorMessage },
-            createdAt: FieldValue.serverTimestamp(),
-            status: 'error',
-            message: errorMessage,
-            id: documentNumber.toString(),
-            provider: 'V8DIGITAL',
-            v8Provider: provider,
-            ...(batchId && { batchId: batchId }),
-        }, { merge: true });
-        return { status: 'error', stepIndex: 1, message: errorMessage };
-    }
-
-   
+    // Always return success immediately, as the actual result comes via webhook
     return { 
         status: 'success', 
         stepIndex: 1, 
@@ -186,8 +188,8 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   } catch (error) {
     console.error("[V8 API] Erro de comunicação na consulta de saldo:", error);
     const message = error instanceof Error ? error.message : 'Ocorreu um erro de comunicação com a API.';
-    const firestore = getFirestore();
-    await firestore.collection('webhookResponses').doc(documentNumber).set({
+    const docRef = firestore.collection('webhookResponses').doc(documentNumber);
+    await docRef.set({
         responseBody: { error: message },
         createdAt: FieldValue.serverTimestamp(),
         status: 'error',
@@ -304,5 +306,3 @@ export async function consultarSaldoManual(input: z.infer<typeof manualActionSch
 
     return { balances: finalBalances };
 }
-
-    

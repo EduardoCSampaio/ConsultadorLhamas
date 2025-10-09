@@ -28,11 +28,18 @@ export async function POST(request: NextRequest) {
       }, { status: 200 });
     }
     
-    const v8Partner = payload.provider || 'qi';
-    const batchId = payload.batchId;
-
     const docRef = db.collection('webhookResponses').doc(docId.toString());
 
+    // Before writing, let's see if we can find a batchId from a pre-existing doc.
+    let batchId: string | undefined = payload.batchId;
+    if (!batchId) {
+        const existingDoc = await docRef.get();
+        if (existingDoc.exists) {
+            batchId = existingDoc.data()?.batchId;
+        }
+    }
+
+    const v8Partner = payload.provider || 'qi';
     const errorMessage = payload.errorMessage || payload.error || payload.message;
     const isError = !!errorMessage;
     const isSuccess = payload.balance !== undefined && payload.balance !== null;
@@ -50,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     const dataToSet = {
       responseBody: payload,
-      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(), // Use a different field to avoid overwriting createdAt
       status: status,
       message: statusMessage,
       id: docId.toString(),
@@ -79,18 +86,16 @@ export async function POST(request: NextRequest) {
                 }
 
                 const newProcessedCount = (batchData.processedCpfs || 0) + 1;
+                const updates: any = { processedCpfs: newProcessedCount };
 
                 if (newProcessedCount >= batchData.totalCpfs) {
                     console.log(`[Batch ${batchId}] Final CPF received. Marking as complete.`);
-                    transaction.update(batchRef, {
-                        processedCpfs: newProcessedCount,
-                        status: 'completed',
-                        message: 'Processamento concluído via webhooks.',
-                        completedAt: FieldValue.serverTimestamp(),
-                    });
-                } else {
-                    transaction.update(batchRef, { processedCpfs: newProcessedCount });
+                    updates.status = 'completed';
+                    updates.message = 'Processamento concluído via webhooks.';
+                    updates.completedAt = FieldValue.serverTimestamp();
                 }
+
+                transaction.update(batchRef, updates);
             });
              console.log(`[Batch ${batchId}] Progress transaction completed successfully.`);
         } catch (e) {
