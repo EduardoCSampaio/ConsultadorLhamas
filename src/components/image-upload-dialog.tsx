@@ -4,8 +4,7 @@ import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useUser, useFirebase } from '@/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { updateProfile } from 'firebase/auth';
-import { doc, updateDoc } from 'firebase/firestore';
+import { updateProfile, FirebaseError } from 'firebase/auth';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -19,10 +18,11 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, UploadCloud, Image as ImageIcon } from 'lucide-react';
 import Image from 'next/image';
+import { updateUserPhotoURL } from '@/app/actions/users';
 
 export function ImageUploadDialog({ children }: { children: React.ReactNode }) {
   const { user } = useUser();
-  const { auth, firestore, storage } = useFirebase();
+  const { auth, storage } = useFirebase();
   const { toast } = useToast();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -44,7 +44,7 @@ export function ImageUploadDialog({ children }: { children: React.ReactNode }) {
   });
 
   const handleUpload = async () => {
-    if (!file || !user || !auth?.currentUser || !storage || !firestore) {
+    if (!file || !user || !auth?.currentUser || !storage) {
       toast({
         variant: 'destructive',
         title: 'Erro',
@@ -56,37 +56,44 @@ export function ImageUploadDialog({ children }: { children: React.ReactNode }) {
     setIsUploading(true);
 
     try {
-      // Use a simple path with the user's UID as the file name
       const storageRef = ref(storage, `profile-pictures/${user.uid}`);
-
-      // Upload file
       const snapshot = await uploadBytes(storageRef, file);
       const downloadURL = await getDownloadURL(snapshot.ref);
 
       // Update Firebase Auth user profile
       await updateProfile(auth.currentUser, { photoURL: downloadURL });
       
-      // Update Firestore user document
-      const userDocRef = doc(firestore, 'users', user.uid);
-      await updateDoc(userDocRef, { photoURL: downloadURL });
-      
+      // Update Firestore user document via Server Action
+      await updateUserPhotoURL({ uid: user.uid, photoURL: downloadURL });
 
       toast({
         title: 'Sucesso!',
-        description: 'Sua foto de perfil foi atualizada.',
+        description: 'Sua foto de perfil foi atualizada. A alteração pode levar alguns instantes para ser exibida.',
       });
 
-      // Close dialog and reset state
       setFile(null);
       setPreview(null);
       setIsOpen(false);
+
     } catch (error) {
       console.error('Error uploading image:', error);
-      const message = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
+      let title = 'Erro no Upload';
+      let description = 'Ocorreu um erro desconhecido ao tentar enviar a imagem.';
+
+      if (error instanceof FirebaseError) {
+        if (error.code === 'storage/unauthorized') {
+            title = 'Permissão Negada';
+            description = 'Você não tem permissão para enviar arquivos. Verifique as regras de segurança do Firebase Storage.';
+        } else if (error.code === 'storage/object-not-found') {
+            title = 'Erro de Configuração';
+            description = 'O bucket de armazenamento não foi encontrado. Verifique sua configuração do Firebase.';
+        }
+      }
+      
       toast({
         variant: 'destructive',
-        title: 'Erro no Upload',
-        description: message,
+        title: title,
+        description: description,
       });
     } finally {
       setIsUploading(false);
@@ -94,7 +101,6 @@ export function ImageUploadDialog({ children }: { children: React.ReactNode }) {
   };
 
   const handleClose = () => {
-    // Prevent closing while uploading
     if (isUploading) return;
     setFile(null);
     setPreview(null);
@@ -125,7 +131,7 @@ export function ImageUploadDialog({ children }: { children: React.ReactNode }) {
             <input {...getInputProps()} />
             {preview ? (
               <div className="relative h-32 w-32 rounded-full overflow-hidden">
-                <Image src={preview} alt="Pré-visualização" layout="fill" objectFit="cover" />
+                <Image src={preview} alt="Pré-visualização" fill objectFit="cover" />
               </div>
             ) : (
               <div className="text-center">

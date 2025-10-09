@@ -43,6 +43,11 @@ const updateUserPermissionsSchema = z.object({
   }).partial(),
 });
 
+const updateUserPhotoURLSchema = z.object({
+  uid: z.string().min(1),
+  photoURL: z.string().url(),
+});
+
 
 const updateUserStatusSchema = z.object({
   uid: z.string().min(1, { message: "UID do usuário é obrigatório." }),
@@ -349,6 +354,28 @@ export async function updateApiCredentials(input: z.infer<typeof updateApiCreden
         return { success: false, error: message };
     }
 }
+
+export async function updateUserPhotoURL(input: z.infer<typeof updateUserPhotoURLSchema>): Promise<{success: boolean, error?: string}> {
+    const validation = updateUserPhotoURLSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, error: "Dados de entrada inválidos (UID ou URL)." };
+    }
+
+    const { uid, photoURL } = validation.data;
+
+    try {
+        initializeFirebaseAdmin();
+        const firestore = getFirestore();
+        const userRef = firestore.collection('users').doc(uid);
+        await userRef.update({ photoURL });
+        return { success: true };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao salvar a foto no banco de dados.";
+        console.error("Erro ao atualizar a foto no Firestore:", message);
+        return { success: false, error: message };
+    }
+}
+
 
 type ExportResult = {
     status: 'success' | 'error';
