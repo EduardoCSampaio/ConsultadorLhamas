@@ -50,7 +50,15 @@ export default function EsteiraPage() {
 
     useEffect(() => {
         fetchBatches();
-    }, [fetchBatches]);
+        const interval = setInterval(() => {
+            // Check if there's any batch still processing before fetching
+            if (batches.some(b => b.status === 'processing')) {
+                fetchBatches(false);
+            }
+        }, 10000); // 10 seconds
+
+        return () => clearInterval(interval);
+    }, [fetchBatches, batches]);
     
     const handleDownloadReport = async (batch: BatchJob) => {
         if (!user) {
