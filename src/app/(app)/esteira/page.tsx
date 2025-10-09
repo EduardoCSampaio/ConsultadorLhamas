@@ -62,19 +62,28 @@ export default function EsteiraPage() {
     }, [toast]);
 
     useEffect(() => {
-        fetchBatches(true);
+        fetchBatches(true); // Initial fetch with loading screen
 
-        const intervalId = setInterval(() => {
+        // Interval to update the visual timer every second
+        const timerInterval = setInterval(() => {
+            setTick(t => t + 1);
+        }, 1000);
+        
+        // Interval to fetch data from the server every 10 seconds
+        const dataFetchInterval = setInterval(() => {
             setBatches(currentBatches => {
+                // Only fetch data if there's a batch currently processing
                 if (currentBatches.some(b => b.status === 'processing')) {
-                    fetchBatches(false);
+                    fetchBatches(false); // Fetch silently in the background
                 }
                 return currentBatches;
             });
-            setTick(t => t + 1); // This will trigger a re-render for the timer
         }, 10000);
 
-        return () => clearInterval(intervalId);
+        return () => {
+            clearInterval(timerInterval);
+            clearInterval(dataFetchInterval);
+        };
     }, [fetchBatches]);
     
     const handleDownloadReport = async (batch: BatchJob) => {
@@ -231,7 +240,7 @@ export default function EsteiraPage() {
                                         {(batch.status === 'completed' || batch.status === 'error') && batch.completedAt && (
                                              <p className="text-sm text-muted-foreground flex items-center gap-1.5">
                                                 <CheckCircle className="h-3.5 w-3.5"/>
-                                                Concluído em: {formatDuration(new Date(batch.completedAt).getTime() - new Date(batch.createdAt).getTime())}
+                                                Concluído em: {formatDuration(new Date(batch.completedAt).getTime() - new Date(batch.createdAt).getTime())} - {new Date(batch.completedAt).toLocaleDateString('pt-BR')} às {new Date(batch.completedAt).toLocaleTimeString('pt-BR')}
                                             </p>
                                         )}
                                     </div>
