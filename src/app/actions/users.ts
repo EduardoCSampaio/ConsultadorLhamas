@@ -66,6 +66,7 @@ const exportUsersSchema = z.object({
 export type UserProfile = {
     uid: string;
     email: string;
+    photoURL?: string;
     role: 'admin' | 'user';
     status: 'pending' | 'active' | 'rejected' | 'inactive';
     createdAt: string;
@@ -229,6 +230,7 @@ export async function getUsers(): Promise<{users: UserProfile[] | null, error?: 
             return {
                 uid: data.uid,
                 email: data.email,
+                photoURL: data.photoURL,
                 role: data.role,
                 status: data.status,
                 createdAt: serializableCreatedAt,

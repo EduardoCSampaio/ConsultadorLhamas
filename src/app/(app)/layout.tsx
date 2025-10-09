@@ -44,6 +44,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from '@/lib/utils';
 import type { UserProfile } from '@/app/actions/users';
+import { ImageUploadDialog } from '@/components/image-upload-dialog';
 
 const allBaseMenuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard", permission: 'isLoggedIn' as const },
@@ -279,10 +280,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 ))}
             </SidebarMenu>
              <div className="flex items-center gap-3 p-2">
-              <Avatar className="size-8">
-                {user?.photoURL && <AvatarImage src={user.photoURL} alt="User Avatar" />}
-                <AvatarFallback>{getInitials(user?.email || '??')}</AvatarFallback>
-              </Avatar>
+                <ImageUploadDialog>
+                    <button className="rounded-full outline-none ring-primary/50 focus-visible:ring-2">
+                        <Avatar className="size-8">
+                            {user?.photoURL && <AvatarImage src={user.photoURL} alt="User Avatar" />}
+                            <AvatarFallback>{getInitials(user?.email || '??')}</AvatarFallback>
+                        </Avatar>
+                    </button>
+                </ImageUploadDialog>
               <div className="flex flex-col text-sm overflow-hidden">
                 <span className="font-medium truncate">{user?.email}</span>
                 <span className="text-xs text-sidebar-foreground/70">{userProfile?.role === 'admin' ? 'Administrador' : 'Usuário'}</span>

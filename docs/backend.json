@@ -52,6 +52,11 @@
           "format": "email",
           "description": "The user's email address."
         },
+        "photoURL": {
+            "type": "string",
+            "format": "uri",
+            "description": "The URL of the user's profile picture."
+        },
         "role": {
           "type": "string",
           "enum": [
