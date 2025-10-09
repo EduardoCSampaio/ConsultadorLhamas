@@ -63,6 +63,33 @@ export async function POST(request: NextRequest) {
     await docRef.set(dataToSet, { merge: true });
 
     console.log(`Payload stored in Firestore with ID: ${docId}. Status: ${status}. Provider: V8DIGITAL (${v8Partner})`);
+    
+    // If the webhook is part of a batch, update the batch progress
+    if (batchId) {
+        const batchRef = db.collection('batches').doc(batchId);
+        const batchDoc = await batchRef.get();
+        if (batchDoc.exists) {
+            const batchData = batchDoc.data()!;
+            const newProcessedCount = (batchData.processedCpfs || 0) + 1;
+            
+            const updateData: any = {
+                processedCpfs: newProcessedCount
+            };
+            
+            // If all CPFs are processed, mark the batch as completed
+            if (newProcessedCount >= batchData.totalCpfs) {
+                updateData.status = 'completed';
+                updateData.message = 'Processamento concluído via webhooks.';
+                updateData.completedAt = FieldValue.serverTimestamp();
+            }
+            
+            await batchRef.update(updateData);
+            console.log(`[Batch ${batchId}] Progress updated. Processed count: ${newProcessedCount}/${batchData.totalCpfs}`);
+        } else {
+            console.warn(`[Webhook] Received payload for batchId ${batchId}, but batch document was not found.`);
+        }
+    }
+
 
     return NextResponse.json({ 
         status: 'success', 

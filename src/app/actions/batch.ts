@@ -166,7 +166,7 @@ async function processFactaBatchInBackground(batchId: string) {
         
         let batchData = batchDoc.data() as BatchJob;
         
-        if (batchData.status === 'completed' || batchData.status === 'error') {
+        if (batchData.status === 'completed' || (batchData.status === 'error' && batchData.processedCpfs === batchData.totalCpfs)) {
             console.log(`[Batch ${batchId}] Batch already finished with status: ${batchData.status}.`);
             return;
         }
@@ -311,7 +311,7 @@ async function processV8BatchInBackground(batchId: string) {
         if (!batchDoc.exists) throw new Error(`Lote ${batchId} não encontrado.`);
 
         const batchData = batchDoc.data() as BatchJob;
-        await batchRef.update({ status: 'processing' });
+        await batchRef.update({ status: 'processing', message: 'Enviando solicitações para a V8...' });
         
         const { cpfs, userId, userEmail, v8Provider } = batchData;
         
@@ -326,12 +326,9 @@ async function processV8BatchInBackground(batchId: string) {
         const { token: authToken, error: authError } = await getV8AuthToken(userCredentials);
         if (authError || !authToken) throw new Error(authError || "Failed to get V8 auth token.");
         
-        await batchRef.update({ 
-            processedCpfs: cpfs.length,
-        });
-
+        // Send all requests, but don't wait for them here
         for (const cpf of cpfs) {
-            await consultarSaldoV8({ 
+             consultarSaldoV8({ 
                 documentNumber: cpf, 
                 userId, 
                 userEmail, 
@@ -341,10 +338,9 @@ async function processV8BatchInBackground(batchId: string) {
             });
         }
         
+        // Update status to indicate we are now waiting for webhooks
         await batchRef.update({ 
-            status: 'completed', 
-            message: 'Todas as solicitações V8 foram enviadas. Os resultados chegarão via webhook.',
-            completedAt: FieldValue.serverTimestamp(),
+            message: 'Solicitações enviadas. Aguardando respostas do webhook.',
         });
 
     } catch (error) {
@@ -361,6 +357,7 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
     }
 
     const { batchId } = validation.data;
+    initializeFirebaseAdmin();
     const firestore = getFirestore();
 
     try {
