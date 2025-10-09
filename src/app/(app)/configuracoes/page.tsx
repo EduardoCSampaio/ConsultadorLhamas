@@ -1,4 +1,3 @@
-
 'use client';
 
 import { PageHeader } from "@/components/page-header";
@@ -29,7 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useUser, useFirestore, useMemoFirebase, useDoc } from "@/firebase";
 import { doc } from "firebase/firestore";
 import { updateApiCredentials, type UserProfile, type ApiCredentials } from "@/app/actions/users";
-import { Loader2, Save, Settings, SlidersHorizontal, User as UserIcon, Lock, MessageSquare } from "lucide-react";
+import { Loader2, Save, Settings, SlidersHorizontal, User as UserIcon, Lock } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -201,20 +200,6 @@ export default function ConfiguracoesPage() {
                                <p className="text-xs text-muted-foreground mt-2">Funcionalidade em breve.</p>
                             </CardContent>
                         </Card>
-                        
-                        <Card>
-                            <CardHeader className="flex flex-row items-center gap-4">
-                                <MessageSquare className="h-6 w-6 text-muted-foreground"/>
-                                <div>
-                                    <CardTitle className="text-lg font-headline">Solicitações ao Admin</CardTitle>
-                                    <CardDescription className="text-xs">Envie solicitações para o administrador do sistema.</CardDescription>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                               <Button disabled>Nova Solicitação</Button>
-                               <p className="text-xs text-muted-foreground mt-2">Funcionalidade em breve.</p>
-                            </CardContent>
-                        </Card>
 
                     </CardContent>
                 </Card>
@@ -381,5 +366,3 @@ export default function ConfiguracoesPage() {
     </div>
   );
 }
-
-    

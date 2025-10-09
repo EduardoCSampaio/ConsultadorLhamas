@@ -1,5 +1,3 @@
-
-
 {
   "entities": {
     "WebhookResponse": {
@@ -54,6 +52,11 @@
           "format": "email",
           "description": "The user's email address."
         },
+        "photoURL": {
+            "type": "string",
+            "format": "uri",
+            "description": "The URL of the user's profile picture."
+        },
         "role": {
           "type": "string",
           "enum": [
@@ -100,6 +103,15 @@
         "facta_password": {
             "type": "string",
             "description": "Password for the Facta API integration (should be stored securely)."
+        },
+        "permissions": {
+          "type": "object",
+          "description": "Granular access control for different app features.",
+          "properties": {
+            "canViewFGTS": { "type": "boolean", "description": "Access to FGTS batch and manual query pages." },
+            "canViewCLT": { "type": "boolean", "description": "Access to CLT credit query pages." },
+            "canViewINSS": { "type": "boolean", "description": "Access to INSS benefit card query pages." }
+          }
         }
       },
       "required": [
@@ -237,6 +249,89 @@
           }
         }
       }
+    },
+    "InssSimulationRequest": {
+      "title": "INSS Simulation Request",
+      "description": "Parameters for simulating INSS benefit card operations.",
+      "type": "object",
+      "properties": {
+        "cpf": { "type": "string" },
+        "data_nascimento": { "type": "string", "format": "date" },
+        "valor_renda": { "type": "number" },
+        "valor_desejado": { "type": "number" },
+        "userId": { "type": "string" }
+      },
+      "required": ["cpf", "data_nascimento", "valor_renda", "valor_desejado", "userId"]
+    },
+    "InssSimulationResult": {
+      "title": "INSS Simulation Result",
+      "description": "Result of an INSS benefit card operation simulation.",
+      "type": "object",
+      "properties": {
+        "tabela": { "type": "string" },
+        "taxa": { "type": "number" },
+        "prazo": { "type": "number" },
+        "codigoTabela": { "type": "number" },
+        "contrato": { "type": "number" },
+        "parcela": { "type": "number" }
+      },
+      "required": ["tabela", "taxa", "prazo", "codigoTabela", "contrato", "parcela"]
+    },
+    "InssCreditOffer": {
+      "title": "INSS Credit Offer",
+      "description": "Represents an INSS new credit or margin complement offer from Facta.",
+      "type": "object",
+      "properties": {
+        "convenio": { "type": "string" },
+        "idConvenio": { "type": "number" },
+        "averbador": { "type": "string" },
+        "tabela": { "type": "string" },
+        "taxa": { "type": "number" },
+        "prazo": { "type": "number" },
+        "tipoop": { "type": "number" },
+        "tipoOperacao": { "type": "string" },
+        "codigoTabela": { "type": "number" },
+        "coeficiente": { "type": "number" },
+        "primeiro_vencimento": { "type": ["string", "null"] },
+        "contrato": { "type": "number" },
+        "parcela": { "type": "number" }
+      },
+      "required": ["tabela", "taxa", "prazo", "codigoTabela", "contrato", "parcela"]
+    },
+    "Ticket": {
+      "title": "Ticket",
+      "description": "Represents a user support ticket or 'chamado'.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the ticket." },
+        "ticketNumber": { "type": "string", "description": "Human-readable ticket number (e.g., #0001)." },
+        "userId": { "type": "string", "description": "UID of the user who created the ticket." },
+        "userEmail": { "type": "string", "description": "Email of the user for easy reference." },
+        "title": { "type": "string", "description": "The subject or title of the ticket." },
+        "status": {
+          "type": "string",
+          "enum": ["aberto", "em_atendimento", "resolvido"],
+          "description": "The current status of the support ticket."
+        },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp when the ticket was created." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Timestamp for the last update." },
+        "lastMessage": { "type": "string", "description": "A snippet of the last message for quick preview." }
+      },
+      "required": ["id", "userId", "userEmail", "title", "status", "createdAt", "updatedAt"]
+    },
+    "TicketMessage": {
+      "title": "Ticket Message",
+      "description": "Represents a single message within a support ticket.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the message." },
+        "ticketId": { "type": "string", "description": "The ID of the parent ticket." },
+        "senderId": { "type": "string", "description": "UID of the message sender (user or admin)." },
+        "senderEmail": { "type": "string", "description": "Email of the sender." },
+        "content": { "type": "string", "description": "The text content of the message." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp when the message was sent." }
+      },
+      "required": ["id", "ticketId", "senderId", "senderEmail", "content", "createdAt"]
     }
   },
   "auth": {
@@ -276,6 +371,14 @@
     "/cltConsents/{consentId}": {
         "schema": { "$ref": "#/entities/CLTConsent" },
         "description": "Stores generated CLT consent terms."
+    },
+    "/tickets/{ticketId}": {
+      "schema": { "$ref": "#/entities/Ticket" },
+      "description": "Stores support tickets created by users."
+    },
+    "/tickets/{ticketId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/TicketMessage" },
+      "description": "Stores all messages related to a specific support ticket."
     }
   }
 }

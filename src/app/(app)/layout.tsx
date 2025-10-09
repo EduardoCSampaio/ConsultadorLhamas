@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -33,6 +32,7 @@ import {
   BookMarked,
   Landmark,
   CreditCard,
+  LifeBuoy,
 } from "lucide-react";
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -45,7 +45,6 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from '@/lib/utils';
 import type { UserProfile } from '@/app/actions/users';
-import { ImageUploadDialog } from '@/components/image-upload-dialog';
 
 const allBaseMenuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard", permission: 'isLoggedIn' as const },
@@ -58,6 +57,7 @@ const adminBottomMenuItems = [
 ];
 
 const bottomMenuItems = [
+    { href: "/chamados", icon: LifeBuoy, label: "Suporte", permission: 'isLoggedIn' as const },
     { href: "/configuracoes", icon: Cog, label: "Configurações", permission: 'isLoggedIn' as const },
 ];
 
@@ -308,5 +308,3 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     </SidebarProvider>
   );
 }
-
-    
