@@ -420,7 +420,7 @@ export async function submitInssSimulation(input: z.infer<typeof inssSubmitSimul
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
-            body: body.toString(),
+            body: body,
         });
 
         const data = await response.json();
@@ -495,3 +495,5 @@ export async function getInssCreditOperations(input: z.infer<typeof inssGetCredi
         return { success: false, message };
     }
 }
+
+    
