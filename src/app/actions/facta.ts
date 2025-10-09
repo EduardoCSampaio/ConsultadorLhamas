@@ -1,3 +1,4 @@
+
 'use server';
 
 import { z } from 'zod';
@@ -471,7 +472,7 @@ export async function getInssCreditOperations(input: z.infer<typeof inssGetCredi
     try {
         const url = new URL(`${FACTA_API_BASE_URL_PROD}/proposta/operacoes-disponiveis`);
         url.searchParams.append('produto', 'D');
-        url.searchParams.append('tipo_operacao', tipo_operacao);
+        url.searchParams.append('tipo_operacao', String(parseInt(tipo_operacao, 10)));
         url.searchParams.append('averbador', '3');
         url.searchParams.append('convenio', '3');
         url.searchParams.append('opcao_valor', '1'); // 1 = contrato
@@ -504,3 +505,5 @@ export async function getInssCreditOperations(input: z.infer<typeof inssGetCredi
         return { success: false, message };
     }
 }
+
+    
