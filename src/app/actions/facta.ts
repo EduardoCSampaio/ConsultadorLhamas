@@ -18,6 +18,14 @@ const fgtsConsultaSchema = z.object({
     token: z.string().optional(),
 });
 
+const inssConsultaSchema = z.object({
+    cpf: z.string(),
+    data_nascimento: z.string(),
+    valor_renda: z.number(),
+    valor_desejado: z.number(),
+    userId: z.string(),
+});
+
 
 type FactaTokenResponse = {
   erro: boolean;
@@ -64,6 +72,23 @@ export type FactaFgtsBalance = {
     [key: `valor_${number}`]: string;
 }
 
+export type InssSimulationResult = {
+    convenio: string;
+    idConvenio: number;
+    averbador: string;
+    tabela: string;
+    taxa: number;
+    prazo: number;
+    tipoop: number;
+    tipoOperacao: string;
+    codigoTabela: number;
+    coeficiente: number;
+    primeiro_vencimento: string | null;
+    codigoNormativa: string;
+    contrato: number;
+    parcela: number;
+}
+
 export type ConsultaFactaCltResult = {
   success: boolean;
   message: string;
@@ -74,6 +99,12 @@ export type ConsultaFactaFgtsResult = {
   success: boolean;
   message: string;
   data?: FactaFgtsBalance;
+};
+
+export type ConsultaFactaInssResult = {
+    success: boolean;
+    message: string;
+    data?: InssSimulationResult[];
 };
 
 
@@ -240,6 +271,65 @@ export async function consultarSaldoFgtsFacta(input: z.infer<typeof fgtsConsulta
     } catch (error) {
         const message = error instanceof Error ? error.message : "Erro de comunicação ao consultar saldo FGTS da Facta.";
         console.error('[FACTA API] Erro na consulta de saldo FGTS:', error);
+        return { success: false, message };
+    }
+}
+
+
+export async function consultarOperacoesInssFacta(input: z.infer<typeof inssConsultaSchema>): Promise<ConsultaFactaInssResult> {
+    const validation = inssConsultaSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: 'Dados de entrada inválidos: ' + JSON.stringify(validation.error.flatten()) };
+    }
+
+    const { cpf, data_nascimento, valor_renda, valor_desejado, userId } = validation.data;
+    
+    const { credentials, error: credError } = await getFactaUserCredentials(userId);
+    if (credError || !credentials) {
+        return { success: false, message: credError || "Credenciais não encontradas." };
+    }
+
+    const { token, error: tokenError } = await getFactaAuthToken(credentials.facta_username, credentials.facta_password);
+    if (tokenError || !token) {
+        return { success: false, message: tokenError || "Não foi possível obter o token da Facta" };
+    }
+    
+    await logActivity({ userId, documentNumber: cpf, action: 'Consulta INSS Facta', provider: 'facta', details: `Valor: ${valor_desejado}` });
+
+    try {
+        const url = new URL(`${FACTA_API_BASE_URL_PROD}/proposta/operacoes-disponiveis`);
+        url.searchParams.append('produto', 'D');
+        url.searchParams.append('tipo_operacao', '33');
+        url.searchParams.append('averbador', '3');
+        url.searchParams.append('convenio', '3');
+        url.searchParams.append('opcao_valor', '1');
+        url.searchParams.append('valor', String(valor_desejado));
+        url.searchParams.append('cpf', cpf);
+        url.searchParams.append('data_nascimento', data_nascimento);
+        url.searchParams.append('valor_renda', String(valor_renda));
+
+        const response = await fetch(url.toString(), {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        const data = await response.json();
+        
+        if (data.erro) {
+            return { success: false, message: data.mensagem || 'Erro ao simular operações na Facta.' };
+        }
+
+        if (!data.tabelas || data.tabelas.length === 0) {
+            return { success: true, message: 'Nenhuma tabela de operação encontrada para os dados informados.', data: [] };
+        }
+
+        return { success: true, message: 'Simulação realizada com sucesso.', data: data.tabelas };
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro de comunicação ao simular operações da Facta.";
+        console.error('[FACTA API] Erro na simulação de operações INSS:', error);
         return { success: false, message };
     }
 }

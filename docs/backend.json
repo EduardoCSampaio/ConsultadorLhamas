@@ -161,6 +161,7 @@
             "processedCpfs": { "type": "number" },
             "message": { "type": "string" },
             "createdAt": { "type": "string", "format": "date-time" },
+            "completedAt": { "type": "string", "format": "date-time", "description": "Timestamp indicating when the job finished (completed or errored)." },
             "cpfs": { "type": "array", "items": { "type": "string" } }
         },
         "required": ["id", "userId", "provider", "status", "totalCpfs", "processedCpfs", "createdAt"]
@@ -236,6 +237,33 @@
           }
         }
       }
+    },
+    "InssSimulationRequest": {
+      "title": "INSS Simulation Request",
+      "description": "Parameters for simulating INSS benefit card operations.",
+      "type": "object",
+      "properties": {
+        "cpf": { "type": "string" },
+        "data_nascimento": { "type": "string", "format": "date" },
+        "valor_renda": { "type": "number" },
+        "valor_desejado": { "type": "number" },
+        "userId": { "type": "string" }
+      },
+      "required": ["cpf", "data_nascimento", "valor_renda", "valor_desejado", "userId"]
+    },
+    "InssSimulationResult": {
+      "title": "INSS Simulation Result",
+      "description": "Result of an INSS benefit card operation simulation.",
+      "type": "object",
+      "properties": {
+        "tabela": { "type": "string" },
+        "taxa": { "type": "number" },
+        "prazo": { "type": "number" },
+        "codigoTabela": { "type": "number" },
+        "contrato": { "type": "number" },
+        "parcela": { "type": "number" }
+      },
+      "required": ["tabela", "taxa", "prazo", "codigoTabela", "contrato", "parcela"]
     }
   },
   "auth": {

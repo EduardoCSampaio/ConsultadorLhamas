@@ -32,6 +32,7 @@ import {
   FileText,
   User,
   BookMarked,
+  Landmark,
 } from "lucide-react";
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -199,6 +200,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   </CollapsibleContent>
                 </Collapsible>
               </SidebarMenuItem>
+            )}
+
+            {isAdmin && (
+                <SidebarMenuItem>
+                    <SidebarMenuButton
+                        asChild
+                        isActive={pathname.startsWith('/inss')}
+                        tooltip="Cartão Benefício INSS"
+                    >
+                        <Link href="/inss">
+                            <Landmark />
+                            <span>INSS</span>
+                        </Link>
+                    </SidebarMenuButton>
+                </SidebarMenuItem>
             )}
 
              <SidebarMenuItem>
