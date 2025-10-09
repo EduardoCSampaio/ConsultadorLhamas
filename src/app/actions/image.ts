@@ -17,13 +17,15 @@ type UploadResult = {
   message?: string;
 };
 
-// IMPORTANT: This API key is public and for a free, rate-limited service.
-// It's suitable for demonstration purposes. For a production application,
-// you should use a dedicated account and store the key in environment variables.
-const IMGBB_API_KEY = 'c14b2b6883595d7e52a5140026e6417f';
-const IMGBB_UPLOAD_URL = 'https://api.imgbb.com/1/upload';
-
 export async function uploadImageToImgBB(base64Image: string): Promise<UploadResult> {
+  const apiKey = process.env.IMGBB_API_KEY;
+
+  if (!apiKey) {
+    const errorMessage = 'A chave de API para o serviço de imagem não está configurada no ambiente do servidor (IMGBB_API_KEY).';
+    console.error(errorMessage);
+    return { success: false, message: errorMessage };
+  }
+
   if (!base64Image) {
     return { success: false, message: 'Nenhuma imagem fornecida para upload.' };
   }
@@ -33,7 +35,7 @@ export async function uploadImageToImgBB(base64Image: string): Promise<UploadRes
     formData.append('image', base64Image);
 
     const response = await axios.post(
-      `${IMGBB_UPLOAD_URL}?key=${IMGBB_API_KEY}`,
+      `https://api.imgbb.com/1/upload?key=${apiKey}`,
       formData,
       {
         headers: {
@@ -47,7 +49,7 @@ export async function uploadImageToImgBB(base64Image: string): Promise<UploadRes
     if (!parsedResponse.success || !parsedResponse.data.success) {
       console.error('ImgBB API Error:', parsedResponse.error || response.data);
       const apiErrorMessage = parsedResponse.success ? response.data?.error?.message : 'A resposta da API de imagem foi inválida.';
-      return { success: false, message: apiErrorMessage };
+      return { success: false, message: `Erro da API ImgBB: ${apiErrorMessage}` };
     }
 
     return {
