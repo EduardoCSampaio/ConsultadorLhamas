@@ -132,7 +132,7 @@ function AdminDashboard({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{activityLogs?.length || 0}</div>
-            <p className="text-xs text-muted-foreground">Consultas na plataforma</p>
+            <div className="text-xs text-muted-foreground">Consultas na plataforma</div>
           </CardContent>
         </Card>
       </div>
@@ -349,11 +349,17 @@ function AdminDashboardLoader() {
             </div>
              <div className="grid gap-6 lg:grid-cols-2">
                  <Card>
-                    <CardHeader><CardTitle><Skeleton className="h-6 w-48"/></CardTitle><CardDescription><Skeleton className="h-4 w-72"/></CardDescription></CardHeader>
+                    <CardHeader>
+                        <CardTitle><Skeleton className="h-6 w-48"/></CardTitle>
+                        <CardDescription><Skeleton className="h-4 w-72"/></CardDescription>
+                    </CardHeader>
                     <CardContent><Skeleton className="h-40 w-full"/></CardContent>
                 </Card>
                  <Card>
-                    <CardHeader><CardTitle><Skeleton className="h-6 w-48"/></CardTitle><CardDescription><Skeleton className="h-4 w-72"/></CardDescription></CardHeader>
+                    <CardHeader>
+                        <CardTitle><Skeleton className="h-6 w-48"/></CardTitle>
+                        <CardDescription><Skeleton className="h-4 w-72"/></CardDescription>
+                    </CardHeader>
                     <CardContent><Skeleton className="h-40 w-full"/></CardContent>
                 </Card>
             </div>
@@ -427,3 +433,5 @@ export default function DashboardPage() {
   // Fallback or loading state if userProfile is not available for some reason.
   return <AdminDashboardLoader />;
 }
+
+    
