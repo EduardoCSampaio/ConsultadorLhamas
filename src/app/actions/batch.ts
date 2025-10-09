@@ -108,12 +108,26 @@ export async function deleteBatch(input: z.infer<typeof deleteBatchSchema>): Pro
 }
 
 
-export async function getBatches(input?: { batchId: string }): Promise<{ status: 'success' | 'error'; batches?: BatchJob[]; batch?: BatchJob; message?: string }> {
+export async function getBatches(input?: { userId: string }): Promise<{ status: 'success' | 'error'; batches?: BatchJob[]; message?: string, error?: string }> {
     try {
         initializeFirebaseAdmin();
         const firestore = getFirestore();
         
-        const mapDocToBatchJob = (doc: FirebaseFirestore.DocumentSnapshot<FirebaseFirestore.DocumentData>): BatchJob => {
+        let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> = firestore.collection('batches');
+
+        if (input?.userId) {
+            query = query.where('userId', '==', input.userId);
+        }
+        
+        query = query.orderBy('createdAt', 'desc');
+
+        const batchesSnapshot = await query.get();
+
+        if (batchesSnapshot.empty) {
+            return { status: 'success', batches: [] };
+        }
+        
+        const batches = batchesSnapshot.docs.map((doc): BatchJob => {
             const data = doc.data()!;
             return {
                 id: doc.id,
@@ -129,27 +143,14 @@ export async function getBatches(input?: { batchId: string }): Promise<{ status:
                 message: data.message,
                 userId: data.userId,
                 userEmail: data.userEmail,
-            } as BatchJob;
-        };
-
-        if (input?.batchId) {
-            const batchDoc = await firestore.collection('batches').doc(input.batchId).get();
-            if (!batchDoc.exists) return { status: 'error', message: 'Lote não encontrado.' };
-            const batch = mapDocToBatchJob(batchDoc);
-            return { status: 'success', batch };
-        }
-
-        const batchesSnapshot = await firestore.collection('batches').orderBy('createdAt', 'desc').get();
-        if (batchesSnapshot.empty) {
-            return { status: 'success', batches: [] };
-        }
-        const batches = batchesSnapshot.docs.map(mapDocToBatchJob);
+            };
+        });
 
         return { status: 'success', batches };
     } catch (error) {
         const message = error instanceof Error ? error.message : "Erro ao buscar lotes.";
         console.error("getBatches error:", message);
-        return { status: 'error', message };
+        return { status: 'error', error: message };
     }
 }
 
@@ -371,7 +372,6 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
 
         const originalBatchData = originalBatchDoc.data() as BatchJob;
 
-        // Log the reprocessing action
         await logActivity({
             userId: originalBatchData.userId,
             action: 'Reprocessamento de Lote',
@@ -382,10 +382,11 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
         // Find which CPFs were NOT processed successfully
         const webhookResponsesSnapshot = await firestore.collection('webhookResponses')
             .where('batchId', '==', batchId)
+            // We only care about successful responses
+            .where('status', '==', 'success') 
             .get();
         
-        const processedCpfs = new Set(webhookResponsesSnapshot.docs.map(doc => {
-             // For V8, the ID is the CPF. For Facta, it's 'facta-CPF'.
+        const successfullyProcessedCpfs = new Set(webhookResponsesSnapshot.docs.map(doc => {
              const docId = doc.id;
              if (originalBatchData.provider.toLowerCase() === 'facta') {
                  return docId.replace('facta-', '');
@@ -393,18 +394,16 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
              return docId;
         }));
 
-        const cpfsToReprocess = originalBatchData.cpfs.filter(cpf => !processedCpfs.has(cpf));
+        const cpfsToReprocess = originalBatchData.cpfs.filter(cpf => !successfullyProcessedCpfs.has(cpf));
 
         if (cpfsToReprocess.length === 0) {
-            // All CPFs were processed, but the batch is still in error.
-            // This might mean the final status update failed. Let's just complete it.
             await originalBatchRef.update({
                 status: 'completed',
-                message: 'Finalizado após verificação de reprocessamento.',
+                message: 'Finalizado após verificação de reprocessamento. Nenhum CPF pendente.',
                 processedCpfs: originalBatchData.totalCpfs,
                 completedAt: FieldValue.serverTimestamp()
             });
-            return { status: 'success', message: 'Todos os CPFs já haviam sido processados. Lote finalizado.' };
+            return { status: 'success', message: 'Todos os CPFs já haviam sido processados com sucesso. Lote finalizado.' };
         }
 
         // Create a NEW batch with only the remaining CPFs
@@ -575,4 +574,3 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         message: 'Relatório gerado com sucesso.',
     };
 }
-

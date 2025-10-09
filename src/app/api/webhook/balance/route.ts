@@ -9,7 +9,6 @@ import { initializeFirebaseAdmin } from '@/firebase/server-init';
  * bypassing client-side security rules and not interfering with user auth sessions.
  */
 export async function POST(request: NextRequest) {
-  // Initialize the Firebase Admin SDK
   initializeFirebaseAdmin();
   const db = getFirestore();
 
@@ -29,8 +28,8 @@ export async function POST(request: NextRequest) {
       }, { status: 200 });
     }
     
-    const v8Partner = payload.provider || 'qi'; // Default to 'qi' if not provided
-    const batchId = payload.batchId; // Extract batchId if present
+    const v8Partner = payload.provider || 'qi';
+    const batchId = payload.batchId;
 
     const docRef = db.collection('webhookResponses').doc(docId.toString());
 
@@ -57,14 +56,13 @@ export async function POST(request: NextRequest) {
       id: docId.toString(),
       provider: "V8DIGITAL",
       v8Provider: v8Partner,
-      ...(batchId && { batchId: batchId }), // Conditionally add batchId
+      ...(batchId && { batchId: batchId }),
     };
 
     await docRef.set(dataToSet, { merge: true });
 
     console.log(`Payload stored in Firestore with ID: ${docId}. Status: ${status}. Provider: V8DIGITAL (${v8Partner})`);
     
-    // If a batchId is present, update the batch progress
     if (batchId) {
         const batchRef = db.collection('batches').doc(batchId);
         try {
@@ -75,8 +73,8 @@ export async function POST(request: NextRequest) {
                     return;
                 }
                 const batchData = batchDoc.data()!;
-                // Only increment if not already completed to avoid race conditions
                 if (batchData.status === 'completed') {
+                    console.log(`[Batch ${batchId}] Already completed. Ignoring webhook update.`);
                     return;
                 }
 

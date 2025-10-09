@@ -48,9 +48,10 @@ export default function EsteiraPage() {
     const [_, setTick] = useState(0); // For re-rendering to update timer
 
     const fetchBatches = useCallback(async (showLoading = true) => {
+        if (!user) return;
         if(showLoading) setIsLoading(true);
         setError(null);
-        const { batches: fetchedBatches, error: fetchError } = await getBatches();
+        const { batches: fetchedBatches, error: fetchError } = await getBatches({ userId: user.uid });
         if (fetchError) {
             setError(fetchError);
             toast({ variant: 'destructive', title: 'Erro ao buscar lotes', description: fetchError });
@@ -59,11 +60,15 @@ export default function EsteiraPage() {
             setBatches(fetchedBatches || []);
         }
         if(showLoading) setIsLoading(false);
-    }, [toast]);
+    }, [toast, user]);
 
     useEffect(() => {
-        fetchBatches(true); // Initial fetch with loading screen
+        if (user) {
+            fetchBatches(true); // Initial fetch with loading screen
+        }
+    }, [user, fetchBatches]);
 
+    useEffect(() => {
         // Interval to update the visual timer every second
         const timerInterval = setInterval(() => {
             setTick(t => t + 1);
