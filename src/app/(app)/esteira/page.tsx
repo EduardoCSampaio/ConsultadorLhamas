@@ -49,16 +49,20 @@ export default function EsteiraPage() {
     }, [toast]);
 
     useEffect(() => {
-        fetchBatches();
-        const interval = setInterval(() => {
-            // Check if there's any batch still processing before fetching
-            if (batches.some(b => b.status === 'processing')) {
-                fetchBatches(false);
-            }
+        fetchBatches(true); // Initial fetch with loading state
+
+        const intervalId = setInterval(() => {
+            // Only fetch in the background if there are batches currently processing
+            setBatches(currentBatches => {
+                if (currentBatches.some(b => b.status === 'processing')) {
+                    fetchBatches(false); 
+                }
+                return currentBatches;
+            });
         }, 10000); // 10 seconds
 
-        return () => clearInterval(interval);
-    }, [fetchBatches, batches]);
+        return () => clearInterval(intervalId);
+    }, [fetchBatches]);
     
     const handleDownloadReport = async (batch: BatchJob) => {
         if (!user) {
@@ -143,7 +147,7 @@ export default function EsteiraPage() {
                 title="Esteira de Processamento de Lotes"
                 description="Acompanhe o andamento e baixe os relatórios dos lotes enviados para consulta."
             >
-                <Button variant="outline" onClick={() => fetchBatches()} disabled={isLoading}>
+                <Button variant="outline" onClick={() => fetchBatches(true)} disabled={isLoading}>
                     <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                     Atualizar
                 </Button>
