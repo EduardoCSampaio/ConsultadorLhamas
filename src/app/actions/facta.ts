@@ -112,7 +112,7 @@ export type InssCreditOffer = {
     convenio: string;
     idConvenio: number;
     averbador: string;
-    tabela: string;
+tabela: string;
     taxa: number;
     prazo: number;
     tipoop: number;
