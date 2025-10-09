@@ -115,19 +115,18 @@ export async function getBatches(input?: { userId: string }): Promise<{ status: 
         
         let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> = firestore.collection('batches');
 
+        // Apply filter if a specific user's batches are requested
         if (input?.userId) {
             query = query.where('userId', '==', input.userId);
         }
         
-        query = query.orderBy('createdAt', 'desc');
-
         const batchesSnapshot = await query.get();
 
         if (batchesSnapshot.empty) {
             return { status: 'success', batches: [] };
         }
         
-        const batches = batchesSnapshot.docs.map((doc): BatchJob => {
+        let batches = batchesSnapshot.docs.map((doc): BatchJob => {
             const data = doc.data()!;
             return {
                 id: doc.id,
@@ -146,10 +145,13 @@ export async function getBatches(input?: { userId: string }): Promise<{ status: 
             };
         });
 
+        // Sort in memory to avoid needing a composite index in Firestore
+        batches.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
         return { status: 'success', batches };
     } catch (error) {
         const message = error instanceof Error ? error.message : "Erro ao buscar lotes.";
-        console.error("getBatches error:", message);
+        console.error("getBatches error:", error);
         return { status: 'error', error: message };
     }
 }
@@ -391,6 +393,7 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
              if (originalBatchData.provider.toLowerCase() === 'facta') {
                  return docId.replace('facta-', '');
              }
+             // For V8, the docId is the CPF itself
              return docId;
         }));
 
@@ -419,6 +422,10 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
         const result = await processarLoteFgts(newBatchAction);
 
         if (result.status === 'success') {
+            // Optionally, mark the old batch as 'reprocessed' or something similar
+            await originalBatchRef.update({ 
+                message: `Lote substituído por um novo lote de reprocessamento: ${result.batch?.id}`
+            });
             return { status: 'success', message: `Novo lote de reprocessamento criado com ${cpfsToReprocess.length} CPFs.`, newBatch: result.batch };
         } else {
             return { status: 'error', message: result.message || "Falha ao criar o novo lote para reprocessamento." };
@@ -574,3 +581,4 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         message: 'Relatório gerado com sucesso.',
     };
 }
+
