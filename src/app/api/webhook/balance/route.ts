@@ -29,15 +29,12 @@ export async function POST(request: NextRequest) {
       }, { status: 200 });
     }
     
-    // The provider should be sent in the webhook payload, e.g. { ..., provider: 'qi' }
-    // This allows us to know which V8 partner the response is for.
     const v8Partner = payload.provider || 'qi'; // Default to 'qi' if not provided
+    const batchId = payload.batchId; // Extract batchId if present
 
     const docRef = db.collection('webhookResponses').doc(docId.toString());
 
-    // Check for explicit error messages within the payload
     const errorMessage = payload.errorMessage || payload.error || payload.message;
-    // An error is when there is a specific error message OR when there's no balance (and it's not a success response)
     const isError = !!errorMessage;
     const isSuccess = payload.balance !== undefined && payload.balance !== null;
 
@@ -52,16 +49,18 @@ export async function POST(request: NextRequest) {
         statusMessage = 'Webhook payload with balance successfully stored.';
     }
 
-
-    await docRef.set({
+    const dataToSet = {
       responseBody: payload,
       createdAt: FieldValue.serverTimestamp(),
       status: status,
       message: statusMessage,
       id: docId.toString(),
-      provider: "V8DIGITAL", // Save the generic provider name
-      v8Provider: v8Partner,  // Save the specific partner
-    }, { merge: true });
+      provider: "V8DIGITAL",
+      v8Provider: v8Partner,
+      ...(batchId && { batchId: batchId }), // Conditionally add batchId
+    };
+
+    await docRef.set(dataToSet, { merge: true });
 
     console.log(`Payload stored in Firestore with ID: ${docId}. Status: ${status}. Provider: V8DIGITAL (${v8Partner})`);
 

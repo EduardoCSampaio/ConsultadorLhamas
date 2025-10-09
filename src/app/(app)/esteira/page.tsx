@@ -50,20 +50,10 @@ export default function EsteiraPage() {
 
     useEffect(() => {
         fetchBatches();
-        const intervalId = setInterval(() => fetchBatches(false), 30000);
+        // Check for updates more frequently now that processing is automatic
+        const intervalId = setInterval(() => fetchBatches(false), 10000); 
         return () => clearInterval(intervalId);
     }, [fetchBatches]);
-
-    const handleRefreshStatus = async (batchId: string) => {
-        const { batch: refreshedBatch, error: fetchError } = await getBatches({ batchId });
-
-        if (fetchError) {
-             toast({ variant: 'destructive', title: 'Erro ao atualizar lote', description: fetchError });
-        } else if (refreshedBatch) {
-             setBatches(prev => prev.map(b => b.id === batchId ? refreshedBatch : b));
-             toast({ title: 'Status atualizado!', description: `Lote ${refreshedBatch.fileName} verificado.`});
-        }
-    };
     
     const handleDownloadReport = async (batch: BatchJob) => {
         if (!user) {
@@ -104,13 +94,12 @@ export default function EsteiraPage() {
 
     const handleReprocessBatch = async (batchId: string) => {
         setIsReprocessing(batchId);
+        toast({ title: "Tentando reprocessar...", description: "Enviando comando para o servidor."})
         const result = await reprocessarLoteComErro({ batchId });
         if (result.status === 'success') {
             toast({
                 title: 'Reprocessamento iniciado!',
-                description: result.newBatch 
-                    ? `Um novo lote foi criado para os CPFs restantes: ${result.newBatch.fileName}`
-                    : result.message,
+                description: result.message,
             });
             await fetchBatches(false);
         } else {
@@ -137,7 +126,8 @@ export default function EsteiraPage() {
             case 'completed': return 'Completo';
             case 'processing': return 'Processando';
             case 'error': return 'Erro';
-            default: return 'Pendente';
+            case 'pending': return 'Pendente';
+            default: return 'Desconhecido';
         }
     }
 
@@ -213,9 +203,6 @@ export default function EsteiraPage() {
                                     </div>
                                     <div className='flex items-center gap-2'>
                                         <Badge variant={getStatusVariant(batch.status)} className="capitalize">{getStatusText(batch.status)}</Badge>
-                                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => fetchBatches(false)}>
-                                            <RefreshCw className="h-4 w-4" />
-                                        </Button>
                                         <AlertDialog>
                                             <AlertDialogTrigger asChild>
                                                 <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10">
@@ -256,17 +243,17 @@ export default function EsteiraPage() {
                                         <AlertDescription>{batch.message || "Ocorreu um erro desconhecido durante o processamento."}</AlertDescription>
                                      </Alert>
                                 )}
-                                <div className="mt-2 flex gap-2">
+                                <div className="mt-4 flex flex-wrap gap-2">
                                     {batch.status === 'completed' && (
                                         <Button onClick={() => handleDownloadReport(batch)} size="sm">
                                             <Download className="mr-2 h-4 w-4" />
                                             Baixar Relatório
                                         </Button>
                                     )}
-                                    {batch.status !== 'completed' && (
+                                     {batch.status === 'error' && (
                                         <Button onClick={() => handleReprocessBatch(batch.id)} size="sm" variant="outline" disabled={isReprocessing === batch.id}>
                                             {isReprocessing === batch.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-                                            {batch.provider === 'facta' ? 'Processar Próximo' : 'Tentar Novamente'}
+                                            Tentar Novamente
                                         </Button>
                                     )}
                                 </div>
