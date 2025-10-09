@@ -31,15 +31,15 @@ export async function uploadImageToImgBB(base64Image: string): Promise<UploadRes
   }
 
   try {
-    const formData = new FormData();
-    formData.append('image', base64Image);
+    const body = new URLSearchParams();
+    body.append('image', base64Image);
 
     const response = await axios.post(
       `https://api.imgbb.com/1/upload?key=${apiKey}`,
-      formData,
+      body,
       {
         headers: {
-          'Content-Type': 'multipart/form-data',
+          'Content-Type': 'application/x-www-form-urlencoded',
         },
       }
     );
