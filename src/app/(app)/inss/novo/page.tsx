@@ -28,9 +28,7 @@ const formSchema = z.object({
   data_nascimento: z.string().refine((val) => /^\d{2}\/\d{2}\/\d{4}$/.test(val), {
     message: "Data de nascimento deve estar no formato DD/MM/AAAA.",
   }),
-  valor_contrato: z.string().refine(val => val && parseFloat(val.replace(/\./g, '').replace(',', '.')) > 0, {
-    message: "O valor do contrato é obrigatório."
-  }),
+  valor_contrato: z.string().optional(),
   tipo_operacao: z.enum(['13', '27'], {
     required_error: "Selecione o tipo de operação."
   }),
@@ -100,7 +98,7 @@ export default function InssCreditPage() {
 
     const formattedValues = {
         ...values,
-        valor_contrato: parseFloat(values.valor_contrato.replace(/\./g, '').replace(',', '.')),
+        valor_contrato: values.valor_contrato ? parseFloat(values.valor_contrato.replace(/\./g, '').replace(',', '.')) : undefined,
         userId: user.uid,
     };
 
@@ -175,7 +173,7 @@ export default function InssCreditPage() {
                     name="valor_contrato"
                     render={({ field }) => (
                     <FormItem>
-                        <FormLabel>Valor do Contrato Desejado</FormLabel>
+                        <FormLabel>Valor do Contrato Desejado (Opcional)</FormLabel>
                         <FormControl>
                         <Input placeholder="1.000,00" {...field} onChange={(e) => { handleCurrencyMask(e); field.onChange(e.target.value); }} disabled={isLoading}/>
                         </FormControl>

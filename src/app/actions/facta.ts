@@ -30,7 +30,7 @@ const inssGetOperationsSchema = z.object({
 const inssGetCreditOperationsSchema = z.object({
     cpf: z.string(),
     data_nascimento: z.string(),
-    valor_contrato: z.number(),
+    valor_contrato: z.number().optional(),
     tipo_operacao: z.enum(['13', '27']),
     userId: z.string(),
 });
@@ -475,8 +475,10 @@ export async function getInssCreditOperations(input: z.infer<typeof inssGetCredi
         url.searchParams.append('tipo_operacao', String(parseInt(tipo_operacao, 10)));
         url.searchParams.append('averbador', '3');
         url.searchParams.append('convenio', '3');
-        url.searchParams.append('opcao_valor', '1'); // 1 = contrato
-        url.searchParams.append('valor', String(valor_contrato));
+        url.searchParams.append('opcao_valor', '1'); // 1 = por valor de contrato/saque
+        if (valor_contrato) {
+            url.searchParams.append('valor', String(valor_contrato));
+        }
         url.searchParams.append('cpf', cpf);
         url.searchParams.append('data_nascimento', data_nascimento);
 
@@ -505,5 +507,3 @@ export async function getInssCreditOperations(input: z.infer<typeof inssGetCredi
         return { success: false, message };
     }
 }
-
-    
