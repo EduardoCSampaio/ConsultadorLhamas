@@ -64,42 +64,35 @@ export async function POST(request: NextRequest) {
 
     console.log(`Payload stored in Firestore with ID: ${docId}. Status: ${status}. Provider: V8DIGITAL (${v8Partner})`);
     
-    // If the webhook is part of a batch, update the batch progress
     if (batchId) {
         const batchRef = db.collection('batches').doc(batchId);
-        
         try {
-             // Transaction to safely increment the processed count.
             await db.runTransaction(async (transaction) => {
                 const batchDoc = await transaction.get(batchRef);
                 if (!batchDoc.exists) {
                     console.warn(`[Webhook Transaction] Batch document ${batchId} not found.`);
                     return;
                 }
-                 // Only increment. Don't do any other logic inside the transaction.
-                transaction.update(batchRef, { processedCpfs: FieldValue.increment(1) });
-            });
+                const batchData = batchDoc.data()!;
+                const currentProcessedCount = batchData.processedCpfs || 0;
+                const newProcessedCount = currentProcessedCount + 1;
 
-             // After the transaction, read the updated document to check for completion.
-            const updatedBatchDoc = await batchRef.get();
-            if (updatedBatchDoc.exists) {
-                const batchData = updatedBatchDoc.data()!;
-                console.log(`[Batch ${batchId}] Progress updated. Processed count: ${batchData.processedCpfs}/${batchData.totalCpfs}`);
-                
-                 // If the batch is now complete, update its status.
-                if (batchData.processedCpfs >= batchData.totalCpfs && batchData.status !== 'completed') {
-                    console.log(`[Batch ${batchId}] All CPFs processed. Marking as complete.`);
-                    await batchRef.update({
+                if (newProcessedCount >= batchData.totalCpfs) {
+                    console.log(`[Batch ${batchId}] Final CPF received. Marking as complete.`);
+                    transaction.update(batchRef, {
+                        processedCpfs: newProcessedCount,
                         status: 'completed',
                         message: 'Processamento concluído via webhooks.',
                         completedAt: FieldValue.serverTimestamp(),
                     });
+                } else {
+                    transaction.update(batchRef, { processedCpfs: newProcessedCount });
                 }
-            }
+            });
+             console.log(`[Batch ${batchId}] Progress transaction completed successfully.`);
         } catch (e) {
-            console.error(`[Batch ${batchId}] Failed to update batch progress: `, e);
+            console.error(`[Batch ${batchId}] Failed to update batch progress transaction: `, e);
         }
-
     }
 
 
