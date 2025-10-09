@@ -1,4 +1,3 @@
-
 'use server';
 
 import { z } from 'zod';
@@ -22,7 +21,6 @@ const inssGetOperationsSchema = z.object({
     cpf: z.string(),
     data_nascimento: z.string(),
     valor_renda: z.number(),
-    valor_desejado: z.number(),
     userId: z.string(),
 });
 
@@ -334,7 +332,7 @@ export async function getInssOperations(input: z.infer<typeof inssGetOperationsS
         return { success: false, message: 'Dados de entrada inválidos: ' + JSON.stringify(validation.error.flatten()) };
     }
 
-    const { cpf, data_nascimento, valor_renda, valor_desejado, userId } = validation.data;
+    const { cpf, data_nascimento, valor_renda, userId } = validation.data;
     
     const { credentials, error: credError } = await getFactaUserCredentials(userId);
     if (credError || !credentials) {
@@ -346,7 +344,7 @@ export async function getInssOperations(input: z.infer<typeof inssGetOperationsS
         return { success: false, message: tokenError || "Não foi possível obter o token da Facta" };
     }
     
-    await logActivity({ userId, documentNumber: cpf, action: 'Consulta Cartão INSS Facta', provider: 'facta', details: `Renda: ${valor_renda}, Desejado: ${valor_desejado}` });
+    await logActivity({ userId, documentNumber: cpf, action: 'Consulta Cartão INSS Facta', provider: 'facta', details: `Renda: ${valor_renda}` });
 
     try {
         const url = new URL(`${FACTA_API_BASE_URL_PROD}/proposta/operacoes-disponiveis`);
@@ -354,11 +352,11 @@ export async function getInssOperations(input: z.infer<typeof inssGetOperationsS
         url.searchParams.append('tipo_operacao', '33');
         url.searchParams.append('averbador', '3');
         url.searchParams.append('convenio', '3');
-        url.searchParams.append('opcao_valor', '1');
+        url.searchParams.append('opcao_valor', '2');
         url.searchParams.append('cpf', cpf);
         url.searchParams.append('data_nascimento', data_nascimento);
         url.searchParams.append('valor_renda', String(valor_renda));
-        url.searchParams.append('valor', String(valor_desejado)); 
+        url.searchParams.append('valor', '');
 
         const response = await fetch(url.toString(), {
             method: 'GET',
