@@ -365,7 +365,7 @@ export async function getInssOperations(input: z.infer<typeof inssGetOperationsS
              url.searchParams.append('opcao_valor', '2');
              url.searchParams.append('margem_cartao', String(margem_cartao));
         } else {
-            return { success: false, message: 'É necessário informar o valor da renda ou a margem do cartão, de acordo com o tipo de cálculo.'};
+            return { success: false, message: 'É necessário informar o valor da renda ou a margem do cartão.'};
         }
 
 
@@ -505,5 +505,3 @@ export async function getInssCreditOperations(input: z.infer<typeof inssGetCredi
         return { success: false, message };
     }
 }
-
-    

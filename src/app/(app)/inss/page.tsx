@@ -33,12 +33,18 @@ const formSchema = z.object({
   valor_renda: z.string().optional(),
   margem_cartao: z.string().optional(),
 }).refine(data => {
-    if (data.calculationType === 'renda') return !!data.valor_renda && parseFloat(data.valor_renda.replace(/\./g, '').replace(',', '.')) > 0;
-    if (data.calculationType === 'margem') return !!data.margem_cartao && parseFloat(data.margem_cartao.replace(/\./g, '').replace(',', '.')) > 0;
+    if (data.calculationType === 'renda') {
+        const value = data.valor_renda ? parseFloat(data.valor_renda.replace(/\./g, '').replace(',', '.')) : 0;
+        return !!data.valor_renda && value > 0;
+    }
+    if (data.calculationType === 'margem') {
+        const value = data.margem_cartao ? parseFloat(data.margem_cartao.replace(/\./g, '').replace(',', '.')) : 0;
+        return !!data.margem_cartao && value > 0;
+    }
     return false;
 }, {
     message: "Preencha o valor correspondente ao tipo de cálculo.",
-    path: ['valor_renda'], // Show error message on one of the fields
+    path: ['calculationType'], // Show error message on the radio group or a general place
 });
 
 
@@ -158,6 +164,8 @@ export default function InssFactaPage() {
 
     if(response.success && response.data) {
         setSubmissionResult({ id: response.data.id_simulador, message: response.message });
+        setOperations(null); // Clear the table to show only the success message
+        setSelectedOperation(null);
     } else {
         setError(response.message);
     }
@@ -269,7 +277,7 @@ export default function InssFactaPage() {
                         <FormItem>
                             <FormLabel>Margem Cartão (R$)</FormLabel>
                             <FormControl>
-                            <Input placeholder="300,00" {...field} onChange={(e) => { handleCurrencyMask(e); field.onChange(e.target.value); }} disabled={isLoading}/>
+                            <Input placeholder="75,90" {...field} onChange={(e) => { handleCurrencyMask(e); field.onChange(e.target.value); }} disabled={isLoading}/>
                             </FormControl>
                             <FormMessage />
                         </FormItem>
@@ -335,8 +343,8 @@ export default function InssFactaPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {operations.map((item) => (
-                                    <TableRow key={item.codigoTabela} className={selectedOperation?.codigoTabela === item.codigoTabela ? "bg-muted hover:bg-muted" : ""}>
+                                {operations.map((item, index) => (
+                                    <TableRow key={`${item.codigoTabela}-${index}`} className={selectedOperation?.codigoTabela === item.codigoTabela ? "bg-muted hover:bg-muted" : ""}>
                                         <TableCell className="font-medium">{item.tabela}</TableCell>
                                         <TableCell>{item.prazo}</TableCell>
                                         <TableCell>{item.taxa}%</TableCell>
