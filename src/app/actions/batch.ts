@@ -170,7 +170,7 @@ async function processFactaBatchInBackground(batchId: string) {
 
         // Ensure status is 'processing'
         if (batchData.status !== 'processing') {
-            await batchRef.update({ status: 'processing' });
+            await batchRef.update({ status: 'processing', message: 'Iniciando processamento...' });
         }
         
         const userDoc = await firestore.collection('users').doc(batchData.userId).get();
@@ -194,9 +194,10 @@ async function processFactaBatchInBackground(batchId: string) {
             return;
         }
 
-        console.log(`[Batch ${batchId}] Processing ${cpfsToProcess.length} CPFs: ${cpfsToProcess.join(', ')}`);
+        console.log(`[Batch ${batchId}] Processing ${cpfsToProcess.length} CPFs in parallel: ${cpfsToProcess.join(', ')}`);
 
-        for (const cpf of cpfsToProcess) {
+        // --- Execute queries in parallel ---
+        const processingPromises = cpfsToProcess.map(async (cpf) => {
             const docRef = firestore.collection('webhookResponses').doc(`facta-${cpf}`);
             try {
                 const result = await consultarSaldoFgtsFacta({ cpf: cpf, userId: batchData.userId, token });
@@ -207,23 +208,25 @@ async function processFactaBatchInBackground(batchId: string) {
                     message: result.message || (result.success ? 'Sucesso' : 'Erro desconhecido'),
                     id: `facta-${cpf}`,
                     provider: 'facta',
-                    batchId: batchId, // Add batchId for tracking
+                    batchId: batchId,
                 };
                 await docRef.set(responseData, { merge: true });
             } catch (cpfError) {
                 const message = cpfError instanceof Error ? cpfError.message : "Erro desconhecido ao processar CPF.";
                 await docRef.set({ status: 'error', message, batchId: batchId }, { merge: true });
             }
-        }
+        });
+
+        // Wait for all queries in the current chunk to complete
+        await Promise.all(processingPromises);
         
         const currentProcessedCount = processedCpfIds.size + cpfsToProcess.length;
         await batchRef.update({ processedCpfs: currentProcessedCount });
 
-        // Check if there are more CPFs to process
+        // Check if there are more CPFs to process and recursively call the next chunk
         if (currentProcessedCount < batchData.totalCpfs) {
-            // Self-trigger the next chunk
             console.log(`[Batch ${batchId}] Chunk processed. Triggering next one.`);
-            await processFactaBatchInBackground(batchId);
+            await processFactaBatchInBackground(batchId); // Auto-trigger next chunk
         } else {
             await batchRef.update({ status: 'completed', message: "Todos os CPFs foram processados." });
             console.log(`[Batch ${batchId}] Final chunk processed. Batch completed.`);
@@ -256,7 +259,7 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
   const batchId = `batch-${displayProvider}-${v8Provider || ''}-${Date.now()}-${userId.substring(0, 5)}`;
   const batchRef = firestore.collection('batches').doc(batchId);
 
-  const batchData: Omit<BatchJob, 'createdAt' | 'id'> & { createdAt: FieldValue } = {
+  const baseBatchData = {
       fileName: fileName,
       provider: displayProvider,
       status: 'pending',
@@ -266,8 +269,12 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
       createdAt: FieldValue.serverTimestamp(),
       userId: userId,
       userEmail: userEmail,
-      ...(provider === 'v8' && { v8Provider }),
   };
+  
+  const batchData = provider === 'v8' 
+    ? { ...baseBatchData, v8Provider: v8Provider! }
+    : baseBatchData;
+
 
   try {
       await batchRef.set(batchData);
@@ -288,7 +295,6 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
     ...batchData,
     id: batchId,
     createdAt: new Date().toISOString(),
-    ...(provider === 'v8' && { v8Provider }),
   }
 
   return {
@@ -493,7 +499,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
             'DATA_REPASSE_1': r['Data Repasse 1'], 'VALOR_1': r['Valor 1'],
             'DATA_REPASSE_2': r['Data Repasse 2'], 'VALOR_2': r['Valor 2'],
             'DATA_REPASSE_3': r['Data Repasse 3'], 'VALOR_3': r['Valor 3'],
-            'DATA_REPASSE_4': r['Data Repasse 4'], 'VALOR_4': r['Valor 4'],
+            'DATA_REpasse_4': r['Data Repasse 4'], 'VALOR_4': r['Valor 4'],
             'DATA_REPASSE_5': r['Data Repasse 5'], 'VALOR_5': r['Valor 5'],
             'DATA_REPASSE_6': r['Data Repasse 6'], 'VALOR_6': r['Valor 6'],
             'DATA_REPASSE_7': r['Data Repasse 7'], 'VALOR_7': r['Valor 7'],
