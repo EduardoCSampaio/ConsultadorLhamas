@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -17,11 +17,12 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, AlertCircle, CircleDashed, TableIcon } from "lucide-react";
+import { Loader2, Search, AlertCircle, CircleDashed, TableIcon, CheckCircle } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { useUser } from "@/firebase";
-import { consultarOperacoesInssFacta, type InssSimulationResult } from "@/app/actions/facta";
+import { getInssOperations, submitInssSimulation, type InssOperation } from "@/app/actions/facta";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Separator } from "@/components/ui/separator";
 
 
 const formSchema = z.object({
@@ -43,6 +44,17 @@ const formatCurrency = (value: string | number | undefined | null) => {
     }).format(numberValue);
 };
 
+const handleCurrencyMask = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value;
+    value = value.replace(/\D/g, '');
+    value = (parseInt(value, 10) / 100).toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+    });
+    if (value === 'NaN') value = '';
+    e.target.value = value;
+};
+
+
 const handleDateMask = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.replace(/\D/g, '');
     if (value.length > 8) value = value.substring(0, 8);
@@ -58,9 +70,12 @@ const handleDateMask = (e: React.ChangeEvent<HTMLInputElement>) => {
 export default function InssFactaPage() {
   const { user } = useUser();
   const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<InssSimulationResult[] | null>(null);
+  const [operations, setOperations] = useState<InssOperation[] | null>(null);
   const [noOffersMessage, setNoOffersMessage] = useState<string | null>(null);
+  const [selectedOperation, setSelectedOperation] = useState<InssOperation | null>(null);
+  const [submissionResult, setSubmissionResult] = useState<{ id: string; message: string } | null>(null);
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -72,7 +87,9 @@ export default function InssFactaPage() {
     },
   });
 
-  async function onSubmit(values: z.infer<typeof formSchema>) {
+  const formData = useWatch({ control: form.control });
+
+  async function onGetOperations(values: z.infer<typeof formSchema>) {
     if (!user) {
       setError("Você precisa estar logado para realizar uma consulta.");
       return;
@@ -80,21 +97,23 @@ export default function InssFactaPage() {
     
     setIsLoading(true);
     setError(null);
-    setResult(null);
+    setOperations(null);
     setNoOffersMessage(null);
+    setSelectedOperation(null);
+    setSubmissionResult(null);
 
     const formattedValues = {
         ...values,
-        valor_renda: parseFloat(values.valor_renda.replace('.', '').replace(',', '.')),
-        valor_desejado: parseFloat(values.valor_desejado.replace('.', '').replace(',', '.')),
+        valor_renda: parseFloat(values.valor_renda.replace(/\./g, '').replace(',', '.')),
+        valor_desejado: parseFloat(values.valor_desejado.replace(/\./g, '').replace(',', '.')),
         userId: user.uid,
     };
 
-    const response = await consultarOperacoesInssFacta(formattedValues);
+    const response = await getInssOperations(formattedValues);
 
     if (response.success) {
         if(response.data && response.data.length > 0) {
-            setResult(response.data);
+            setOperations(response.data);
         } else {
             setNoOffersMessage(response.message || "Nenhuma operação disponível encontrada para os dados informados.");
         }
@@ -103,6 +122,35 @@ export default function InssFactaPage() {
     }
     
     setIsLoading(false);
+  }
+
+  async function onConfirmSimulation() {
+    if (!user || !selectedOperation) {
+        setError("Nenhuma operação selecionada para confirmar.");
+        return;
+    }
+    setIsSubmitting(true);
+    setError(null);
+
+    const response = await submitInssSimulation({
+        userId: user.uid,
+        cpf: formData.cpf,
+        data_nascimento: formData.data_nascimento,
+        valor_renda: parseFloat(formData.valor_renda.replace(/\./g, '').replace(',', '.')),
+        codigo_tabela: selectedOperation.codigoTabela,
+        prazo: selectedOperation.prazo,
+        valor_operacao: selectedOperation.contrato,
+        valor_parcela: selectedOperation.parcela,
+        coeficiente: selectedOperation.coeficiente,
+    });
+
+    if(response.success && response.data) {
+        setSubmissionResult({ id: response.data.id_simulador, message: response.message });
+    } else {
+        setError(response.message);
+    }
+
+    setIsSubmitting(false);
   }
 
   return (
@@ -114,11 +162,11 @@ export default function InssFactaPage() {
       <Card>
         <CardHeader>
             <CardTitle>Simular Operações</CardTitle>
-            <CardDescription>Insira os dados do cliente para simular as operações.</CardDescription>
+            <CardDescription>Insira os dados do cliente para buscar as tabelas de operações.</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <form onSubmit={form.handleSubmit(onGetOperations)} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField
                         control={form.control}
@@ -161,7 +209,7 @@ export default function InssFactaPage() {
                         <FormItem>
                             <FormLabel>Valor do Benefício (Renda)</FormLabel>
                             <FormControl>
-                            <Input placeholder="1412,00" {...field} disabled={isLoading}/>
+                            <Input placeholder="1.412,00" {...field} onChange={(e) => { handleCurrencyMask(e); field.onChange(e.target.value); }} disabled={isLoading}/>
                             </FormControl>
                             <FormMessage />
                         </FormItem>
@@ -174,7 +222,7 @@ export default function InssFactaPage() {
                         <FormItem>
                             <FormLabel>Valor de Saque Desejado</FormLabel>
                             <FormControl>
-                            <Input placeholder="2000,00" {...field} disabled={isLoading}/>
+                            <Input placeholder="2.000,00" {...field} onChange={(e) => { handleCurrencyMask(e); field.onChange(e.target.value); }} disabled={isLoading}/>
                             </FormControl>
                             <FormMessage />
                         </FormItem>
@@ -183,7 +231,7 @@ export default function InssFactaPage() {
                 </div>
               <Button type="submit" disabled={isLoading}>
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
-                {isLoading ? "Consultando..." : "Simular"}
+                {isLoading ? "Buscando..." : "Buscar Operações"}
               </Button>
             </form>
           </Form>
@@ -198,7 +246,7 @@ export default function InssFactaPage() {
          </Alert>
       )}
 
-      {noOffersMessage && !result && (
+      {noOffersMessage && !operations && (
         <Card>
             <CardContent className="pt-6">
                 <div className="flex flex-col items-center justify-center gap-4 text-center h-60 border-2 border-dashed rounded-lg">
@@ -214,47 +262,98 @@ export default function InssFactaPage() {
         </Card>
       )}
 
-      {result && (
-        <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <TableIcon />
-                    Operações Disponíveis
-                </CardTitle>
-                <CardDescription>
-                    Foram encontradas {result.length} tabelas de operações para os dados informados.
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div className="rounded-md border">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Tabela</TableHead>
-                                <TableHead>Prazo</TableHead>
-                                <TableHead>Taxa</TableHead>
-                                <TableHead>Contrato</TableHead>
-                                <TableHead>Parcela</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {result.map((item) => (
-                                <TableRow key={item.codigoTabela}>
-                                    <TableCell className="font-medium">{item.tabela}</TableCell>
-                                    <TableCell>{item.prazo}</TableCell>
-                                    <TableCell>{item.taxa}%</TableCell>
-                                    <TableCell>{formatCurrency(item.contrato)}</TableCell>
-                                    <TableCell className="font-semibold">{formatCurrency(item.parcela)}</TableCell>
+      {operations && !submissionResult && (
+        <>
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <TableIcon />
+                        Selecione uma Operação
+                    </CardTitle>
+                    <CardDescription>
+                        Foram encontradas {operations.length} tabelas de operações. Selecione uma para prosseguir.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="rounded-md border">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Tabela</TableHead>
+                                    <TableHead>Prazo</TableHead>
+                                    <TableHead>Taxa</TableHead>
+                                    <TableHead>Contrato</TableHead>
+                                    <TableHead>Parcela</TableHead>
+                                    <TableHead className="text-right">Ação</TableHead>
                                 </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
-            </CardContent>
-        </Card>
+                            </TableHeader>
+                            <TableBody>
+                                {operations.map((item) => (
+                                    <TableRow key={item.codigoTabela} className={selectedOperation?.codigoTabela === item.codigoTabela ? "bg-muted hover:bg-muted" : ""}>
+                                        <TableCell className="font-medium">{item.tabela}</TableCell>
+                                        <TableCell>{item.prazo}</TableCell>
+                                        <TableCell>{item.taxa}%</TableCell>
+                                        <TableCell>{formatCurrency(item.contrato)}</TableCell>
+                                        <TableCell className="font-semibold">{formatCurrency(item.parcela)}</TableCell>
+                                        <TableCell className="text-right">
+                                            <Button size="sm" variant={selectedOperation?.codigoTabela === item.codigoTabela ? "secondary" : "outline"} onClick={() => setSelectedOperation(item)}>
+                                                {selectedOperation?.codigoTabela === item.codigoTabela ? "Selecionado" : "Selecionar"}
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {selectedOperation && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Confirmar Simulação</CardTitle>
+                        <CardDescription>Confirme os detalhes abaixo para registrar a simulação.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                            <div className="flex flex-col gap-1 rounded-md border p-3">
+                               <span className="text-muted-foreground">Tabela</span>
+                               <span className="font-semibold truncate">{selectedOperation.tabela}</span>
+                            </div>
+                            <div className="flex flex-col gap-1 rounded-md border p-3">
+                               <span className="text-muted-foreground">Valor do Contrato</span>
+                               <span className="font-semibold">{formatCurrency(selectedOperation.contrato)}</span>
+                            </div>
+                            <div className="flex flex-col gap-1 rounded-md border p-3">
+                               <span className="text-muted-foreground">Valor da Parcela</span>
+                               <span className="font-semibold">{formatCurrency(selectedOperation.parcela)}</span>
+                            </div>
+                             <div className="flex flex-col gap-1 rounded-md border p-3">
+                               <span className="text-muted-foreground">Prazo</span>
+                               <span className="font-semibold">{selectedOperation.prazo} meses</span>
+                            </div>
+                        </div>
+                         <Button onClick={onConfirmSimulation} disabled={isSubmitting}>
+                            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+                            {isSubmitting ? "Confirmando..." : "Confirmar e Gerar Simulação"}
+                        </Button>
+                    </CardContent>
+                </Card>
+            )}
+        </>
+      )}
+
+      {submissionResult && (
+         <Alert variant="default" className="border-green-600 bg-green-50 text-green-900">
+            <CheckCircle className="h-4 w-4 text-green-600" />
+            <AlertTitle>Simulação Registrada com Sucesso!</AlertTitle>
+            <AlertDescription>
+                {submissionResult.message}<br/>
+                O ID da simulação é: <span className="font-bold font-mono">{submissionResult.id}</span>
+            </AlertDescription>
+         </Alert>
       )}
 
     </div>
   );
 }
-

@@ -18,11 +18,23 @@ const fgtsConsultaSchema = z.object({
     token: z.string().optional(),
 });
 
-const inssConsultaSchema = z.object({
+const inssGetOperationsSchema = z.object({
     cpf: z.string(),
     data_nascimento: z.string(),
     valor_renda: z.number(),
     valor_desejado: z.number(),
+    userId: z.string(),
+});
+
+const inssSubmitSimulationSchema = z.object({
+    cpf: z.string(),
+    data_nascimento: z.string(),
+    valor_renda: z.number(),
+    codigo_tabela: z.number(),
+    prazo: z.number(),
+    valor_operacao: z.number(),
+    valor_parcela: z.number(),
+    coeficiente: z.number(),
     userId: z.string(),
 });
 
@@ -72,7 +84,7 @@ export type FactaFgtsBalance = {
     [key: `valor_${number}`]: string;
 }
 
-export type InssSimulationResult = {
+export type InssOperation = {
     convenio: string;
     idConvenio: number;
     averbador: string;
@@ -89,6 +101,10 @@ export type InssSimulationResult = {
     parcela: number;
 }
 
+export type InssSubmitResult = {
+    id_simulador: string;
+}
+
 export type ConsultaFactaCltResult = {
   success: boolean;
   message: string;
@@ -101,10 +117,16 @@ export type ConsultaFactaFgtsResult = {
   data?: FactaFgtsBalance;
 };
 
-export type ConsultaFactaInssResult = {
+export type GetInssOperationsResult = {
     success: boolean;
     message: string;
-    data?: InssSimulationResult[];
+    data?: InssOperation[];
+};
+
+export type SubmitInssSimulationResult = {
+    success: boolean;
+    message: string;
+    data?: InssSubmitResult;
 };
 
 
@@ -276,8 +298,8 @@ export async function consultarSaldoFgtsFacta(input: z.infer<typeof fgtsConsulta
 }
 
 
-export async function consultarOperacoesInssFacta(input: z.infer<typeof inssConsultaSchema>): Promise<ConsultaFactaInssResult> {
-    const validation = inssConsultaSchema.safeParse(input);
+export async function getInssOperations(input: z.infer<typeof inssGetOperationsSchema>): Promise<GetInssOperationsResult> {
+    const validation = inssGetOperationsSchema.safeParse(input);
     if (!validation.success) {
         return { success: false, message: 'Dados de entrada inválidos: ' + JSON.stringify(validation.error.flatten()) };
     }
@@ -330,6 +352,59 @@ export async function consultarOperacoesInssFacta(input: z.infer<typeof inssCons
     } catch (error) {
         const message = error instanceof Error ? error.message : "Erro de comunicação ao simular operações da Facta.";
         console.error('[FACTA API] Erro na simulação de operações INSS:', error);
+        return { success: false, message };
+    }
+}
+
+export async function submitInssSimulation(input: z.infer<typeof inssSubmitSimulationSchema>): Promise<SubmitInssSimulationResult> {
+    const validation = inssSubmitSimulationSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: 'Dados de entrada inválidos para submissão: ' + JSON.stringify(validation.error.flatten()) };
+    }
+
+    const { userId, ...formData } = validation.data;
+     const { credentials, error: credError } = await getFactaUserCredentials(userId);
+    if (credError || !credentials) {
+        return { success: false, message: credError || "Credenciais não encontradas." };
+    }
+
+    const { token, error: tokenError } = await getFactaAuthToken(credentials.facta_username, credentials.facta_password);
+    if (tokenError || !token) {
+        return { success: false, message: tokenError || "Não foi possível obter o token da Facta" };
+    }
+
+    await logActivity({ userId, documentNumber: formData.cpf, action: 'Confirmação Simulação INSS Facta', provider: 'facta', details: `Tabela: ${formData.codigo_tabela}` });
+
+    try {
+        const body = new URLSearchParams({
+            produto: 'D',
+            tipo_operacao: '33',
+            averbador: '3',
+            convenio: '3',
+            login_certificado: credentials.facta_username!,
+            ...Object.fromEntries(Object.entries(formData).map(([key, value]) => [key, String(value)])),
+        });
+
+        const response = await fetch(`${FACTA_API_BASE_URL_PROD}/proposta/etapa1-simulador`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: body.toString(),
+        });
+
+        const data = await response.json();
+
+        if (data.erro) {
+            return { success: false, message: data.mensagem || 'Erro ao submeter simulação na Facta.' };
+        }
+
+        return { success: true, message: 'Simulação submetida com sucesso.', data };
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro de comunicação ao submeter simulação da Facta.";
+        console.error('[FACTA API] Erro na submissão de simulação INSS:', error);
         return { success: false, message };
     }
 }
