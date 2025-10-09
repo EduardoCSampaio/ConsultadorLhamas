@@ -20,7 +20,7 @@ type UploadResult = {
 // IMPORTANT: This API key is public and for a free, rate-limited service.
 // It's suitable for demonstration purposes. For a production application,
 // you should use a dedicated account and store the key in environment variables.
-const IMGBB_API_KEY = '58a15993365191f64f33168278486064';
+const IMGBB_API_KEY = 'c14b2b6883595d7e52a5140026e6417f';
 const IMGBB_UPLOAD_URL = 'https://api.imgbb.com/1/upload';
 
 export async function uploadImageToImgBB(base64Image: string): Promise<UploadResult> {
@@ -46,7 +46,8 @@ export async function uploadImageToImgBB(base64Image: string): Promise<UploadRes
 
     if (!parsedResponse.success || !parsedResponse.data.success) {
       console.error('ImgBB API Error:', parsedResponse.error || response.data);
-      return { success: false, message: 'A resposta da API de imagem foi inválida.' };
+      const apiErrorMessage = parsedResponse.success ? response.data?.error?.message : 'A resposta da API de imagem foi inválida.';
+      return { success: false, message: apiErrorMessage };
     }
 
     return {
