@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -280,14 +281,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 ))}
             </SidebarMenu>
              <div className="flex items-center gap-3 p-2">
-                <ImageUploadDialog>
-                    <button className="rounded-full outline-none ring-primary/50 focus-visible:ring-2">
-                        <Avatar className="size-8">
-                            {user?.photoURL && <AvatarImage src={user.photoURL} alt="User Avatar" />}
-                            <AvatarFallback>{getInitials(user?.email || '??')}</AvatarFallback>
-                        </Avatar>
-                    </button>
-                </ImageUploadDialog>
+                <Avatar className="size-8">
+                    {user?.photoURL && <AvatarImage src={user.photoURL} alt="User Avatar" />}
+                    <AvatarFallback>{getInitials(user?.email || '??')}</AvatarFallback>
+                </Avatar>
               <div className="flex flex-col text-sm overflow-hidden">
                 <span className="font-medium truncate">{user?.email}</span>
                 <span className="text-xs text-sidebar-foreground/70">{userProfile?.role === 'admin' ? 'Administrador' : 'Usuário'}</span>
@@ -311,3 +308,5 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     </SidebarProvider>
   );
 }
+
+    

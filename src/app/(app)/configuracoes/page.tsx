@@ -19,7 +19,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -30,9 +29,13 @@ import { useToast } from "@/hooks/use-toast";
 import { useUser, useFirestore, useMemoFirebase, useDoc } from "@/firebase";
 import { doc } from "firebase/firestore";
 import { updateApiCredentials, type UserProfile, type ApiCredentials } from "@/app/actions/users";
-import { Loader2, Save, Settings, SlidersHorizontal } from "lucide-react";
+import { Loader2, Save, Settings, SlidersHorizontal, User as UserIcon, Lock, MessageSquare } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useEffect, useState } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ImageUploadDialog } from "@/components/image-upload-dialog";
+
 
 // Schemas for form validation
 const v8FormSchema = z.object({
@@ -136,180 +139,244 @@ export default function ConfiguracoesPage() {
     if (provider === 'facta') setIsFactaSubmitting(false);
   };
   
+  const getInitials = (email = '') => {
+    return email.substring(0, 2).toUpperCase();
+  }
+  
   const isLoading = isUserLoading || isProfileLoading;
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="Configurações das APIs"
-        description="Gerencie suas credenciais para integração com as APIs."
+        title="Configurações"
+        description="Gerencie seu perfil e suas credenciais para integração com as APIs."
       />
       
       {isLoading ? (
         <Card>
             <CardContent className="pt-6">
                 <div className="space-y-4">
-                    <Skeleton className="h-12 w-full" />
-                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-10 w-48" />
+                    <Skeleton className="h-40 w-full" />
                 </div>
             </CardContent>
         </Card>
       ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>Provedores de API</CardTitle>
-            <CardDescription>
-                Clique em um provedor para editar suas credenciais de API.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-             {/* V8 Dialog Trigger */}
-             <Dialog open={isV8ModalOpen} onOpenChange={setIsV8ModalOpen}>
-                <DialogTrigger asChild>
-                    <button className="flex flex-col items-center justify-center gap-4 text-center p-6 border-2 border-dashed rounded-lg hover:border-primary hover:bg-primary/5 transition-colors">
-                        <SlidersHorizontal className="h-10 w-10 text-primary" />
-                        <h3 className="text-xl font-bold tracking-tight">
-                            API V8
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                            Credenciais para consulta de saldo FGTS e Crédito Privado CLT.
-                        </p>
-                    </button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>Credenciais da API V8</DialogTitle>
-                        <DialogDescription>
-                            Para consulta de saldo FGTS e Crédito Privado CLT (V8).
-                        </DialogDescription>
-                    </DialogHeader>
-                    <Form {...v8Form}>
-                      <form onSubmit={v8Form.handleSubmit((values) => handleSave(values, 'v8'))} className="space-y-4 pt-4">
-                          <FormField
-                            control={v8Form.control}
-                            name="v8_username"
-                            render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>V8 Username</FormLabel>
-                                <FormControl>
-                                <Input placeholder="seu_usuario_v8" {...field} disabled={isV8Submitting}/>
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={v8Form.control}
-                            name="v8_password"
-                            render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>V8 Password</FormLabel>
-                                <FormControl>
-                                <Input type="password" placeholder="********" {...field} disabled={isV8Submitting} />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={v8Form.control}
-                            name="v8_audience"
-                            render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>V8 Audience</FormLabel>
-                                <FormControl>
-                                <Input placeholder="https://audiencia.v8.com" {...field} disabled={isV8Submitting} />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={v8Form.control}
-                            name="v8_client_id"
-                            render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>V8 Client ID</FormLabel>
-                                <FormControl>
-                                <Input placeholder="client_id_da_v8" {...field} disabled={isV8Submitting} />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                            )}
-                          />
-                          <DialogFooter className="pt-4">
-                              <Button type="button" variant="outline" onClick={() => setIsV8ModalOpen(false)}>Cancelar</Button>
-                              <Button type="submit" disabled={isV8Submitting}>
-                                  {isV8Submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                                  Salvar
-                              </Button>
-                          </DialogFooter>
-                      </form>
-                    </Form>
-                </DialogContent>
-             </Dialog>
+        <Tabs defaultValue="perfil">
+            <TabsList className="grid w-full grid-cols-2 max-w-md">
+                <TabsTrigger value="perfil">Perfil</TabsTrigger>
+                <TabsTrigger value="apis">APIs</TabsTrigger>
+            </TabsList>
+            <TabsContent value="perfil">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Configurações de Perfil</CardTitle>
+                        <CardDescription>Gerencie sua conta e aparência no sistema.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        <div className="flex items-center gap-4 p-4 border rounded-lg">
+                            <Avatar className="h-16 w-16">
+                                {user?.photoURL && <AvatarImage src={user.photoURL} alt="User Avatar" />}
+                                <AvatarFallback className="text-xl">{getInitials(user?.email || '??')}</AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1">
+                                <h3 className="font-semibold">{user?.email}</h3>
+                                <p className="text-sm text-muted-foreground">{userProfile?.role === 'admin' ? 'Administrador' : 'Usuário'}</p>
+                            </div>
+                            <ImageUploadDialog>
+                                <Button variant="outline">Alterar Foto</Button>
+                            </ImageUploadDialog>
+                        </div>
 
-             {/* Facta Dialog Trigger */}
-             <Dialog open={isFactaModalOpen} onOpenChange={setIsFactaModalOpen}>
-                <DialogTrigger asChild>
-                     <button className="flex flex-col items-center justify-center gap-4 text-center p-6 border-2 border-dashed rounded-lg hover:border-primary hover:bg-primary/5 transition-colors">
-                        <SlidersHorizontal className="h-10 w-10 text-primary" />
-                        <h3 className="text-xl font-bold tracking-tight">
-                            API Facta
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                            Credenciais para consulta de Crédito Privado CLT.
-                        </p>
-                    </button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>Credenciais da API Facta</DialogTitle>
-                        <DialogDescription>
-                            Para consulta de Crédito Privado CLT (Facta).
-                        </DialogDescription>
-                    </DialogHeader>
-                    <Form {...factaForm}>
-                        <form onSubmit={factaForm.handleSubmit((values) => handleSave(values, 'facta'))} className="space-y-4 pt-4">
-                           <FormField
-                              control={factaForm.control}
-                              name="facta_username"
-                              render={({ field }) => (
-                              <FormItem>
-                                  <FormLabel>Facta Username</FormLabel>
-                                  <FormControl>
-                                  <Input placeholder="seu_usuario_facta" {...field} disabled={isFactaSubmitting}/>
-                                  </FormControl>
-                                  <FormMessage />
-                              </FormItem>
-                              )}
-                           />
-                           <FormField
-                              control={factaForm.control}
-                              name="facta_password"
-                              render={({ field }) => (
-                              <FormItem>
-                                  <FormLabel>Facta Password</FormLabel>
-                                  <FormControl>
-                                  <Input type="password" placeholder="********" {...field} disabled={isFactaSubmitting} />
-                                  </FormControl>
-                                  <FormMessage />
-                              </FormItem>
-                              )}
-                           />
-                           <DialogFooter className="pt-4">
-                                <Button type="button" variant="outline" onClick={() => setIsFactaModalOpen(false)}>Cancelar</Button>
-                                <Button type="submit" disabled={isFactaSubmitting}>
-                                    {isFactaSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                                    Salvar
-                                </Button>
-                           </DialogFooter>
-                        </form>
-                    </Form>
-                </DialogContent>
-             </Dialog>
-          </CardContent>
-        </Card>
+                         <Card>
+                            <CardHeader className="flex flex-row items-center gap-4">
+                                <Lock className="h-6 w-6 text-muted-foreground"/>
+                                <div>
+                                    <CardTitle className="text-lg font-headline">Alterar Senha</CardTitle>
+                                    <CardDescription className="text-xs">Altere sua senha de acesso.</CardDescription>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                               <Button disabled>Alterar Senha</Button>
+                               <p className="text-xs text-muted-foreground mt-2">Funcionalidade em breve.</p>
+                            </CardContent>
+                        </Card>
+                        
+                        <Card>
+                            <CardHeader className="flex flex-row items-center gap-4">
+                                <MessageSquare className="h-6 w-6 text-muted-foreground"/>
+                                <div>
+                                    <CardTitle className="text-lg font-headline">Solicitações ao Admin</CardTitle>
+                                    <CardDescription className="text-xs">Envie solicitações para o administrador do sistema.</CardDescription>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                               <Button disabled>Nova Solicitação</Button>
+                               <p className="text-xs text-muted-foreground mt-2">Funcionalidade em breve.</p>
+                            </CardContent>
+                        </Card>
+
+                    </CardContent>
+                </Card>
+            </TabsContent>
+            <TabsContent value="apis">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Provedores de API</CardTitle>
+                    <CardDescription>
+                        Clique em um provedor para editar suas credenciais de API.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     {/* V8 Dialog Trigger */}
+                     <Dialog open={isV8ModalOpen} onOpenChange={setIsV8ModalOpen}>
+                        <DialogTrigger asChild>
+                            <button className="flex flex-col items-center justify-center gap-4 text-center p-6 border-2 border-dashed rounded-lg hover:border-primary hover:bg-primary/5 transition-colors">
+                                <SlidersHorizontal className="h-10 w-10 text-primary" />
+                                <h3 className="text-xl font-bold tracking-tight">
+                                    API V8
+                                </h3>
+                                <p className="text-sm text-muted-foreground">
+                                    Credenciais para consulta de saldo FGTS e Crédito Privado CLT.
+                                </p>
+                            </button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-md">
+                            <DialogHeader>
+                                <DialogTitle>Credenciais da API V8</DialogTitle>
+                                <DialogDescription>
+                                    Para consulta de saldo FGTS e Crédito Privado CLT (V8).
+                                </DialogDescription>
+                            </DialogHeader>
+                            <Form {...v8Form}>
+                              <form onSubmit={v8Form.handleSubmit((values) => handleSave(values, 'v8'))} className="space-y-4 pt-4">
+                                  <FormField
+                                    control={v8Form.control}
+                                    name="v8_username"
+                                    render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>V8 Username</FormLabel>
+                                        <FormControl>
+                                        <Input placeholder="seu_usuario_v8" {...field} disabled={isV8Submitting}/>
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                  />
+                                  <FormField
+                                    control={v8Form.control}
+                                    name="v8_password"
+                                    render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>V8 Password</FormLabel>
+                                        <FormControl>
+                                        <Input type="password" placeholder="********" {...field} disabled={isV8Submitting} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                  />
+                                  <FormField
+                                    control={v8Form.control}
+                                    name="v8_audience"
+                                    render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>V8 Audience</FormLabel>
+                                        <FormControl>
+                                        <Input placeholder="https://audiencia.v8.com" {...field} disabled={isV8Submitting} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                  />
+                                  <FormField
+                                    control={v8Form.control}
+                                    name="v8_client_id"
+                                    render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>V8 Client ID</FormLabel>
+                                        <FormControl>
+                                        <Input placeholder="client_id_da_v8" {...field} disabled={isV8Submitting} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                  />
+                                  <DialogFooter className="pt-4">
+                                      <Button type="button" variant="outline" onClick={() => setIsV8ModalOpen(false)}>Cancelar</Button>
+                                      <Button type="submit" disabled={isV8Submitting}>
+                                          {isV8Submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                                          Salvar
+                                      </Button>
+                                  </DialogFooter>
+                              </form>
+                            </Form>
+                        </DialogContent>
+                     </Dialog>
+
+                     {/* Facta Dialog Trigger */}
+                     <Dialog open={isFactaModalOpen} onOpenChange={setIsFactaModalOpen}>
+                        <DialogTrigger asChild>
+                             <button className="flex flex-col items-center justify-center gap-4 text-center p-6 border-2 border-dashed rounded-lg hover:border-primary hover:bg-primary/5 transition-colors">
+                                <SlidersHorizontal className="h-10 w-10 text-primary" />
+                                <h3 className="text-xl font-bold tracking-tight">
+                                    API Facta
+                                </h3>
+                                <p className="text-sm text-muted-foreground">
+                                    Credenciais para consulta de Crédito Privado CLT.
+                                </p>
+                            </button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-md">
+                            <DialogHeader>
+                                <DialogTitle>Credenciais da API Facta</DialogTitle>
+                                <DialogDescription>
+                                    Para consulta de Crédito Privado CLT (Facta).
+                                </DialogDescription>
+                            </DialogHeader>
+                            <Form {...factaForm}>
+                                <form onSubmit={factaForm.handleSubmit((values) => handleSave(values, 'facta'))} className="space-y-4 pt-4">
+                                   <FormField
+                                      control={factaForm.control}
+                                      name="facta_username"
+                                      render={({ field }) => (
+                                      <FormItem>
+                                          <FormLabel>Facta Username</FormLabel>
+                                          <FormControl>
+                                          <Input placeholder="seu_usuario_facta" {...field} disabled={isFactaSubmitting}/>
+                                          </FormControl>
+                                          <FormMessage />
+                                      </FormItem>
+                                      )}
+                                   />
+                                   <FormField
+                                      control={factaForm.control}
+                                      name="facta_password"
+                                      render={({ field }) => (
+                                      <FormItem>
+                                          <FormLabel>Facta Password</FormLabel>
+                                          <FormControl>
+                                          <Input type="password" placeholder="********" {...field} disabled={isFactaSubmitting} />
+                                          </FormControl>
+                                          <FormMessage />
+                                      </FormItem>
+                                      )}
+                                   />
+                                   <DialogFooter className="pt-4">
+                                        <Button type="button" variant="outline" onClick={() => setIsFactaModalOpen(false)}>Cancelar</Button>
+                                        <Button type="submit" disabled={isFactaSubmitting}>
+                                            {isFactaSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                                            Salvar
+                                        </Button>
+                                   </DialogFooter>
+                                </form>
+                            </Form>
+                        </DialogContent>
+                     </Dialog>
+                  </CardContent>
+                </Card>
+            </TabsContent>
+        </Tabs>
       )}
     </div>
   );
