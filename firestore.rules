@@ -1,63 +1,68 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
-    function isAdmin() {
-      return request.auth.token.admin == true;
-    }
-    
+    // Função auxiliar para verificar se o usuário é o dono do recurso
     function isOwner(userId) {
-      return request.auth.uid == userId;
+      return request.auth != null && request.auth.uid == userId;
     }
 
-    // Matches any document in the 'users' collection.
+    // Função auxiliar para verificar se o usuário tem a role 'admin'
+    // no seu documento da coleção /users.
+    function isUserAdmin() {
+      return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Usuários só podem ler e escrever seus próprios perfis.
     match /users/{userId} {
-      // Only the authenticated user can read or write to their own profile.
-      allow read, write: if isOwner(userId);
+      allow read, update, delete: if isOwner(userId);
+      allow create: if request.auth != null;
     }
     
-    // Matches any document in the 'activityLogs' collection.
+    // Admins podem ler todos os usuários.
+    match /users/{userId} {
+        allow list: if isUserAdmin();
+    }
+
+    // Logs de atividade: Admins podem ler tudo, usuários podem ler apenas os seus.
     match /activityLogs/{logId} {
-        // Admins can read all logs. Users can read their own.
-        allow list: if isAdmin() || (request.query.where.userId == request.auth.uid);
-        allow get: if isAdmin() || isOwner(resource.data.userId);
-        // Only backend can create logs
-        allow create: if false;
-        allow update, delete: if false;
+        allow read: if isUserAdmin() || (isOwner(resource.data.userId));
+        allow create: if request.auth != null;
+    }
+
+    // Lotes: Usuários só podem interagir com seus próprios lotes. Admins podem ver todos.
+    match /batches/{batchId} {
+        allow read, write, delete: if isUserAdmin() || isOwner(resource.data.userId);
+        allow create: if request.auth != null;
     }
     
-     // Matches any document in the 'batches' collection.
-    match /batches/{batchId} {
-        // Users can only read/write their own batches
-        allow read, write: if isOwner(resource.data.userId);
+    // Webhook: Acesso liberado para escrita externa, mas restrito para leitura.
+    match /webhookResponses/{responseId} {
+        allow write: if true; // Aberto para a API externa escrever
+        allow read: if isUserAdmin(); // Apenas admins podem ler as respostas
     }
 
-    // Matches any document in the 'tickets' collection.
+    // Chamados (Tickets) e suas Mensagens
     match /tickets/{ticketId} {
-      // CREATE: Any authenticated user can create a ticket for themselves.
-      allow create: if request.auth != null && isOwner(request.resource.data.userId);
-      
-      // READ, UPDATE: Allow if the user is the owner or an admin.
-      allow read, update: if isAdmin() || (resource.data.userId == request.auth.uid);
-      
-      // DELETE: Only admins can delete tickets.
-      allow delete: if isAdmin();
+      // Qualquer usuário autenticado pode criar um chamado.
+      allow create: if request.auth != null;
 
-      // Subcollection: messages
+      // Leitura e atualização: Permitido se for o dono do ticket OU se for admin.
+      allow read, update: if isOwner(resource.data.userId) || isUserAdmin();
+
+      // Mensagens dentro de um chamado
       match /messages/{messageId} {
-        // READ, WRITE: Allow if user has access to the parent ticket.
-        // This rule is inherited, but we make it explicit for clarity.
-        allow read, write: if exists(/databases/$(database)/documents/tickets/$(ticketId)) && (
-          (get(/databases/$(database)/documents/tickets/$(ticketId)).data.userId == request.auth.uid) || isAdmin()
-        );
+        // Leitura e escrita: Permitido se o usuário tem permissão para ler o ticket pai.
+        allow read, write: if (exists(/databases/$(database)/documents/tickets/$(ticketId)) && 
+                              (isOwner(get(/databases/$(database)/documents/tickets/$(ticketId)).data.userId) || isUserAdmin()));
       }
     }
     
-    // Default deny all other collections/documents
-    match /{document=**} {
-      allow read, write: if false;
+    // Contadores internos (como o de tickets) só podem ser acessados pelo backend.
+    match /internal/{docId} {
+        allow read, write: if false;
     }
   }
 }
