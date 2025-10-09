@@ -1,4 +1,3 @@
-
 'use server';
 
 import { z } from 'zod';
@@ -280,6 +279,14 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
 
   try {
       await batchRef.set(batchData);
+
+      await logActivity({
+          userId: userId,
+          action: `Consulta FGTS em Lote (Excel)`,
+          provider: displayProvider,
+          details: `Arquivo: ${fileName} (${cpfs.length} CPFs)`
+      });
+
   } catch(error) {
     const message = error instanceof Error ? error.message : "Erro ao iniciar o lote no Firestore.";
     console.error("Batch init error:", message);
@@ -341,6 +348,7 @@ async function processV8BatchInBackground(batchId: string) {
                 provider: v8Provider,
                 batchId: batchId
             });
+            // We don't log individual CPFs for batch jobs anymore to reduce noise
         }
         
         await batchRef.update({ 
@@ -384,7 +392,6 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
         // Find which CPFs were NOT processed successfully
         const webhookResponsesSnapshot = await firestore.collection('webhookResponses')
             .where('batchId', '==', batchId)
-            // We only care about successful responses
             .where('status', '==', 'success') 
             .get();
         
@@ -393,7 +400,6 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
              if (originalBatchData.provider.toLowerCase() === 'facta') {
                  return docId.replace('facta-', '');
              }
-             // For V8, the docId is the CPF itself
              return docId;
         }));
 
@@ -422,7 +428,6 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
         const result = await processarLoteFgts(newBatchAction);
 
         if (result.status === 'success') {
-            // Optionally, mark the old batch as 'reprocessed' or something similar
             await originalBatchRef.update({ 
                 message: `Lote substituído por um novo lote de reprocessamento: ${result.batch?.id}`
             });
@@ -581,4 +586,3 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         message: 'Relatório gerado com sucesso.',
     };
 }
-

@@ -1,4 +1,3 @@
-
 'use server';
 
 import { z } from 'zod';
@@ -149,13 +148,17 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   };
 
   try {
-    await logActivity({
-        userId: userId,
-        action: `Consulta FGTS - V8`,
-        documentNumber: documentNumber,
-        provider: 'V8DIGITAL',
-        details: `Parceiro: ${provider}`
-    });
+    // Log activity only for manual queries, batch queries are logged once per file.
+    if (!batchId) {
+      await logActivity({
+          userId: userId,
+          action: `Consulta FGTS - V8`,
+          documentNumber: documentNumber,
+          provider: 'V8DIGITAL',
+          details: `Parceiro: ${provider}`
+      });
+    }
+
 
     // Fire-and-forget the consultation request
     fetch(API_URL_CONSULTA, {

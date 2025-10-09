@@ -271,6 +271,27 @@
         "parcela": { "type": "number" }
       },
       "required": ["tabela", "taxa", "prazo", "codigoTabela", "contrato", "parcela"]
+    },
+    "InssCreditOffer": {
+      "title": "INSS Credit Offer",
+      "description": "Represents an INSS new credit or margin complement offer from Facta.",
+      "type": "object",
+      "properties": {
+        "convenio": { "type": "string" },
+        "idConvenio": { "type": "number" },
+        "averbador": { "type": "string" },
+        "tabela": { "type": "string" },
+        "taxa": { "type": "number" },
+        "prazo": { "type": "number" },
+        "tipoop": { "type": "number" },
+        "tipoOperacao": { "type": "string" },
+        "codigoTabela": { "type": "number" },
+        "coeficiente": { "type": "number" },
+        "primeiro_vencimento": { "type": ["string", "null"] },
+        "contrato": { "type": "number" },
+        "parcela": { "type": "number" }
+      },
+      "required": ["tabela", "taxa", "prazo", "codigoTabela", "contrato", "parcela"]
     }
   },
   "auth": {
