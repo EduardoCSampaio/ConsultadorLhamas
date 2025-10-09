@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useUser, useFirebase } from '@/firebase';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { updateProfile } from 'firebase/auth';
 import { doc, updateDoc } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,7 @@ import Image from 'next/image';
 
 export function ImageUploadDialog({ children }: { children: React.ReactNode }) {
   const { user } = useUser();
-  const { auth, firestore } = useFirebase();
+  const { auth, firestore, storage } = useFirebase();
   const { toast } = useToast();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -44,11 +44,11 @@ export function ImageUploadDialog({ children }: { children: React.ReactNode }) {
   });
 
   const handleUpload = async () => {
-    if (!file || !user || !auth) {
+    if (!file || !user || !auth || !storage || !firestore) {
       toast({
         variant: 'destructive',
         title: 'Erro',
-        description: 'Nenhum arquivo selecionado ou usuário não autenticado.',
+        description: 'Nenhum arquivo selecionado ou serviços indisponíveis.',
       });
       return;
     }
@@ -56,7 +56,6 @@ export function ImageUploadDialog({ children }: { children: React.ReactNode }) {
     setIsUploading(true);
 
     try {
-      const storage = getStorage(auth.app);
       const storageRef = ref(storage, `profile-pictures/${user.uid}/${file.name}`);
 
       // Upload file
@@ -67,10 +66,9 @@ export function ImageUploadDialog({ children }: { children: React.ReactNode }) {
       await updateProfile(user, { photoURL: downloadURL });
       
       // Update Firestore user document
-      if (firestore) {
-        const userDocRef = doc(firestore, 'users', user.uid);
-        await updateDoc(userDocRef, { photoURL: downloadURL });
-      }
+      const userDocRef = doc(firestore, 'users', user.uid);
+      await updateDoc(userDocRef, { photoURL: downloadURL });
+      
 
       toast({
         title: 'Sucesso!',
@@ -95,13 +93,17 @@ export function ImageUploadDialog({ children }: { children: React.ReactNode }) {
   };
 
   const handleClose = () => {
+    // Prevent closing while uploading
+    if (isUploading) return;
     setFile(null);
     setPreview(null);
     setIsOpen(false);
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={(open) => {
+      if (!isUploading) setIsOpen(open);
+    }}>
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="sm:max-w-md" onInteractOutside={(e) => {
         if(isUploading) e.preventDefault();
