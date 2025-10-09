@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from "react";
+import Link from 'next/link';
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -247,7 +248,7 @@ export default function ChamadosPage() {
                                         </p>
                                    </div>
                                    <Button variant="outline" size="sm" asChild>
-                                        <a href="#">Ver Detalhes</a>
+                                        <Link href={`/chamados/${ticket.id}`}>Ver Chamado</Link>
                                    </Button>
                                </div>
                            ))}

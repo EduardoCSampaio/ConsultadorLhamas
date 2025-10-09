@@ -1,4 +1,3 @@
-
 'use server';
 
 import { z } from 'zod';
@@ -16,6 +15,19 @@ const getTicketsSchema = z.object({
     userId: z.string().min(1),
 });
 
+const getTicketByIdSchema = z.object({
+    ticketId: z.string().min(1),
+});
+
+const addMessageSchema = z.object({
+    ticketId: z.string().min(1),
+    userId: z.string().min(1),
+    userEmail: z.string().email(),
+    isAdmin: z.boolean(),
+    content: z.string().min(1).max(2000),
+});
+
+
 export type Ticket = {
     id: string;
     ticketNumber: string;
@@ -27,6 +39,15 @@ export type Ticket = {
     updatedAt: string; // ISO String
     lastMessage?: string;
 };
+
+export type TicketMessage = {
+    id: string;
+    senderId: string;
+    senderEmail: string;
+    content: string;
+    createdAt: string; // ISO string
+};
+
 
 type CreateTicketResult = {
   success: boolean;
@@ -40,6 +61,18 @@ type GetTicketsResult = {
     error?: string;
 };
 
+type GetTicketResult = {
+    success: boolean;
+    ticket?: Ticket;
+    error?: string;
+};
+
+type AddMessageResult = {
+    success: boolean;
+    message: string;
+};
+
+
 function toISODate(timestamp: Timestamp | string | Date | undefined): string {
     if (!timestamp) return new Date().toISOString();
     if (timestamp instanceof Timestamp) {
@@ -52,6 +85,7 @@ function toISODate(timestamp: Timestamp | string | Date | undefined): string {
 }
 
 async function getNextTicketNumber(): Promise<string> {
+    initializeFirebaseAdmin();
     const firestore = getFirestore();
     const counterRef = firestore.collection('internal').doc('ticketCounter');
     
@@ -145,12 +179,10 @@ export async function getTicketsForUser(input: z.infer<typeof getTicketsSchema>)
 
         let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> = firestore.collection('tickets');
 
-        // If the user is not an admin, filter tickets by their user ID.
         if (!isAdmin) {
             query = query.where('userId', '==', input.userId);
         }
         
-        // Fetch without ordering to avoid needing a composite index.
         const ticketsSnapshot = await query.get();
 
         if (ticketsSnapshot.empty) {
@@ -172,7 +204,6 @@ export async function getTicketsForUser(input: z.infer<typeof getTicketsSchema>)
             } as Ticket;
         });
         
-        // Sort in memory after fetching.
         tickets.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
 
@@ -181,5 +212,86 @@ export async function getTicketsForUser(input: z.infer<typeof getTicketsSchema>)
         const message = error instanceof Error ? error.message : "Ocorreu um erro ao buscar seus chamados.";
         console.error(`getTicketsForUser error for user ${input.userId}:`, error);
         return { success: false, error: message };
+    }
+}
+
+export async function getTicketById(input: z.infer<typeof getTicketByIdSchema>): Promise<GetTicketResult> {
+    const validation = getTicketByIdSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, error: "ID de chamado inválido." };
+    }
+    try {
+        initializeFirebaseAdmin();
+        const firestore = getFirestore();
+        const ticketDoc = await firestore.collection('tickets').doc(input.ticketId).get();
+
+        if (!ticketDoc.exists) {
+            return { success: false, error: 'Chamado não encontrado.' };
+        }
+
+        const data = ticketDoc.data()!;
+        const ticket: Ticket = {
+            id: ticketDoc.id,
+            ticketNumber: data.ticketNumber,
+            userId: data.userId,
+            userEmail: data.userEmail,
+            title: data.title,
+            status: data.status,
+            createdAt: toISODate(data.createdAt),
+            updatedAt: toISODate(data.updatedAt),
+            lastMessage: data.lastMessage,
+        };
+
+        return { success: true, ticket };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro ao buscar o chamado.";
+        console.error("getTicketById error:", error);
+        return { success: false, error: message };
+    }
+}
+
+export async function addMessageToTicket(input: z.infer<typeof addMessageSchema>): Promise<AddMessageResult> {
+    const validation = addMessageSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: "Dados da mensagem inválidos." };
+    }
+    
+    const { ticketId, userId, userEmail, isAdmin, content } = validation.data;
+
+    try {
+        initializeFirebaseAdmin();
+        const firestore = getFirestore();
+        const ticketRef = firestore.collection('tickets').doc(ticketId);
+        const messageRef = ticketRef.collection('messages').doc();
+
+        const now = FieldValue.serverTimestamp();
+
+        const newMessageData = {
+            senderId: userId,
+            senderEmail: userEmail,
+            content: content,
+            createdAt: now,
+        };
+
+        const ticketUpdates: { [key: string]: any } = {
+            updatedAt: now,
+            lastMessage: content,
+        };
+
+        const ticketDoc = await ticketRef.get();
+        if (ticketDoc.exists && ticketDoc.data()?.status === 'aberto' && isAdmin) {
+            ticketUpdates.status = 'em_atendimento';
+        }
+        
+        const batch = firestore.batch();
+        batch.set(messageRef, newMessageData);
+        batch.update(ticketRef, ticketUpdates);
+        await batch.commit();
+
+        return { success: true, message: 'Mensagem enviada com sucesso.' };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro ao enviar mensagem.";
+        console.error("addMessageToTicket error:", error);
+        return { success: false, message };
     }
 }
