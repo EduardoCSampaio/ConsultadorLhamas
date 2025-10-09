@@ -357,7 +357,7 @@ export async function getInssOperations(input: z.infer<typeof inssGetOperationsS
         url.searchParams.append('cpf', cpf);
         url.searchParams.append('data_nascimento', data_nascimento);
         url.searchParams.append('valor_renda', String(valor_renda));
-        url.searchParams.append('valor', ''); // Explicitly empty as per correction
+        url.searchParams.append('valor', ''); // Explicitly empty for this operation type
 
         const response = await fetch(url.toString(), {
             method: 'GET',
@@ -393,8 +393,8 @@ export async function submitInssSimulation(input: z.infer<typeof inssSubmitSimul
 
     const { userId, ...formData } = validation.data;
      const { credentials, error: credError } = await getFactaUserCredentials(userId);
-    if (credError || !credentials) {
-        return { success: false, message: credError || "Credenciais não encontradas." };
+    if (credError || !credentials || !credentials.facta_username) {
+        return { success: false, message: credError || "Credenciais não encontradas ou incompletas." };
     }
 
     const { token, error: tokenError } = await getFactaAuthToken(credentials.facta_username, credentials.facta_password);
@@ -410,7 +410,7 @@ export async function submitInssSimulation(input: z.infer<typeof inssSubmitSimul
             tipo_operacao: '33',
             averbador: '3',
             convenio: '3',
-            login_certificado: credentials.facta_username!,
+            login_certificado: credentials.facta_username,
             ...Object.fromEntries(Object.entries(formData).map(([key, value]) => [key, String(value)])),
         });
 
