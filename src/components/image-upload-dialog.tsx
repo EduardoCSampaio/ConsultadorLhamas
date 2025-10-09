@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { useDropzone } from 'react-dropzone';
+import { useDropzone, FileRejection } from 'react-dropzone';
 import { useUser, useFirebase } from '@/firebase';
 import { updateProfile } from 'firebase/auth';
 import { Button } from '@/components/ui/button';
@@ -51,10 +51,32 @@ export function ImageUploadDialog({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const onDropRejected = useCallback((fileRejections: FileRejection[]) => {
+    const error = fileRejections[0]?.errors[0];
+    if (error) {
+        if (error.code === 'file-too-large') {
+            toast({
+                variant: 'destructive',
+                title: 'Arquivo muito grande',
+                description: 'Por favor, selecione uma imagem com menos de 5MB.'
+            });
+        } else {
+             toast({
+                variant: 'destructive',
+                title: 'Erro no arquivo',
+                description: 'Não foi possível usar este arquivo. Verifique o tipo ou tente outro.'
+            });
+        }
+    }
+  }, [toast]);
+
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
+    onDropRejected,
     accept: { 'image/*': ['.jpeg', '.png', '.jpg', '.gif'] },
     multiple: false,
+    maxSize: 5 * 1024 * 1024, // 5MB
   });
 
   const handleUpload = async () => {
@@ -99,7 +121,15 @@ export function ImageUploadDialog({ children }: { children: React.ReactNode }) {
 
     } catch (error) {
       console.error('Error uploading image:', error);
-      const message = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
+      
+      let message = 'Ocorreu um erro desconhecido.';
+      if (error instanceof Error) {
+        if (error.message.includes('storage/unauthorized')) {
+          message = 'Permissão negada. Verifique as regras de segurança do Firebase Storage.';
+        } else {
+          message = error.message;
+        }
+      }
       
       toast({
         variant: 'destructive',
@@ -129,7 +159,7 @@ export function ImageUploadDialog({ children }: { children: React.ReactNode }) {
         <DialogHeader>
           <DialogTitle>Alterar Foto de Perfil</DialogTitle>
           <DialogDescription>
-            Selecione uma nova imagem para o seu perfil.
+            Selecione uma nova imagem para o seu perfil (máx. 5MB).
           </DialogDescription>
         </DialogHeader>
         <div className="py-4">
