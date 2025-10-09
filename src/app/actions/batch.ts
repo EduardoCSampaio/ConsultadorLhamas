@@ -213,7 +213,7 @@ async function processFactaBatchInBackground(batchId: string) {
                 await docRef.set(responseData, { merge: true });
             } catch (cpfError) {
                 const message = cpfError instanceof Error ? cpfError.message : "Erro desconhecido ao processar CPF.";
-                await docRef.set({ status: 'error', message, batchId: batchId }, { merge: true });
+                await docRef.set({ status: 'error', message, batchId: batchId, provider: 'facta' }, { merge: true });
             }
         });
 
@@ -258,7 +258,7 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
   
   const batchId = `batch-${displayProvider}-${v8Provider || ''}-${Date.now()}-${userId.substring(0, 5)}`;
   const batchRef = firestore.collection('batches').doc(batchId);
-
+  
   const baseBatchData = {
       fileName: fileName,
       provider: displayProvider,
@@ -271,8 +271,8 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
       userEmail: userEmail,
   };
   
-  const batchData = provider === 'v8' 
-    ? { ...baseBatchData, v8Provider: v8Provider! }
+  const batchData = provider === 'v8' && v8Provider 
+    ? { ...baseBatchData, v8Provider: v8Provider }
     : baseBatchData;
 
 
@@ -552,3 +552,5 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         message: 'Relatório gerado com sucesso.',
     };
 }
+
+    
