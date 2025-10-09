@@ -50,9 +50,6 @@ export default function EsteiraPage() {
 
     useEffect(() => {
         fetchBatches();
-        // Check for updates more frequently now that processing is automatic
-        const intervalId = setInterval(() => fetchBatches(false), 10000); 
-        return () => clearInterval(intervalId);
     }, [fetchBatches]);
     
     const handleDownloadReport = async (batch: BatchJob) => {
