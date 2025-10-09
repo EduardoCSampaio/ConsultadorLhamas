@@ -3,8 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useUser, useFirebase } from '@/firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { updateProfile, FirebaseError } from 'firebase/auth';
+import { updateProfile } from 'firebase/auth';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -19,10 +18,25 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, UploadCloud, Image as ImageIcon } from 'lucide-react';
 import Image from 'next/image';
 import { updateUserPhotoURL } from '@/app/actions/users';
+import { uploadImageToImgBB } from '@/app/actions/image';
+
+
+// Helper to convert file to base64
+const toBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+        // Result is "data:image/jpeg;base64,LzlqLzRBQ...". We only need the part after the comma.
+        const result = reader.result as string;
+        resolve(result.split(',')[1]);
+    };
+    reader.onerror = error => reject(error);
+});
+
 
 export function ImageUploadDialog({ children }: { children: React.ReactNode }) {
   const { user } = useUser();
-  const { auth, storage } = useFirebase();
+  const { auth } = useFirebase();
   const { toast } = useToast();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -44,11 +58,11 @@ export function ImageUploadDialog({ children }: { children: React.ReactNode }) {
   });
 
   const handleUpload = async () => {
-    if (!file || !user || !auth?.currentUser || !storage) {
+    if (!file || !user || !auth?.currentUser) {
       toast({
         variant: 'destructive',
         title: 'Erro',
-        description: 'Nenhum arquivo selecionado ou serviços indisponíveis.',
+        description: 'Nenhum arquivo selecionado ou usuário não autenticado.',
       });
       return;
     }
@@ -56,19 +70,27 @@ export function ImageUploadDialog({ children }: { children: React.ReactNode }) {
     setIsUploading(true);
 
     try {
-      const storageRef = ref(storage, `profile-pictures/${user.uid}`);
-      const snapshot = await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(snapshot.ref);
+      // 1. Convert file to Base64
+      const base64Image = await toBase64(file);
+      
+      // 2. Upload to ImgBB via Server Action
+      const uploadResult = await uploadImageToImgBB(base64Image);
 
-      // Update Firebase Auth user profile
+      if (!uploadResult.success || !uploadResult.url) {
+        throw new Error(uploadResult.message || 'Falha no upload para o ImgBB.');
+      }
+      
+      const downloadURL = uploadResult.url;
+
+      // 3. Update Firebase Auth user profile
       await updateProfile(auth.currentUser, { photoURL: downloadURL });
       
-      // Update Firestore user document via Server Action
+      // 4. Update Firestore user document via Server Action
       await updateUserPhotoURL({ uid: user.uid, photoURL: downloadURL });
 
       toast({
         title: 'Sucesso!',
-        description: 'Sua foto de perfil foi atualizada. A alteração pode levar alguns instantes para ser exibida.',
+        description: 'Sua foto de perfil foi atualizada.',
       });
 
       setFile(null);
@@ -77,23 +99,12 @@ export function ImageUploadDialog({ children }: { children: React.ReactNode }) {
 
     } catch (error) {
       console.error('Error uploading image:', error);
-      let title = 'Erro no Upload';
-      let description = 'Ocorreu um erro desconhecido ao tentar enviar a imagem.';
-
-      if (error instanceof FirebaseError) {
-        if (error.code === 'storage/unauthorized') {
-            title = 'Permissão Negada';
-            description = 'Você não tem permissão para enviar arquivos. Verifique as regras de segurança do Firebase Storage.';
-        } else if (error.code === 'storage/object-not-found') {
-            title = 'Erro de Configuração';
-            description = 'O bucket de armazenamento não foi encontrado. Verifique sua configuração do Firebase.';
-        }
-      }
+      const message = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido.';
       
       toast({
         variant: 'destructive',
-        title: title,
-        description: description,
+        title: 'Erro no Upload',
+        description: message,
       });
     } finally {
       setIsUploading(false);
