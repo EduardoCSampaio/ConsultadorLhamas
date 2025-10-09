@@ -331,7 +331,7 @@ async function processV8BatchInBackground(batchId: string) {
              consultarSaldoV8({ 
                 documentNumber: cpf, 
                 userId, 
-                userEmail, 
+                userEmail, // Pass the userEmail here
                 token: authToken, 
                 provider: v8Provider,
                 batchId: batchId
@@ -541,3 +541,5 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         message: 'Relatório gerado com sucesso.',
     };
 }
+
+    

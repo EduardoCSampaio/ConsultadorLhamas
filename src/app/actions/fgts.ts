@@ -304,3 +304,5 @@ export async function consultarSaldoManual(input: z.infer<typeof manualActionSch
 
     return { balances: finalBalances };
 }
+
+    
