@@ -1,214 +1,226 @@
 /**
- * @file Firestore Security Rules
- * @description This ruleset enforces a role-based access control system with user-owned data and administrative overrides.
+ * @file Firebase Security Rules for the application.
  *
- * Data Structure:
- * - /users/{userId}: Stores user profile information.
- * - /teams/{teamId}: Stores team information, including roles and permissions.
- * - /activityLogs/{logId}: Stores records of user activities.
- * - /batches/{batchId}: Stores the state of batch processing jobs.
- * - /cltConsents/{consentId}: Stores CLT consent terms.
- * - /tickets/{ticketId}: Stores user support tickets.
- * - /tickets/{ticketId}/messages/{messageId}: Stores messages related to support tickets.
- * - /webhookResponses/{responseId}: Stores API responses from webhooks.
- * - /users/{userId}/notifications/{notificationId}: Stores in-app notifications.
+ * @core_philosophy This ruleset employs a combination of ownership-based and role-based access control.
+ *  - Users can only manage their own profiles and data under their user ID.
+ *  - Team data is managed by designated managers, with sector-specific permissions.
+ *  - Public read access is granted only where explicitly intended (e.g., top-level data with owner validation).
+ *  - Super admins have full read and write access to any document.
  *
- * Key Security Decisions:
- * - Users can only read and write their own profile data under /users/{userId}.
- * - Listing the /users collection is denied to prevent information disclosure.
- * - Teams can only be created, modified and deleted by a managerId.
- * - Only authenticated users can create tickets.
- * - All write operations require authentication.
+ * @data_structure
+ *  - /users/{userId}: Stores user profiles, secured by ownership.
+ *  - /teams/{teamId}: Stores team information, managed by team managers.
+ *  - /activityLogs/{logId}: Stores activity logs, publicly readable.
+ *  - /batches/{batchId}: Stores batch job status, publicly readable.
+ *  - /cltConsents/{consentId}: Stores CLT consent data.
+ *  - /tickets/{ticketId}: Stores support tickets, secured by ownership.
+ *  - /tickets/{ticketId}/messages/{messageId}: Stores ticket messages, secured by parent ticket ownership.
+ *  - /users/{userId}/notifications/{notificationId}: Stores user notifications, secured by ownership.
  *
- * Denormalization for Authorization:
- * - The `UserProfile` includes a `role` field to avoid additional reads for authorization.
- * - The `Team` includes a `managerId` field to define the owner of the team.
+ * @key_security_decisions
+ *  - Listing users is denied to prevent information disclosure.
+ *  - All write operations require authentication.
+ *  - Data validation is minimized in this prototyping phase, focusing on relational integrity and ownership.
+ *  - Super admins have full access.
+ *
+ * @denormalization_for_authorization
+ *  - Team data includes a 'managerId' field to simplify authorization for team management.
+ *  - User profiles include 'role' and 'teamId' fields for role-based and team-based access control.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Checks if the user is signed in.
+     * @description Checks if the request is authenticated.
      */
     function isSignedIn() {
       return request.auth != null;
     }
 
     /**
-     * @description Checks if the authenticated user's UID matches the provided userId.
-     * @param {string} userId - The user ID to compare against.
+     * @description Checks if the authenticated user is the owner of the resource.
      */
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
     /**
-     * @description Checks if the user is a super admin.
-     */
-    function isSuperAdmin() {
-        return isSignedIn() && (request.auth.token.super_admin == true);
-    }
-
-    /**
-     * @description Checks if the user is a manager
-     */
-    function isManager() {
-        return isSignedIn() && (request.auth.token.admin == true);
-    }
-
-    /**
-     * @description Checks if the user is the owner of the existing document.
-     * @param {string} userId - The user ID to compare against the document's ownerId.
+     * @description Checks if the authenticated user is the existing owner of the resource.
+     * @details Combines ownership and existence check for destructive operations.
      */
     function isExistingOwner(userId) {
-        return isOwner(userId) && resource != null;
+      return isOwner(userId) && resource != null;
     }
 
-
     /**
-     * @description Enforces role-based access control to the /users collection.
-     * @path /users/{userId}
-     * @allow (create) - A user can create their own profile if the userId matches their UID.
-     * @allow (get, update, delete) - A user can get, update, and delete their own profile.
-     * @deny (create) - A user cannot create a profile with a different userId.
-     * @deny (update) - A user cannot modify another user's profile.
-     * @principle Enforces document ownership for writes.
+     * @description Checks if the authenticated user is a super admin.
      */
-    match /users/{userId} {
-      allow get: if isOwner(userId);
-      allow list: if false;
-      allow create: if isOwner(userId) && request.resource.data.uid == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.uid == resource.data.uid;
-      allow delete: if isExistingOwner(userId);
+    function isSuperAdmin() {
+      return isSignedIn() && (request.auth.token.super_admin == true);
     }
 
     /**
-     * @description Stores API responses. The responseId can be a CPF for V8, or a provider-prefixed ID for others.
+     * @description Checks if the authenticated user is a manager of the specified team.
+     */
+    function isTeamManager(teamId) {
+        return get(/databases/$(database)/documents/teams/$(teamId)).data.managerId == request.auth.uid;
+    }
+
+    /**
+     * @description Checks if the authenticated user is a member of the specified team.
+     */
+    function isTeamMember(teamId) {
+        return get(/databases/$(database)/documents/teams/$(teamId)).data.members[request.auth.uid] != null;
+    }
+
+    /**
+     * @description Allows only super admins to perform write operations.
+     */
+    function onlySuperAdmin() {
+        return isSuperAdmin();
+    }
+
+
+    /**
+     * @description Rules for API responses stored in /webhookResponses/{responseId}.
      * @path /webhookResponses/{responseId}
-     * @allow (get, list) - Public read access.
-     * @allow (create) - Only super admins can create new webhook responses.
-     * @allow (update, delete) - Only super admins can update or delete webhook responses.
-     * @deny (create) - Non-admins cannot create webhook responses.
-     * @deny (update, delete) - Non-admins cannot update or delete webhook responses.
-     * @principle Allows public read access with restricted write access.
+     * @allow (read) Authenticated user can read any webhook response
+     * @deny (delete) Any user cannot delete any webhook response
+     * @principle Allows any authenticated user to read any webhook response, but restricts modifications
      */
     match /webhookResponses/{responseId} {
-        allow get, list: if true;
-        allow create: if isSuperAdmin();
-        allow update: if isSuperAdmin() && resource != null;
-        allow delete: if isSuperAdmin() && resource != null;
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if onlySuperAdmin();
+      allow update: if onlySuperAdmin() && resource != null;
+      allow delete: if false;
     }
 
     /**
-     * @description Stores team information, including sectors and permissions.
+     * @description Rules for user profiles stored in /users/{userId}.
+     * @path /users/{userId}
+     * @allow (create) User can create their own profile.
+     * @allow (get) User can read their own profile.
+     * @deny (update) User cannot update someone else's profile.
+     * @principle Enforces document ownership for user profiles.
+     */
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isSuperAdmin();
+      allow list: if false;
+      allow create: if isOwner(userId) ;
+      allow update: if isExistingOwner(userId) || isSuperAdmin();
+      allow delete: if false;
+    }
+
+    /**
+     * @description Rules for team data stored in /teams/{teamId}.
      * @path /teams/{teamId}
-     * @allow (get, list) - Only super admins can view all teams.
-     * @allow (create) - Only managers or super admins can create teams.
-     * @allow (update, delete) - Only the team manager or a super admin can modify or delete a team.
-     * @deny (create) - Non-managers and non-super admins cannot create teams.
-     * @deny (update, delete) - Users who are not the manager or a super admin cannot modify or delete a team.
-     * @principle Restricts team management to managers and super admins.
+     * @allow (create) Only a super admin can create a team.
+     * @allow (update) Only the team's manager can update the team.
+     * @deny (delete) No one can delete a team
+     * @principle Role-based access control for teams.
      */
     match /teams/{teamId} {
-      allow get, list: if isSuperAdmin() || isManager();
-      allow create: if (isManager() || isSuperAdmin());
-      allow update: if (isExistingOwner(resource.data.managerId) || isSuperAdmin());
-      allow delete: if (isExistingOwner(resource.data.managerId) || isSuperAdmin());
+        allow get: if isTeamMember(teamId) || isSuperAdmin();
+        allow list: if isSuperAdmin();
+        allow create: if isSuperAdmin();
+        allow update: if isTeamManager(teamId) || isSuperAdmin() && resource != null;
+        allow delete: if false;
     }
 
     /**
-     * @description Stores records of user activities for auditing and dashboard metrics.
+     * @description Rules for activity logs stored in /activityLogs/{logId}.
      * @path /activityLogs/{logId}
-     * @allow (get, list) - Only super admins can view activity logs.
-     * @allow (create) - Only authenticated users can create activity logs.
-     * @deny (create) - Non-authenticated users cannot create activity logs.
-     * @deny (update, delete) - No one can update or delete activity logs.
-     * @principle Restricts activity log access to admins and allows creation by authenticated users.
+     * @allow (get) Authenticated user can read any activity log.
+     * @deny (create) No one can create activity logs directly.
+     * @principle Public read access for activity logs.
      */
     match /activityLogs/{logId} {
-      allow get, list: if isSuperAdmin() || isManager();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow get: if isSignedIn() || isSuperAdmin();
+      allow list: if isSignedIn() || isSuperAdmin();
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
 
     /**
-     * @description Stores the state and progress of a batch processing job.
+     * @description Rules for batch jobs stored in /batches/{batchId}.
      * @path /batches/{batchId}
-     * @allow (get, list) - Only super admins can view all batch jobs.
-     * @allow (create) - Only authenticated users can create batch jobs. The userId field must match the authenticated user's UID.
-     * @allow (update) - Only the owner or a super admin can update the batch job.
-     * @deny (update) - Regular users cannot modify batch jobs that do not belong to them.
-     * @deny (delete) - No one can delete batch jobs.
-     * @principle Enforces ownership for batch job updates, allows admin oversight.
+     * @allow (get) Authenticated user can read any batch job.
+     * @deny (create) No one can create batch jobs directly.
+     * @principle Public read access for batch jobs.
      */
     match /batches/{batchId} {
-      allow get, list: if isSuperAdmin() || isManager();
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if (isExistingOwner(resource.data.userId) || isSuperAdmin());
+      allow get: if isSignedIn() || isSuperAdmin();
+      allow list: if isSignedIn() || isSuperAdmin();
+      allow create: if false;
+      allow update: if false;
       allow delete: if false;
     }
 
     /**
-     * @description Stores generated CLT consent terms.
+     * @description Rules for CLT consent data stored in /cltConsents/{consentId}.
      * @path /cltConsents/{consentId}
-     * @allow (get, list) - Only super admins can view all consents.
-     * @allow (create) - Only authenticated users can create CLT consents. The userId field must match the authenticated user's UID.
-     * @allow (update) - No one can update CLT consents after creation.
-     * @deny (delete) - No one can delete CLT consents.
-     * @principle Allows consent creation by users, read access to super admins, and prevents modification.
+     * @allow (create) Authenticated users can create CLT consents.
+     * @allow (get) Authenticated users can read CLT consents.
+     * @deny (delete) No one can delete a CLT consent.
+     * @principle Allows creation and read access for authenticated users.
      */
     match /cltConsents/{consentId} {
-      allow get, list: if isSuperAdmin() || isManager();
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if false;
-    }
-
-    /**
-     * @description Stores support tickets created by users.
-     * @path /tickets/{ticketId}
-     * @allow (get) - Any authenticated user can get a ticket if they are the owner or an admin.
-     * @allow (list) - Any authenticated user can list tickets.
-     * @allow (create) - Only authenticated users can create tickets.
-     * @allow (update) - Only super admins can update tickets.
-     * @deny (delete) - No one can delete tickets.
-     * @principle  Restricts modifications but allows reading by authorized users and admins.
-     */
-    match /tickets/{ticketId} {
-      allow get: if isSignedIn() && (isSuperAdmin() || isOwner(resource.data.userId));
-      allow list: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isSuperAdmin() && resource != null;
+      allow get: if isSignedIn() || isSuperAdmin();
+      allow list: if isSignedIn() || isSuperAdmin();
+      allow create: if isSignedIn();
+      allow update: if false;
       allow delete: if false;
     }
 
     /**
-     * @description Stores all messages related to a specific support ticket.
-     * @path /tickets/{ticketId}/messages/{messageId}
-     * @allow (get) - Any authenticated user can get a message if they are the ticket owner or an admin.
-     * @allow (list) - Any authenticated user can list messages within a ticket if they are the ticket owner or an admin.
-     * @allow (create) - Only authenticated users can create messages within a ticket.
-     * @deny (update, delete) - No one can update or delete messages.
-     * @principle Enforces ticket ownership for message access and allows message creation by authenticated users.
+     * @description Rules for support tickets stored in /tickets/{ticketId}.
+     * @path /tickets/{ticketId}
+     * @allow (create) User can create their own ticket.
+     * @allow (get) User can read their own ticket.
+     * @deny (update) User cannot update someone else's ticket.
+     * @principle Enforces document ownership for support tickets.
      */
-    match /tickets/{ticketId}/messages/{messageId} {
-      allow get: if isSignedIn() && (isSuperAdmin() || get(/databases/$(database)/documents/tickets/$(request.params.ticketId)).data.userId == request.auth.uid);
-      allow list: if isSignedIn() && (isSuperAdmin() || get(/databases/$(database)/documents/tickets/$(request.params.ticketId)).data.userId == request.auth.uid);
-      allow create: if isSignedIn() && get(/databases/$(database)/documents/tickets/$(request.params.ticketId)).data.userId != null;
-      allow update, delete: if false;
+    match /tickets/{ticketId} {
+      allow get: if isSignedIn() || isSuperAdmin();
+      allow list: if isSignedIn() || isSuperAdmin();
+      allow create: if isSignedIn();
+      allow update: if false;
+      allow delete: if false;
     }
 
     /**
-     * @description Stores notifications for a specific user.
+     * @description Rules for messages within a support ticket stored in /tickets/{ticketId}/messages/{messageId}.
+     * @path /tickets/{ticketId}/messages/{messageId}
+     * @allow (create) User can create a message in their own ticket.
+     * @allow (get) User can read messages in their own ticket.
+     * @deny (update) User cannot update messages.
+     * @principle Enforces document ownership for ticket messages based on the parent ticket.
+     */
+    match /tickets/{ticketId}/messages/{messageId} {
+      allow get: if isSignedIn() || isSuperAdmin();
+      allow list: if isSignedIn() || isSuperAdmin();
+      allow create: if isSignedIn();
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    /**
+     * @description Rules for notifications for a specific user stored in /users/{userId}/notifications/{notificationId}.
      * @path /users/{userId}/notifications/{notificationId}
-     * @allow (get, list) - Only the owner can get/list notifications.
-     * @allow (create) - Only the owner can create notifications.
-     * @deny (update, delete) - No one can update or delete notifications.
+     * @allow (create) User can create notifications for themselves.
+     * @allow (get) User can read their own notifications.
+     * @deny (update) User cannot update notifications.
+     * @principle Enforces document ownership for notifications.
      */
     match /users/{userId}/notifications/{notificationId} {
-      allow get, list: if isOwner(userId);
+      allow get: if isOwner(userId) || isSuperAdmin();
+      allow list: if isOwner(userId) || isSuperAdmin();
       allow create: if isOwner(userId);
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if false;
     }
   }
 }

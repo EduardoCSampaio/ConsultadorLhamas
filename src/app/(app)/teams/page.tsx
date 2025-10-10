@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -92,7 +91,7 @@ export default function MyTeamPage() {
                     <CardDescription>Compartilhe este link para que novos usuários possam solicitar entrada na sua equipe.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {isLoading || !invitationLink ? (
+                    {isManagerProfileLoading || !teamId ? (
                          <Skeleton className="h-10 w-full" />
                     ) : (
                         <div className="flex items-center gap-2">
@@ -174,5 +173,3 @@ export default function MyTeamPage() {
         </div>
     );
 }
-
-    
