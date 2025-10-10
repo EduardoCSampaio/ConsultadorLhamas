@@ -33,6 +33,7 @@ import {
   Landmark,
   CreditCard,
   LifeBuoy,
+  ClipboardCheck,
 } from "lucide-react";
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -54,6 +55,7 @@ const allBaseMenuItems = [
 
 const adminBottomMenuItems = [
     { href: "/admin/users", icon: Users, label: "Gerenciar Usuários", permission: 'isAdmin' as const },
+    { href: "/admin/auxilio-propostas", icon: ClipboardCheck, label: "Auxílio Propostas", permission: 'isSuperAdmin' as const },
 ];
 
 const bottomMenuItems = [
@@ -107,8 +109,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return email.substring(0, 2).toUpperCase();
   }
 
-  const hasPermission = (permission: 'isAdmin' | 'isLoggedIn' | keyof UserProfile['permissions']) => {
+  const hasPermission = (permission: 'isAdmin' | 'isLoggedIn' | 'isSuperAdmin' | keyof UserProfile['permissions']) => {
     if (permission === 'isLoggedIn') return true;
+    const isSuperAdmin = userProfile?.email === 'admin@lhamascred.com.br';
+    if (permission === 'isSuperAdmin') return isSuperAdmin;
     if (userProfile?.role === 'admin') return true;
     if (permission === 'isAdmin') return false;
     

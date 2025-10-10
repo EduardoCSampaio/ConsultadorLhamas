@@ -334,6 +334,25 @@
         "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp when the message was sent." }
       },
       "required": ["id", "ticketId", "senderId", "senderEmail", "content", "createdAt"]
+    },
+    "FactaProposal": {
+      "title": "Facta Proposal",
+      "description": "Represents a proposal status from the Facta 'andamento-propostas' endpoint.",
+      "type": "object",
+      "properties": {
+        "proposta": { "type": "string" },
+        "data_digitacao": { "type": "string", "format": "date-time" },
+        "situacao": { "type": "string" },
+        "convenio": { "type": "string" },
+        "cpf": { "type": "string" },
+        "cliente": { "type": "string" },
+        "valor_liberado": { "type": "number" },
+        "valor_prestacao": { "type": "number" },
+        "prazo": { "type": "number" },
+        "login": { "type": "string" },
+        "nome_login": { "type": "string" }
+      },
+      "required": ["proposta", "data_digitacao", "situacao", "cpf", "cliente"]
     }
   },
   "auth": {
@@ -384,4 +403,3 @@
     }
   }
 }
-    
