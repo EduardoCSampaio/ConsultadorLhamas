@@ -7,11 +7,22 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { updateUserStatus, getUsers, exportUsersToExcel, updateUserPermissions } from "@/app/actions/users";
+import { updateUserStatus, getUsers, exportUsersToExcel, updateUserPermissions, deleteUser } from "@/app/actions/users";
 import { useToast } from "@/hooks/use-toast";
-import { Check, X, Pencil, UserX, UserCheck, Download, Loader2 } from "lucide-react";
+import { Check, X, Pencil, UserX, UserCheck, Download, Loader2, Trash2 } from "lucide-react";
 import type { UserProfile, UserPermissions } from "@/app/actions/users";
 import { useEffect, useState } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -98,6 +109,25 @@ export default function AdminUsersPage() {
         setUpdatingId(null);
     };
     
+    const handleDeleteUser = async (uid: string) => {
+        setUpdatingId(uid);
+        const result = await deleteUser({ uid });
+        if (result.success) {
+            toast({
+                title: "Usuário excluído!",
+                description: "O usuário foi removido permanentemente do sistema.",
+            });
+            await fetchUsers();
+        } else {
+             toast({
+                variant: "destructive",
+                title: "Erro ao excluir usuário",
+                description: result.error,
+            });
+        }
+         setUpdatingId(null);
+    };
+
     const handleOpenEditModal = (user: UserProfile) => {
         setSelectedUser(user);
         setNewStatus(user.status);
@@ -276,9 +306,37 @@ export default function AdminUsersPage() {
                                                      <div className="flex gap-2 justify-end items-center">
                                                         {renderActionButtons(user)}
                                                         {user.role !== 'admin' && (
-                                                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenEditModal(user)}>
-                                                                <Pencil className="h-4 w-4" />
-                                                            </Button>
+                                                            <>
+                                                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenEditModal(user)}>
+                                                                    <Pencil className="h-4 w-4" />
+                                                                </Button>
+                                                                <AlertDialog>
+                                                                    <AlertDialogTrigger asChild>
+                                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive-foreground">
+                                                                            <Trash2 className="h-4 w-4" />
+                                                                        </Button>
+                                                                    </AlertDialogTrigger>
+                                                                    <AlertDialogContent>
+                                                                        <AlertDialogHeader>
+                                                                        <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
+                                                                        <AlertDialogDescription>
+                                                                            Esta ação não pode ser desfeita. Isso excluirá permanentemente a conta de
+                                                                            <span className="font-bold"> {user.email} </span>
+                                                                            e removerá seus dados de nossos servidores.
+                                                                        </AlertDialogDescription>
+                                                                        </AlertDialogHeader>
+                                                                        <AlertDialogFooter>
+                                                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                                        <AlertDialogAction
+                                                                            className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                                                                            onClick={() => handleDeleteUser(user.uid)}
+                                                                        >
+                                                                            Sim, excluir usuário
+                                                                        </AlertDialogAction>
+                                                                        </AlertDialogFooter>
+                                                                    </AlertDialogContent>
+                                                                </AlertDialog>
+                                                            </>
                                                         )}
                                                     </div>
                                                 </TableCell>
@@ -372,5 +430,7 @@ export default function AdminUsersPage() {
         </>
     );
 }
+
+    
 
     

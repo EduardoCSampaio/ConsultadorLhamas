@@ -55,6 +55,11 @@ const updateUserStatusSchema = z.object({
   status: z.enum(['pending', 'active', 'rejected', 'inactive']),
 });
 
+const deleteUserSchema = z.object({
+  uid: z.string().min(1, { message: "UID do usuário é obrigatório." }),
+});
+
+
 const setAdminClaimSchema = z.object({
   uid: z.string().min(1, { message: "UID do usuário é obrigatório." }),
 });
@@ -344,6 +349,37 @@ export async function updateUserStatus(input: z.infer<typeof updateUserStatusSch
   }
 }
 
+export async function deleteUser(input: z.infer<typeof deleteUserSchema>): Promise<{ success: boolean; error?: string }> {
+    const validation = deleteUserSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, error: "UID do usuário inválido." };
+    }
+
+    const { uid } = validation.data;
+
+    try {
+        initializeFirebaseAdmin();
+        const auth = getAuth();
+        const firestore = getFirestore();
+
+        // Delete from Firebase Authentication
+        await auth.deleteUser(uid);
+
+        // Delete from Firestore
+        await firestore.collection('users').doc(uid).delete();
+        
+        // Optionally, you might want to delete related data like activity logs, but this can be complex.
+        // For now, we just delete the main user records.
+
+        return { success: true };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao excluir o usuário.";
+        console.error(`Erro ao excluir usuário ${uid}:`, message);
+        return { success: false, error: message };
+    }
+}
+
+
 export async function updateUserPermissions(input: z.infer<typeof updateUserPermissionsSchema>): Promise<{success: boolean, error?: string}> {
     const validation = updateUserPermissionsSchema.safeParse(input);
     if (!validation.success) {
@@ -491,3 +527,5 @@ export async function exportUsersToExcel(input: z.infer<typeof exportUsersSchema
         return { status: 'error', message };
     }
 }
+
+    
