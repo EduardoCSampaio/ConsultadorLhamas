@@ -393,7 +393,7 @@ export async function updateUserRole(input: z.infer<typeof updateUserRoleSchema>
                 throw new Error(teamResult.message);
             }
             
-            await userRef.update({ role: 'manager', teamId: teamResult.team?.id });
+            // The `createTeam` action now handles updating the user role, teamId, and permissions.
 
             await logActivity({
                 userId: adminId,

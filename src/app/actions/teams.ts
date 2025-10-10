@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { logActivity } from './users';
+import type { UserPermissions } from './users';
+
 
 export type Team = {
     id: string;
@@ -13,11 +15,7 @@ export type Team = {
     sectors: {
         [sectorName: string]: {
             isManager?: boolean;
-            permissions: {
-                canViewFGTS: boolean;
-                canViewCLT: boolean;
-                canViewINSS: boolean;
-            }
+            permissions: UserPermissions;
         }
     }
 };
@@ -26,6 +24,19 @@ const createTeamSchema = z.object({
   name: z.string().min(3, "O nome do time deve ter pelo menos 3 caracteres."),
   managerId: z.string().min(1, "ID do gerente é obrigatório."),
 });
+
+const updateTeamSectorsSchema = z.object({
+  teamId: z.string().min(1),
+  sectors: z.record(z.object({
+      isManager: z.boolean().optional(),
+      permissions: z.object({
+          canViewFGTS: z.boolean(),
+          canViewCLT: z.boolean(),
+          canViewINSS: z.boolean(),
+      })
+  }))
+});
+
 
 type CreateTeamResult = {
   success: boolean;
@@ -58,8 +69,8 @@ export async function createTeam(input: z.infer<typeof createTeamSchema>): Promi
             managerId,
             createdAt: FieldValue.serverTimestamp(),
             sectors: {
-                // Default "TI" sector with full permissions for the team
-                'TI': {
+                // Default "Gerente" sector with full permissions for the team manager
+                'Gerente': {
                     isManager: true,
                     permissions: {
                         canViewFGTS: true,
@@ -72,8 +83,13 @@ export async function createTeam(input: z.infer<typeof createTeamSchema>): Promi
 
         await firestore.runTransaction(async (transaction) => {
             transaction.set(teamRef, newTeamData);
-            // Update the user's role to 'manager' and assign them to the new team
-            transaction.update(managerRef, { role: 'manager', teamId: teamRef.id });
+            // Update the user's role to 'manager' and assign them to the new team and default sector
+            transaction.update(managerRef, { 
+                role: 'manager', 
+                teamId: teamRef.id,
+                sector: 'Gerente', // Assign manager to their own sector
+                permissions: newTeamData.sectors.Gerente.permissions, // Give them full permissions
+             });
         });
 
         await logActivity({
@@ -95,6 +111,33 @@ export async function createTeam(input: z.infer<typeof createTeamSchema>): Promi
     } catch (error) {
         const message = error instanceof Error ? error.message : "Erro desconhecido ao criar o time.";
         console.error("createTeam error:", error);
+        return { success: false, message };
+    }
+}
+
+
+export async function updateTeamSectors(input: z.infer<typeof updateTeamSectorsSchema>): Promise<{success: boolean, message: string}> {
+    const validation = updateTeamSectorsSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: 'Dados inválidos para atualizar setores.' };
+    }
+
+    const { teamId, sectors } = validation.data;
+    
+    try {
+        initializeFirebaseAdmin();
+        const firestore = getFirestore();
+        const teamRef = firestore.collection('teams').doc(teamId);
+
+        await teamRef.update({ sectors });
+
+        // Optional: Add logging for this action
+        // await logActivity({ ... });
+
+        return { success: true, message: "Setores da equipe atualizados com sucesso." };
+    } catch(error) {
+        const message = error instanceof Error ? error.message : "Erro desconhecido ao atualizar setores.";
+        console.error("updateTeamSectors error:", error);
         return { success: false, message };
     }
 }
