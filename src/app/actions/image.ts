@@ -1,7 +1,6 @@
 
 'use server';
 
-import axios from 'axios';
 import { z } from 'zod';
 
 const imgbbResponseSchema = z.object({
@@ -35,26 +34,26 @@ export async function uploadImageToImgBB(base64Image: string): Promise<UploadRes
     // A API do ImgBB espera apenas a string base64, sem o prefixo data URI.
     const base64Data = base64Image.split(',').pop() || base64Image;
 
-    // Use FormData para enviar a imagem, que é o método mais robusto.
-    const formData = new FormData();
-    formData.append('image', base64Data);
+    const body = new URLSearchParams();
+    body.append('image', base64Data);
 
-    const response = await axios.post(
+    const response = await fetch(
       `https://api.imgbb.com/1/upload?key=${apiKey}`,
-      formData,
       {
+        method: 'POST',
         headers: {
-            // O Axios definirá o 'Content-Type' como 'multipart/form-data' automaticamente
-            // ao usar um objeto FormData. Não é necessário definir manualmente.
+          'Content-Type': 'application/x-www-form-urlencoded',
         },
+        body: body,
       }
     );
 
-    const parsedResponse = imgbbResponseSchema.safeParse(response.data);
+    const responseData = await response.json();
+    const parsedResponse = imgbbResponseSchema.safeParse(responseData);
 
-    if (!parsedResponse.success || !parsedResponse.data.success) {
-      console.error('ImgBB API Error:', parsedResponse.error || response.data);
-      const apiErrorMessage = parsedResponse.success ? (response.data?.error?.message || 'Erro desconhecido da API') : 'A resposta da API de imagem foi inválida.';
+    if (!response.ok || !parsedResponse.success || !parsedResponse.data.success) {
+      console.error('ImgBB API Error:', parsedResponse.error || responseData);
+      const apiErrorMessage = parsedResponse.success ? (responseData?.error?.message || 'Erro desconhecido da API ImgBB') : 'A resposta da API de imagem foi inválida.';
       return { success: false, message: `Erro da API ImgBB: ${apiErrorMessage}` };
     }
 
@@ -65,9 +64,7 @@ export async function uploadImageToImgBB(base64Image: string): Promise<UploadRes
     };
   } catch (error) {
     console.error('Error uploading to ImgBB:', error);
-    const message = axios.isAxiosError(error)
-      ? error.response?.data?.error?.message || error.message
-      : 'Erro desconhecido no serviço de upload de imagem.';
+    const message = error instanceof Error ? error.message : 'Erro desconhecido no serviço de upload de imagem.';
     return { success: false, message };
   }
 }
