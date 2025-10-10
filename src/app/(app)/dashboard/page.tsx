@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Users, UserCheck, UserPlus, ArrowRight, Activity, TrendingUp, Settings, Search, CheckCircle, XCircle } from "lucide-react";
+import { Users, UserCheck, UserPlus, ArrowRight, Activity, TrendingUp, Settings, Search, CheckCircle, XCircle, Inbox } from "lucide-react";
 import React from "react";
 import { useFirestore, useMemoFirebase, useUser } from "@/firebase";
 import { doc } from "firebase/firestore";
@@ -263,8 +263,12 @@ function UserDashboard({ userProfile }: { userProfile: UserProfile }) {
                     ) : error ? (
                         <div className="text-red-500">{error}</div>
                     ) : activity.length === 0 ? (
-                        <div className="text-center p-8 text-muted-foreground">
-                            Nenhuma atividade registrada ainda.
+                        <div className="flex flex-col items-center justify-center gap-4 text-center h-60 border-2 border-dashed rounded-lg">
+                            <Inbox className="h-12 w-12 text-muted-foreground" />
+                            <h3 className="text-2xl font-bold tracking-tight">Nenhuma atividade registrada</h3>
+                            <p className="text-sm text-muted-foreground">
+                                Comece a usar o sistema para ver suas ações aqui.
+                            </p>
                         </div>
                     ) : (
                         <div className="rounded-md border">
@@ -337,7 +341,7 @@ function AdminDashboardLoader() {
         <div className="flex flex-col gap-6">
             <PageHeader
                 title={<Skeleton className="h-8 w-64"/>}
-                description={<Skeleton className="h-5 w-80"/>}
+                description={<div className="h-5 w-80"><Skeleton className="h-full w-full"/></div>}
             >
                 <Skeleton className="h-10 w-44" />
             </PageHeader>
@@ -465,3 +469,5 @@ export default function DashboardPage() {
   // Fallback or loading state if userProfile is not available for some reason.
   return <AdminDashboardLoader />;
 }
+
+    
