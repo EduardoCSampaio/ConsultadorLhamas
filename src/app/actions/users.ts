@@ -252,7 +252,7 @@ export async function getUsers(): Promise<{users: UserProfile[] | null, error?: 
                     email: userRecord.email || '',
                     role: isAdmin ? 'admin' : 'user',
                     status: 'pending',
-                    createdAt: serverTimestamp(),
+                    createdAt: FieldValue.serverTimestamp(),
                     permissions: { canViewFGTS: false, canViewCLT: false, canViewINSS: false }
                 };
                 await firestore.collection('users').doc(userRecord.uid).set(newProfile);

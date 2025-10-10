@@ -14,9 +14,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, CheckCircle } from "lucide-react";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, FieldValue } from "firebase/firestore";
 import { useFirestore } from "@/firebase";
 import { setAdminClaim, logActivity } from "@/app/actions/users";
+import { serverTimestamp } from "firebase/firestore";
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
