@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUser, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
-import { collection, query, where, doc, getDocs } from 'firebase/firestore';
+import { collection, query, where, doc, getDocs, getDoc } from 'firebase/firestore';
 import type { UserProfile, UserPermissions } from '@/app/actions/users';
 import { updateUserStatus } from '@/app/actions/users';
 import { updateTeamSectors } from '@/app/actions/teams';
