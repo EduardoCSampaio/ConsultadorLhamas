@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "WebhookResponse": {
@@ -297,6 +298,91 @@
         "parcela": { "type": "number" }
       },
       "required": ["tabela", "taxa", "prazo", "codigoTabela", "contrato", "parcela"]
+    },
+    "Ticket": {
+      "title": "Ticket",
+      "description": "Represents a user support ticket or 'chamado'.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the ticket." },
+        "ticketNumber": { "type": "string", "description": "Human-readable ticket number (e.g., #0001)." },
+        "userId": { "type": "string", "description": "UID of the user who created the ticket." },
+        "userEmail": { "type": "string", "description": "Email of the user for easy reference." },
+        "title": { "type": "string", "description": "The subject or title of the ticket." },
+        "status": {
+          "type": "string",
+          "enum": ["aberto", "em_atendimento", "em_desenvolvimento", "testando", "liberado", "resolvido"],
+          "description": "The current status of the support ticket."
+        },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp when the ticket was created." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Timestamp for the last update." },
+        "lastMessage": { "type": "string", "description": "A snippet of the last message for quick preview." },
+        "unreadByUser": { "type": "number", "description": "Count of unread messages for the user." },
+        "unreadByAdmin": { "type": "number", "description": "Count of unread messages for the admin." }
+      },
+      "required": ["id", "userId", "userEmail", "title", "status", "createdAt", "updatedAt"]
+    },
+    "TicketMessage": {
+      "title": "Ticket Message",
+      "description": "Represents a single message within a support ticket.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the message." },
+        "ticketId": { "type": "string", "description": "The ID of the parent ticket." },
+        "senderId": { "type": "string", "description": "UID of the message sender (user or admin)." },
+        "senderEmail": { "type": "string", "description": "Email of the sender." },
+        "content": { "type": "string", "description": "The text content of the message." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp when the message was sent." }
+      },
+      "required": ["id", "ticketId", "senderId", "senderEmail", "content", "createdAt"]
+    },
+    "FactaProposal": {
+      "title": "Facta Proposal",
+      "description": "Represents a proposal status from the Facta 'andamento-propostas' endpoint.",
+      "type": "object",
+      "properties": {
+        "proposta": { "type": "string" },
+        "data_digitacao": { "type": "string" },
+        "situacao": { "type": "string" },
+        "convenio": { "type": "string" },
+        "cpf": { "type": "string" },
+        "cliente": { "type": "string" },
+        "valor_liberado": { "type": "number" },
+        "vlrprestacao": { "type": "number" },
+        "numeroprestacao": { "type": "number" },
+        "login_corretor": { "type": "string" },
+        "nome_login": { "type": "string" },
+        "corretor": { "type": "string" },
+        "data_movimento": { "type": "string" },
+        "data_movimento_ocorrencia": { "type": "string" },
+        "hora_movimento_ocorrencia": { "type": "string" },
+        "averbador": { "type": "string" },
+        "codigo_af": { "type": "string" },
+        "numero_contrato": { "type": "string" },
+        "numero_contrato_refin": { "type": "string" },
+        "produto": { "type": "string" },
+        "saldo_devedor": { "type": "number" },
+        "status_proposta": { "type": "string" },
+        "status_crivo": { "type": "string" },
+        "tabela": { "type": "string" },
+        "tipo_operacao": { "type": "string" },
+        "valor_af": { "type": "number" },
+        "valor_bruto": { "type": "number" },
+        "taxa": { "type": "number" },
+        "valor_iof": { "type": "number" },
+        "valor_seguro": { "type": "number" },
+        "vendedor": { "type": "string" },
+        "matricula": { "type": "string" },
+        "especie_beneficio": { "type": "string" },
+        "meio_pagamento_beneficio": { "type": "string" },
+        "banco": { "type": "string" },
+        "agencia": { "type": "string" },
+        "conta": { "type": "string" },
+        "banco_desconto": { "type": "string" },
+        "agencia_desconto": { "type": "string" },
+        "conta_desconto": { "type": "string" }
+      },
+      "required": ["proposta", "data_digitacao", "situacao", "cpf", "cliente"]
     }
   },
   "auth": {
@@ -336,6 +422,14 @@
     "/cltConsents/{consentId}": {
         "schema": { "$ref": "#/entities/CLTConsent" },
         "description": "Stores generated CLT consent terms."
+    },
+    "/tickets/{ticketId}": {
+      "schema": { "$ref": "#/entities/Ticket" },
+      "description": "Stores support tickets created by users."
+    },
+    "/tickets/{ticketId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/TicketMessage" },
+      "description": "Stores all messages related to a specific support ticket."
     }
   }
 }

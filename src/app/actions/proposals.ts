@@ -1,3 +1,4 @@
+
 'use server';
 
 import { z } from 'zod';
@@ -26,7 +27,35 @@ export type FactaProposal = {
     prazo: number;
     login: string;
     nome_login: string;
-    // Add other fields from the API response as needed
+    corretor: string;
+    data_movimento: string;
+    data_movimento_ocorrencia: string;
+    hora_movimento_ocorrencia: string;
+    averbador: string;
+    codigo_af: string;
+    numero_contrato: string;
+    numero_contrato_refin: string;
+    produto: string;
+    saldo_devedor: number;
+    status_proposta: string;
+    status_crivo: string;
+    tabela: string;
+    tipo_operacao: string;
+    valor_af: number;
+    valor_bruto: number;
+    taxa: number;
+    valor_iof: number;
+    valor_seguro: number;
+    vendedor: string;
+    matricula: string;
+    especie_beneficio: string;
+    meio_pagamento_beneficio: string;
+    banco: string;
+    agencia: string;
+    conta: string;
+    banco_desconto: string;
+    agencia_desconto: string;
+    conta_desconto: string;
 };
 
 type GetProposalsResult = {
@@ -145,14 +174,43 @@ export async function getFactaProposalsReport(input: z.infer<typeof getProposals
         const dataToExport = result.proposals.map(p => ({
             'Proposta': p.proposta,
             'Data Digitação': p.data_digitacao,
-            'Situação': p.situacao,
+            'Situação': p.status_proposta,
             'CPF': p.cpf,
             'Cliente': p.cliente,
             'Valor Liberado': p.valor_liberado,
-            'Valor Prestação': p.valor_prestacao,
-            'Prazo': p.prazo,
-            'Login': p.login,
-            'Correspondente': p.nome_login
+            'Valor Prestação': p.vlrprestacao,
+            'Prazo': p.numeroprestacao,
+            'Login': p.login_corretor,
+            'Correspondente': p.nome_login,
+            'Corretor': p.corretor,
+            'Data Movimento': p.data_movimento,
+            'Data Mov. Ocorrência': p.data_movimento_ocorrencia,
+            'Hora Mov. Ocorrência': p.hora_movimento_ocorrencia,
+            'Averbador': p.averbador,
+            'Código AF': p.codigo_af,
+            'Contrato': p.numero_contrato,
+            'Contrato Refin': p.numero_contrato_refin,
+            'Convênio': p.convenio,
+            'Produto': p.produto,
+            'Saldo Devedor': p.saldo_devedor,
+            'Status Crivo': p.status_crivo,
+            'Tabela': p.tabela,
+            'Tipo Operação': p.tipo_operacao,
+            'Valor AF': p.valor_af,
+            'Valor Bruto': p.valor_bruto,
+            'Taxa': p.taxa,
+            'Valor IOF': p.valor_iof,
+            'Valor Seguro': p.valor_seguro,
+            'Vendedor': p.vendedor,
+            'Matrícula': p.matricula,
+            'Espécie Benefício': p.especie_beneficio,
+            'Meio Pagamento': p.meio_pagamento_beneficio,
+            'Banco': p.banco,
+            'Agência': p.agencia,
+            'Conta': p.conta,
+            'Banco Desconto': p.banco_desconto,
+            'Agência Desconto': p.agencia_desconto,
+            'Conta Desconto': p.conta_desconto
         }));
 
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
@@ -161,7 +219,7 @@ export async function getFactaProposalsReport(input: z.infer<typeof getProposals
 
         // Set column widths
         const header = Object.keys(dataToExport[0]);
-        worksheet['!cols'] = header.map(h => ({ wch: Math.max(h.length, 20) }));
+        worksheet['!cols'] = header.map(h => ({ wch: Math.max(h.length, 18) }));
         
         const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
         const base64String = buffer.toString('base64');
