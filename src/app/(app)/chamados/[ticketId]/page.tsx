@@ -31,6 +31,20 @@ const statusLabels: Record<Ticket['status'], string> = {
     resolvido: "Resolvido",
 };
 
+const getStatusVariant = (status: Ticket['status']) => {
+    switch (status) {
+        case 'aberto': return 'secondary';
+        case 'em_atendimento':
+        case 'em_desenvolvimento':
+            return 'default';
+        case 'resolvido': return 'destructive';
+        case 'testando':
+        case 'liberado':
+             return 'outline';
+        default: return 'outline';
+    }
+};
+
 
 export default function ChamadoDetalhePage() {
     const { toast } = useToast();
@@ -158,7 +172,7 @@ export default function ChamadoDetalhePage() {
                         </Button>
                         <span className="truncate">{ticket.title}</span>
                          <Badge variant="secondary">{ticket.ticketNumber}</Badge>
-                         <Badge variant="outline">{statusLabels[ticket.status]}</Badge>
+                         <Badge variant={getStatusVariant(ticket.status)}>{statusLabels[ticket.status]}</Badge>
                     </div>
                 }
                 description={
