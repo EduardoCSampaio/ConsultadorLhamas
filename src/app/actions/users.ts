@@ -7,6 +7,7 @@ import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import * as XLSX from 'xlsx';
 import { createNotificationsForAdmins } from './notifications';
+import { createTeam } from './teams';
 
 export type UserPermissions = {
   canViewFGTS?: boolean;
@@ -54,6 +55,14 @@ const updateUserStatusSchema = z.object({
   uid: z.string().min(1, { message: "UID do usuário é obrigatório." }),
   status: z.enum(['pending', 'active', 'rejected', 'inactive']),
 });
+
+const updateUserRoleSchema = z.object({
+  uid: z.string().min(1),
+  newRole: z.enum(['user', 'manager']),
+  adminId: z.string().min(1),
+  userEmail: z.string().email(),
+});
+
 
 const deleteUserSchema = z.object({
   uid: z.string().min(1, { message: "UID do usuário é obrigatório." }),
@@ -125,7 +134,7 @@ export async function logActivity(input: LogActivityInput) {
 
         // If the action is a new user registration, notify all admins.
         if (input.action.startsWith('User Registration')) {
-            await createNotificationsForAdmins({
+             await createNotificationsForAdmins({
                 title: 'Novo Usuário Cadastrado',
                 message: `O usuário ${userEmail} se cadastrou e aguarda aprovação.`,
                 link: '/admin/users'
@@ -355,6 +364,63 @@ export async function updateUserStatus(input: z.infer<typeof updateUserStatusSch
   }
 }
 
+export async function updateUserRole(input: z.infer<typeof updateUserRoleSchema>): Promise<{success: boolean, message: string}> {
+    const validation = updateUserRoleSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: "Dados inválidos." };
+    }
+
+    const { uid, newRole, adminId, userEmail } = validation.data;
+
+    try {
+        initializeFirebaseAdmin();
+        const firestore = getFirestore();
+        const userRef = firestore.collection('users').doc(uid);
+
+        if (newRole === 'manager') {
+            // Demoting from manager back to user is not handled here, only promotion.
+            const userDoc = await userRef.get();
+            const userData = userDoc.data();
+
+            if (userData?.role === 'manager' && userData?.teamId) {
+                return { success: false, message: "O usuário já é um gerente com uma equipe. A remoção de função deve ser tratada separadamente." };
+            }
+
+            const teamResult = await createTeam({ 
+                name: `Time de ${userEmail.split('@')[0]}`,
+                managerId: uid,
+            });
+
+            if (!teamResult.success) {
+                throw new Error(teamResult.message);
+            }
+            
+            await userRef.update({ role: 'manager', teamId: teamResult.team?.id });
+
+            await logActivity({
+                userId: adminId,
+                action: 'Promoção de Usuário',
+                details: `Usuário ${userEmail} promovido para Gerente e time ${teamResult.team?.id} criado.`
+            });
+
+            return { success: true, message: "Usuário promovido a Gerente e uma nova equipe foi criada para ele." };
+
+        } else if (newRole === 'user') {
+            // Handle demotion if needed in the future
+            await userRef.update({ role: 'user' });
+            return { success: true, message: "Função do usuário atualizada para Usuário." };
+        }
+
+        return { success: false, message: "Ação de função inválida." };
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro desconhecido ao atualizar a função do usuário.";
+        console.error(`Error updating role for user ${uid}:`, error);
+        return { success: false, message };
+    }
+}
+
+
 export async function deleteUser(input: z.infer<typeof deleteUserSchema>): Promise<{ success: boolean; error?: string }> {
     const validation = deleteUserSchema.safeParse(input);
     if (!validation.success) {
@@ -544,3 +610,5 @@ export async function exportUsersToExcel(input: z.infer<typeof exportUsersSchema
         return { status: 'error', message };
     }
 }
+
+    

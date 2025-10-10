@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { updateUserStatus, getUsers, exportUsersToExcel, updateUserPermissions, deleteUser } from "@/app/actions/users";
+import { updateUserStatus, getUsers, exportUsersToExcel, updateUserPermissions, deleteUser, updateUserRole } from "@/app/actions/users";
 import { useToast } from "@/hooks/use-toast";
 import { Check, X, Pencil, UserX, UserCheck, Download, Loader2, Trash2 } from "lucide-react";
 import type { UserProfile, UserPermissions } from "@/app/actions/users";
@@ -66,6 +66,7 @@ export default function AdminUsersPage() {
     const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
     
     // State for editing in modal
+    const [newRole, setNewRole] = useState<UserRole | null>(null);
     const [newStatus, setNewStatus] = useState<UserStatus | null>(null);
     const [newPermissions, setNewPermissions] = useState<UserPermissions>({});
 
@@ -131,31 +132,53 @@ export default function AdminUsersPage() {
 
     const handleOpenEditModal = (user: UserProfile) => {
         setSelectedUser(user);
+        setNewRole(user.role);
         setNewStatus(user.status);
         setNewPermissions(user.permissions || {});
         setIsEditModalOpen(true);
     };
 
     const handleSaveChanges = async () => {
-        if (!selectedUser) return;
+        if (!selectedUser || !adminUser) return;
         setUpdatingId(selectedUser.uid);
         
-        let statusUpdated = true;
+        let success = true;
+        let finalMessage = "Usuário atualizado com sucesso!";
+
+        // Role Change
+        if (newRole && newRole !== selectedUser.role) {
+            const roleResult = await updateUserRole({ 
+                uid: selectedUser.uid, 
+                newRole: newRole,
+                adminId: adminUser.uid,
+                userEmail: selectedUser.email
+            });
+            if (!roleResult.success) {
+                toast({ variant: "destructive", title: "Erro ao atualizar função", description: roleResult.message });
+                success = false;
+            } else {
+                finalMessage = roleResult.message || finalMessage;
+            }
+        }
+        
+        // Status Change
         if (newStatus && newStatus !== selectedUser.status) {
             const statusResult = await updateUserStatus({ uid: selectedUser.uid, status: newStatus });
             if (!statusResult.success) {
                 toast({ variant: "destructive", title: "Erro ao atualizar status", description: statusResult.error });
-                statusUpdated = false;
+                success = false;
             }
         }
         
+        // Permissions Change
         const permsResult = await updateUserPermissions({ uid: selectedUser.uid, permissions: newPermissions });
         if (!permsResult.success) {
              toast({ variant: "destructive", title: "Erro ao atualizar permissões", description: permsResult.error });
+             success = false;
         }
 
-        if(statusUpdated && permsResult.success) {
-             toast({ title: "Usuário atualizado com sucesso!" });
+        if(success) {
+             toast({ title: finalMessage });
         }
         
         setIsEditModalOpen(false);
@@ -228,7 +251,7 @@ export default function AdminUsersPage() {
     const renderActionButtons = (user: UserProfile) => {
         const isUpdating = updatingId === user.uid;
 
-        if (user.role === 'super_admin' || user.role === 'admin') {
+        if (user.role === 'super_admin' || (user.role === 'admin' && adminUser?.email !== 'super@lhamascred.com.br')) {
             return <span className="text-xs text-muted-foreground">Admin</span>;
         }
 
@@ -315,7 +338,7 @@ export default function AdminUsersPage() {
                                                 <TableCell className="text-right">
                                                      <div className="flex gap-2 justify-end items-center">
                                                         {renderActionButtons(user)}
-                                                        {user.role !== 'super_admin' && user.role !== 'admin' && (
+                                                        {user.role !== 'super_admin' && (
                                                             <>
                                                                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenEditModal(user)}>
                                                                     <Pencil className="h-4 w-4" />
@@ -373,7 +396,7 @@ export default function AdminUsersPage() {
                     <DialogHeader>
                         <DialogTitle>Editar Usuário</DialogTitle>
                         <DialogDescription>
-                            Altere o status e as permissões do usuário.
+                            Altere o status, a função e as permissões do usuário.
                         </DialogDescription>
                     </DialogHeader>
                     {selectedUser && (
@@ -384,6 +407,24 @@ export default function AdminUsersPage() {
                                         Email
                                     </Label>
                                     <Input id="email" value={selectedUser.email || ''} readOnly className="col-span-3" />
+                                </div>
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="status" className="text-right">
+                                        Função
+                                    </Label>
+                                    <Select
+                                        value={newRole || ''}
+                                        onValueChange={(value) => setNewRole(value as UserRole)}
+                                        disabled={selectedUser.role === 'super_admin'}
+                                    >
+                                        <SelectTrigger className="col-span-3">
+                                            <SelectValue placeholder="Selecione uma função" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="user">Usuário</SelectItem>
+                                            <SelectItem value="manager">Gerente</SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                                 <div className="grid grid-cols-4 items-center gap-4">
                                     <Label htmlFor="status" className="text-right">
@@ -440,7 +481,5 @@ export default function AdminUsersPage() {
         </>
     );
 }
-
-    
 
     
