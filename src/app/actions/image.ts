@@ -1,3 +1,4 @@
+
 'use server';
 
 import axios from 'axios';
@@ -31,9 +32,12 @@ export async function uploadImageToImgBB(base64Image: string): Promise<UploadRes
   }
 
   try {
+    // A API do ImgBB espera apenas a string base64, sem o prefixo data URI.
+    // Vamos remover o prefixo se ele existir.
+    const base64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
+
     // A API do ImgBB espera um corpo `x-www-form-urlencoded`
-    // Construir a string manualmente é mais robusto para garantir o formato correto.
-    const requestBody = `image=${encodeURIComponent(base64Image)}`;
+    const requestBody = `image=${encodeURIComponent(base64Data)}`;
 
     const response = await axios.post(
       `https://api.imgbb.com/1/upload?key=${apiKey}`,
