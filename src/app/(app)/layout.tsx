@@ -118,18 +118,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const hasPermission = React.useCallback((permission: 'isManager' | 'isLoggedIn' | 'isAdmin' | keyof UserProfile['permissions']) => {
     if (!userProfile) return false;
+    
+    // Admin has all permissions
+    if (userProfile.role === 'admin') return true;
+
     if (permission === 'isLoggedIn') return true;
-
-    const isAdmin = userProfile.role === 'admin';
-    if (permission === 'isAdmin') return isAdmin;
-    if (isAdmin) return true; // Admin has all permissions
-
-    const isManager = userProfile.role === 'manager';
-    if (permission === 'isManager') return isManager;
+    if (permission === 'isManager') return userProfile.role === 'manager';
+    if (permission === 'isAdmin') return userProfile.role === 'admin';
 
     // For granular permissions, check the user's profile
     return !!userProfile?.permissions?.[permission as keyof UserProfile['permissions']];
   }, [userProfile]);
+
 
   if (isUserLoading || isProfileLoading || !user || !userProfile) {
     return (
@@ -338,3 +338,5 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     </SidebarProvider>
   );
 }
+
+    

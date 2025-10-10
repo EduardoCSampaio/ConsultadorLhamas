@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -36,7 +37,7 @@ const getStatusText = (status: UserStatus) => {
 };
 
 export default function MyTeamPage() {
-    const { user: manager } = useUser();
+    const { user: manager, isUserLoading: isManagerAuthLoading } = useUser();
     const firestore = useFirestore();
     const { toast } = useToast();
 
@@ -46,23 +47,24 @@ export default function MyTeamPage() {
         return doc(firestore, 'users', manager.uid);
     }, [firestore, manager]);
     
-    const { data: managerProfile, isLoading: isManagerLoading } = useDoc<UserProfile>(managerProfileRef);
+    const { data: managerProfile, isLoading: isManagerProfileLoading } = useDoc<UserProfile>(managerProfileRef);
     const teamId = managerProfile?.teamId;
 
     const teamMembersQuery = useMemoFirebase(() => {
         if (!firestore || !teamId) return null;
-        // Query for users that belong to the manager's team but are not the manager themselves.
+        // Query for users that belong to the manager's team.
         return query(collection(firestore, 'users'), where('teamId', '==', teamId));
     }, [firestore, teamId]);
 
     const { data: teamMembers, isLoading: areMembersLoading } = useCollection<UserProfile>(teamMembersQuery);
     
     const teamMembersFiltered = useMemo(() => {
+        // Also filter out the manager themselves from the list
         return teamMembers?.filter(member => member.uid !== manager?.uid);
     }, [teamMembers, manager]);
 
 
-    const isLoading = isManagerLoading || areMembersLoading;
+    const isLoading = isManagerAuthLoading || isManagerProfileLoading || areMembersLoading;
     
     const invitationLink = useMemo(() => {
         if (typeof window !== 'undefined' && teamId) {
@@ -172,3 +174,5 @@ export default function MyTeamPage() {
         </div>
     );
 }
+
+    
