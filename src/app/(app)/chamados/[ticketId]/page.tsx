@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Send, ArrowLeft, AlertCircle } from 'lucide-react';
 import { getTicketById, addMessageToTicket, markTicketAsRead, updateTicketStatus, type Ticket, type TicketMessage } from '@/app/actions/tickets';
 import { useUser, useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase";
-import { doc, collection, orderBy, query } from 'firebase/firestore';
+import { doc, collection, orderBy, query, getDoc } from 'firebase/firestore';
 import type { UserProfile } from '@/app/actions/users';
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -55,6 +55,8 @@ export default function ChamadoDetalhePage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [newMessage, setNewMessage] = useState("");
+    const [participantProfiles, setParticipantProfiles] = useState<Record<string, UserProfile | null>>({});
+
 
     const ticketRef = useMemoFirebase(() => {
         if (!firestore || !ticketId) return null;
@@ -79,7 +81,7 @@ export default function ChamadoDetalhePage() {
 
     useEffect(() => {
        async function checkAccessAndMarkRead() {
-           if (pageIsLoading || !ticket || !user) return;
+           if (pageIsLoading || !ticket || !user || !firestore) return;
            
             // Security check
             if (!isAdmin && user?.uid !== ticket.userId) {
@@ -90,9 +92,24 @@ export default function ChamadoDetalhePage() {
             
             // Mark as read after fetching and confirming access
             await markTicketAsRead({ ticketId, userId: user.uid });
+
+            // Fetch profiles of participants
+            const participantIds = Array.from(new Set(messages?.map(m => m.senderId)));
+            const profilesToFetch = participantIds.filter(id => !participantProfiles[id]);
+
+            if (profilesToFetch.length > 0) {
+                const newProfiles: Record<string, UserProfile | null> = {};
+                for (const id of profilesToFetch) {
+                    const userDoc = await getDoc(doc(firestore, 'users', id));
+                    if (userDoc.exists()) {
+                        newProfiles[id] = userDoc.data() as UserProfile;
+                    }
+                }
+                setParticipantProfiles(prev => ({ ...prev, ...newProfiles }));
+            }
        }
        checkAccessAndMarkRead();
-    }, [ticket, user, isAdmin, pageIsLoading, ticketId, router, toast]);
+    }, [ticket, user, isAdmin, pageIsLoading, ticketId, router, toast, firestore, messages, participantProfiles]);
 
 
     useEffect(() => {
@@ -202,37 +219,41 @@ export default function ChamadoDetalhePage() {
                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                        </div>
                    )}
-                   {messages?.map(message => (
-                       <div 
-                        key={message.id} 
-                        className={cn("flex items-end gap-3", user?.uid === message.senderId ? "justify-end" : "justify-start")}
-                       >
-                           {user?.uid !== message.senderId && (
-                               <Avatar className="h-8 w-8">
-                                   <AvatarFallback>{getInitials(message.senderEmail)}</AvatarFallback>
-                               </Avatar>
-                           )}
+                   {messages?.map(message => {
+                        const senderProfile = participantProfiles[message.senderId];
+                        return (
                            <div 
-                            className={cn(
-                                "max-w-md p-3 rounded-lg",
-                                user?.uid === message.senderId 
-                                ? "bg-primary text-primary-foreground" 
-                                : "bg-muted"
-                                )}
-                            >
-                               <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                               <p className={cn("text-xs mt-2 opacity-70", user?.uid === message.senderId ? 'text-right' : 'text-left')}>
-                                   {new Date(message.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                               </p>
+                            key={message.id} 
+                            className={cn("flex items-end gap-3", user?.uid === message.senderId ? "justify-end" : "justify-start")}
+                           >
+                               {user?.uid !== message.senderId && (
+                                   <Avatar className="h-8 w-8">
+                                       <AvatarImage src={senderProfile?.photoURL ?? undefined} />
+                                       <AvatarFallback>{getInitials(message.senderEmail)}</AvatarFallback>
+                                   </Avatar>
+                               )}
+                               <div 
+                                className={cn(
+                                    "max-w-md p-3 rounded-lg",
+                                    user?.uid === message.senderId 
+                                    ? "bg-primary text-primary-foreground" 
+                                    : "bg-muted"
+                                    )}
+                                >
+                                   <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                                   <p className={cn("text-xs mt-2 opacity-70", user?.uid === message.senderId ? 'text-right' : 'text-left')}>
+                                       {new Date(message.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                   </p>
+                               </div>
+                                 {user?.uid === message.senderId && (
+                                   <Avatar className="h-8 w-8">
+                                       <AvatarImage src={userProfile?.photoURL ?? undefined} />
+                                       <AvatarFallback>{getInitials(message.senderEmail)}</AvatarFallback>
+                                   </Avatar>
+                               )}
                            </div>
-                             {user?.uid === message.senderId && (
-                               <Avatar className="h-8 w-8">
-                                   <AvatarImage src={userProfile?.photoURL ?? undefined} />
-                                   <AvatarFallback>{getInitials(message.senderEmail)}</AvatarFallback>
-                               </Avatar>
-                           )}
-                       </div>
-                   ))}
+                        );
+                   })}
                    <div ref={messagesEndRef} />
                 </CardContent>
                 <CardFooter className="p-4 border-t">
