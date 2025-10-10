@@ -251,8 +251,8 @@ export default function AdminUsersPage() {
     const renderActionButtons = (user: UserProfile) => {
         const isUpdating = updatingId === user.uid;
 
-        if (user.role === 'super_admin' || (user.role === 'admin' && adminUser?.email !== 'super@lhamascred.com.br')) {
-            return <span className="text-xs text-muted-foreground">Admin</span>;
+        if (user.role === 'super_admin' || (user.role === 'manager' && adminUser?.email !== 'super@lhamascred.com.br')) {
+             return <span className="text-xs text-muted-foreground">Gerente</span>;
         }
 
         switch (user.status) {
@@ -481,5 +481,3 @@ export default function AdminUsersPage() {
         </>
     );
 }
-
-    

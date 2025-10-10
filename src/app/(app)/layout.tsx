@@ -127,6 +127,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
     );
   }
+  
+  const getRoleText = (role: UserProfile['role'] | undefined) => {
+    if (!role) return 'Usuário';
+    switch (role) {
+        case 'super_admin': return 'Super Admin';
+        case 'manager': return 'Gerente';
+        case 'user': return 'Usuário';
+        default: return 'Usuário';
+    }
+  }
 
   const baseMenuItems = allBaseMenuItems.filter(item => hasPermission(item.permission));
   const allBottomMenuItems = [
@@ -292,7 +302,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </Avatar>
               <div className="flex flex-col text-sm overflow-hidden">
                 <span className="font-medium truncate">{user?.email}</span>
-                <span className="text-xs text-sidebar-foreground/70">{userProfile?.role === 'super_admin' ? 'Super Admin' : (userProfile?.role === 'admin' ? 'Admin' : 'Usuário')}</span>
+                <span className="text-xs text-sidebar-foreground/70">{getRoleText(userProfile?.role)}</span>
               </div>
               <Button variant="ghost" size="icon" className="ml-auto size-7 text-sidebar-foreground/70 hover:text-sidebar-foreground" onClick={handleLogout}>
                 <LogOut />
