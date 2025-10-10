@@ -62,6 +62,7 @@ const deleteUserSchema = z.object({
 
 const setAdminClaimSchema = z.object({
   uid: z.string().min(1, { message: "UID do usuário é obrigatório." }),
+  role: z.enum(['admin', 'super_admin']),
 });
 
 const getUserActivitySchema = z.object({
@@ -78,9 +79,11 @@ export type UserProfile = {
     uid: string;
     email: string;
     photoURL?: string;
-    role: 'admin' | 'user';
+    role: 'super_admin' | 'manager' | 'user';
     status: 'pending' | 'active' | 'rejected' | 'inactive';
     createdAt: string;
+    teamId?: string;
+    sector?: string;
     permissions?: UserPermissions;
 } & ApiCredentials;
 
@@ -121,7 +124,7 @@ export async function logActivity(input: LogActivityInput) {
         });
 
         // If the action is a new user registration, notify all admins.
-        if (input.action === 'User Registration') {
+        if (input.action.startsWith('User Registration')) {
             await createNotificationsForAdmins({
                 title: 'Novo Usuário Cadastrado',
                 message: `O usuário ${userEmail} se cadastrou e aguarda aprovação.`,
@@ -247,26 +250,27 @@ export async function getUsers(): Promise<{users: UserProfile[] | null, error?: 
         // 3. Merge Auth users with Firestore profiles
         const users = await Promise.all(authUsers.map(async (userRecord) => {
             let profileData = firestoreProfiles.get(userRecord.uid);
-            const isAdmin = userRecord.email === 'admin@lhamascred.com.br';
+            
+            // Only process users that have an email
+            if (!userRecord.email) {
+                return null;
+            }
 
-            // If a user exists in Auth but not in Firestore, and has an email, create a profile for them
-            if (!profileData && userRecord.email) {
+            // If a user exists in Auth but not in Firestore, create a profile for them
+            if (!profileData) {
                 console.log(`User ${userRecord.email} found in Auth but not in Firestore. Creating profile...`);
+                const isSuperAdmin = userRecord.email === 'super@lhamascred.com.br';
+                const isAdmin = userRecord.email === 'admin@lhamascred.com.br';
                 const newProfile = {
                     uid: userRecord.uid,
-                    email: userRecord.email || '',
-                    role: isAdmin ? 'admin' : 'user',
+                    email: userRecord.email,
+                    role: isSuperAdmin ? 'super_admin' : (isAdmin ? 'admin' : 'user'),
                     status: 'pending',
                     createdAt: FieldValue.serverTimestamp(),
                     permissions: { canViewFGTS: false, canViewCLT: false, canViewINSS: false }
                 };
                 await firestore.collection('users').doc(userRecord.uid).set(newProfile);
                 profileData = newProfile;
-            }
-
-            // Only process users that have an email
-            if (!userRecord.email) {
-                return null;
             }
             
             const createdAt = profileData.createdAt;
@@ -284,6 +288,8 @@ export async function getUsers(): Promise<{users: UserProfile[] | null, error?: 
                 role: profileData.role || 'user',
                 status: profileData.status || 'pending',
                 createdAt: serializableCreatedAt,
+                teamId: profileData.teamId,
+                sector: profileData.sector,
                 v8_username: profileData.v8_username,
                 v8_password: profileData.v8_password,
                 v8_audience: profileData.v8_audience,
@@ -316,7 +322,7 @@ export async function setAdminClaim(input: z.infer<typeof setAdminClaimSchema>):
   try {
     initializeFirebaseAdmin();
     const auth = getAuth();
-    await auth.setCustomUserClaims(validation.data.uid, { admin: true });
+    await auth.setCustomUserClaims(validation.data.uid, { [validation.data.role]: true });
     return { success: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao definir a claim de admin.";
@@ -474,6 +480,15 @@ const getStatusText = (status: UserProfile['status']) => {
     }
 };
 
+const getRoleText = (role: UserProfile['role']) => {
+    switch (role) {
+        case 'super_admin': return 'Super Admin';
+        case 'manager': return 'Gerente';
+        case 'user': return 'Usuário';
+        default: return role;
+    }
+};
+
 export async function exportUsersToExcel(input: z.infer<typeof exportUsersSchema>): Promise<ExportResult> {
     const validation = exportUsersSchema.safeParse(input);
     if (!validation.success) {
@@ -494,7 +509,9 @@ export async function exportUsersToExcel(input: z.infer<typeof exportUsersSchema
         const dataToExport = users.map(user => ({
             'Email': user.email,
             'Status': getStatusText(user.status),
-            'Função': user.role === 'admin' ? 'Administrador' : 'Usuário',
+            'Função': getRoleText(user.role),
+            'Time ID': user.teamId || 'N/A',
+            'Setor': user.sector || 'N/A',
             'Data de Cadastro': new Date(user.createdAt).toLocaleDateString('pt-BR'),
         }));
         
@@ -502,7 +519,7 @@ export async function exportUsersToExcel(input: z.infer<typeof exportUsersSchema
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Usuários');
         
-        const header = ['Email', 'Status', 'Função', 'Data de Cadastro'];
+        const header = ['Email', 'Status', 'Função', 'Time ID', 'Setor', 'Data de Cadastro'];
         const colWidths = header.map(h => ({ wch: Math.max(h.length, 20) }));
         worksheet['!cols'] = colWidths;
 
@@ -527,5 +544,3 @@ export async function exportUsersToExcel(input: z.infer<typeof exportUsersSchema
         return { status: 'error', message };
     }
 }
-
-    

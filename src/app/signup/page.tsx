@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, FormEvent, useEffect } from "react";
@@ -9,22 +8,22 @@ import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { Logo } from "@/components/logo";
 import { useAuth, useUser } from "@/firebase";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, AuthError, signOut, getIdTokenResult } from "firebase/auth";
+import { createUserWithEmailAndPassword, AuthError, signOut } from "firebase/auth";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, CheckCircle } from "lucide-react";
-import { doc, setDoc, FieldValue } from "firebase/firestore";
+import { doc, setDoc, getDoc, FieldValue } from "firebase/firestore";
 import { useFirestore } from "@/firebase";
-import { setAdminClaim, logActivity } from "@/app/actions/users";
+import { logActivity } from "@/app/actions/users";
 import { serverTimestamp } from "firebase/firestore";
+import type { Team } from '@/app/actions/teams';
 
-export default function LoginPage() {
+export default function SignUpPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isSignUp, setIsSignUp] = useState(false);
   const [showPendingMessage, setShowPendingMessage] = useState(false);
 
   const auth = useAuth();
@@ -33,22 +32,17 @@ export default function LoginPage() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const { user, isUserLoading } = useUser();
-
-  const isPending = searchParams.get('status') === 'pending';
+  const teamId = searchParams.get('convite');
 
   useEffect(() => {
-    // If user is logged in, redirect to dashboard.
-    // The layout will handle redirecting back if the user is not 'active'.
     if (!isUserLoading && user) {
-      // Force refresh of the token to get new custom claims after login.
-      getIdTokenResult(user, true).then((idTokenResult) => {
-        // The custom claim might not be immediately available on first sign-up,
-        // but on subsequent logins it should be.
-        // We push to dashboard regardless, and let the dashboard logic handle role access.
-        router.push('/dashboard');
-      });
+      router.push('/dashboard');
     }
-  }, [user, isUserLoading, router]);
+    if (!teamId) {
+        // Redirect to main login page if there's no invitation code
+        router.push('/');
+    }
+  }, [user, isUserLoading, router, teamId]);
 
   const handleAuth = async (e: FormEvent) => {
     e.preventDefault();
@@ -56,32 +50,39 @@ export default function LoginPage() {
     setError(null);
     setShowPendingMessage(false);
 
-    if (!auth || !firestore) {
-      setError("Serviços de autenticação não estão disponíveis. Tente novamente mais tarde.");
+    if (!auth || !firestore || !teamId) {
+      setError("Link de convite inválido ou serviços de autenticação indisponíveis.");
       setIsLoading(false);
       return;
     }
+    
+     // Check if the team exists before creating the user
+    const teamRef = doc(firestore, "teams", teamId);
+    const teamSnap = await getDoc(teamRef);
+
+    if (!teamSnap.exists()) {
+        setError("O time para o qual você foi convidado não existe mais.");
+        setIsLoading(false);
+        return;
+    }
+    const teamData = teamSnap.data() as Team;
 
     try {
-      if (isSignUp) {
-        // Create user
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const newUser = userCredential.user;
-        const isAdmin = newUser.email === 'admin@lhamascred.com.br';
-        const isSuperAdmin = newUser.email === 'super@lhamascred.com.br';
 
-        // Create user profile in Firestore
+        // Find the default sector for the team (if any), or assign a default one
+        // For now, let's assume there is no default sector and leave it blank.
+        // A manager would have to assign it.
         const userProfile = {
           uid: newUser.uid,
           email: newUser.email,
-          role: isSuperAdmin ? 'super_admin' : (isAdmin ? 'admin' : 'user'),
-          status: isSuperAdmin || isAdmin ? 'active' : 'pending',
+          role: 'user',
+          status: 'pending', // Users joining via link must be approved
           createdAt: serverTimestamp(),
-          permissions: (isSuperAdmin || isAdmin) ? {
-              canViewFGTS: true,
-              canViewCLT: true,
-              canViewINSS: true,
-          } : {
+          teamId: teamId,
+          sector: '', // Initially no sector assigned
+          permissions: { // Users from invitation link start with no permissions
               canViewFGTS: false,
               canViewCLT: false,
               canViewINSS: false,
@@ -92,50 +93,19 @@ export default function LoginPage() {
         
         await logActivity({
             userId: newUser.uid,
-            action: 'User Registration',
-            details: `New user ${newUser.email} signed up.`
+            action: 'User Registration (Invitation)',
+            details: `New user ${newUser.email} signed up for team ${teamId}`
         });
         
-        // Set admin custom claim via server action if it's the admin user
-        if (isSuperAdmin || isAdmin) {
-          const claimResult = await setAdminClaim({ uid: newUser.uid, role: isSuperAdmin ? 'super_admin' : 'admin' });
-          if (!claimResult.success) {
-            // This is not a fatal error for the user flow, but should be logged.
-            console.error("Failed to set admin claim:", claimResult.error);
-          }
-           // Force token refresh to pick up the new claim immediately and redirect
-           await getIdTokenResult(newUser, true);
-           router.push('/dashboard');
-        } else {
-            // For regular users, show pending message and sign them out.
-            setShowPendingMessage(true);
-            await signOut(auth);
-        }
+        setShowPendingMessage(true);
+        await signOut(auth);
 
-      } else {
-        // Handle sign in
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        const loggedInUser = userCredential.user;
-        
-        // This is important: force a token refresh after sign-in
-        // to ensure the latest custom claims are loaded into the token.
-        await getIdTokenResult(loggedInUser, true);
-
-        // Redirect is handled by the useEffect hook
-      }
     } catch (err) {
       const authError = err as AuthError;
       let friendlyMessage = 'Ocorreu um erro. Tente novamente.';
       switch (authError.code) {
-        case 'auth/user-not-found':
-        case 'auth/invalid-credential':
-          friendlyMessage = 'Credenciais inválidas. Verifique seu e-mail e senha.';
-          break;
-        case 'auth/wrong-password':
-          friendlyMessage = 'Senha incorreta. Por favor, tente novamente.';
-          break;
         case 'auth/email-already-in-use':
-          friendlyMessage = 'Este e-mail já está em uso por outra conta.';
+          friendlyMessage = 'Este e-mail já está em uso. Tente fazer o login.';
           break;
         case 'auth/invalid-email':
           friendlyMessage = 'O formato do e-mail é inválido.';
@@ -154,8 +124,7 @@ export default function LoginPage() {
     }
   };
 
-  // Do not render the form while checking auth state or if user is logged in
-  if (isUserLoading || user) {
+  if (isUserLoading || user || !teamId) {
     return <div className="flex min-h-screen items-center justify-center bg-background"><Logo /></div>;
   }
 
@@ -174,11 +143,13 @@ export default function LoginPage() {
                 </div>
                <CardTitle className="font-headline text-2xl font-semibold mt-4">Solicitação Enviada!</CardTitle>
                <CardDescription className="text-base">
-                 Sua conta foi criada e está aguardando aprovação de um administrador.
+                 Sua solicitação para entrar na equipe foi enviada e está aguardando aprovação.
                </CardDescription>
              </CardHeader>
              <CardFooter>
-               <Button className="w-full" onClick={() => setShowPendingMessage(false)}>Voltar para o Login</Button>
+               <Button className="w-full" asChild>
+                   <Link href="/">Ir para o Login</Link>
+                </Button>
              </CardFooter>
            </Card>
         ) : (
@@ -186,25 +157,18 @@ export default function LoginPage() {
             <form onSubmit={handleAuth}>
               <CardHeader className="text-center">
                 <CardTitle className="font-headline text-2xl font-semibold">
-                  {isSignUp ? "Crie sua conta" : "Bem-vindo de volta!"}
+                  Criar Conta para Equipe
                 </CardTitle>
                 <CardDescription>
-                  {isSignUp ? "Preencha os dados para começar." : "Acesse sua conta para gerenciar suas finanças."}
+                  Você foi convidado para uma equipe. Preencha seus dados para se registrar.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {error && (
                   <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>Erro de Autenticação</AlertTitle>
+                    <AlertTitle>Erro no Cadastro</AlertTitle>
                     <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
-                 {isPending && (
-                  <Alert variant="default" className="bg-yellow-50 border-yellow-200 text-yellow-800">
-                    <AlertCircle className="h-4 w-4 !text-yellow-600" />
-                    <AlertTitle>Conta Pendente</AlertTitle>
-                    <AlertDescription>Sua conta ainda está aguardando aprovação do administrador.</AlertDescription>
                   </Alert>
                 )}
                 <div className="space-y-2">
@@ -221,14 +185,7 @@ export default function LoginPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="password">Senha</Label>
-                    {!isSignUp && (
-                      <Link href="#" className="text-sm text-primary hover:underline">
-                        Esqueceu a senha?
-                      </Link>
-                    )}
-                  </div>
+                  <Label htmlFor="password">Senha</Label>
                   <Input 
                     id="password" 
                     type="password" 
@@ -236,27 +193,19 @@ export default function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={isLoading}
-                    autoComplete={isSignUp ? "new-password" : "current-password"}
+                    autoComplete="new-password"
                   />
                 </div>
               </CardContent>
               <CardFooter className="flex flex-col gap-4">
                 <Button className="w-full" type="submit" disabled={isLoading}>
-                  {isLoading ? "Carregando..." : (isSignUp ? "Cadastrar" : "Entrar")}
+                  {isLoading ? "Criando conta..." : "Criar conta e solicitar acesso"}
                 </Button>
-                <div className="text-center text-sm text-muted-foreground">
-                  {isSignUp ? "Já tem uma conta?" : "Não tem uma conta?"}{' '}
-                  <Button 
-                    variant="link" 
-                    className="p-0 h-auto"
-                    type="button" 
-                    onClick={() => {
-                      setIsSignUp(!isSignUp);
-                      setError(null);
-                    }}
-                  >
-                    {isSignUp ? "Faça o login" : "Cadastre-se"}
-                  </Button>
+                 <div className="text-center text-sm text-muted-foreground">
+                    Já tem uma conta?{' '}
+                    <Link href="/" className="text-primary hover:underline">
+                        Faça o login
+                    </Link>
                 </div>
               </CardFooter>
             </form>

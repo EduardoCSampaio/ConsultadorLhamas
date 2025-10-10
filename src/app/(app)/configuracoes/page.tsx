@@ -143,6 +143,16 @@ export default function ConfiguracoesPage() {
   }
   
   const isLoading = isUserLoading || isProfileLoading;
+  
+  const getRoleText = (role: UserProfile['role'] | undefined) => {
+    if (!role) return '';
+    switch (role) {
+        case 'super_admin': return 'Super Admin';
+        case 'manager': return 'Gerente';
+        case 'user': return 'Usuário';
+        default: return role;
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -180,7 +190,7 @@ export default function ConfiguracoesPage() {
                             </Avatar>
                             <div className="flex-1">
                                 <h3 className="font-semibold">{user?.email}</h3>
-                                <p className="text-sm text-muted-foreground">{userProfile?.role === 'admin' ? 'Administrador' : 'Usuário'}</p>
+                                <p className="text-sm text-muted-foreground">{getRoleText(userProfile?.role)}</p>
                             </div>
                             <ImageUploadDialog>
                                 <Button variant="outline">Alterar Foto</Button>
@@ -191,7 +201,7 @@ export default function ConfiguracoesPage() {
                             <CardHeader className="flex flex-row items-center gap-4">
                                 <Lock className="h-6 w-6 text-muted-foreground"/>
                                 <div>
-                                    <CardTitle className="text-lg font-headline">Alterar Senha</CardTitle>
+                                    <CardTitle>Alterar Senha</CardTitle>
                                     <CardDescription className="text-xs">Altere sua senha de acesso.</CardDescription>
                                 </div>
                             </CardHeader>
@@ -221,9 +231,9 @@ export default function ConfiguracoesPage() {
                                 <h3 className="text-xl font-bold tracking-tight">
                                     API V8
                                 </h3>
-                                <p className="text-sm text-muted-foreground">
+                                <div className="text-sm text-muted-foreground">
                                     Credenciais para consulta de saldo FGTS e Crédito Privado CLT.
-                                </p>
+                                </div>
                             </button>
                         </DialogTrigger>
                         <DialogContent className="sm:max-w-md">
@@ -307,9 +317,9 @@ export default function ConfiguracoesPage() {
                                 <h3 className="text-xl font-bold tracking-tight">
                                     API Facta
                                 </h3>
-                                <p className="text-sm text-muted-foreground">
+                                <div className="text-sm text-muted-foreground">
                                     Credenciais para consulta de Crédito Privado CLT.
-                                </p>
+                                </div>
                             </button>
                         </DialogTrigger>
                         <DialogContent className="sm:max-w-md">

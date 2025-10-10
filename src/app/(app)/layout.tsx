@@ -51,11 +51,11 @@ import { NotificationBell } from '@/components/notification-bell';
 const allBaseMenuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard", permission: 'isLoggedIn' as const },
   { href: "/esteira", icon: Workflow, label: "Esteira", permission: 'isAdmin' as const },
-  { href: "/admin/history", icon: BookMarked, label: "Histórico", permission: 'isAdmin' as const },
+  { href: "/admin/history", icon: BookMarked, label: "Histórico", permission: 'isSuperAdmin' as const },
 ];
 
 const adminBottomMenuItems = [
-    { href: "/admin/users", icon: Users, label: "Gerenciar Usuários", permission: 'isAdmin' as const },
+    { href: "/admin/users", icon: Users, label: "Gerenciar Usuários", permission: 'isSuperAdmin' as const },
     { href: "/admin/auxilio-propostas", icon: ClipboardCheck, label: "Auxílio Propostas", permission: 'isSuperAdmin' as const },
 ];
 
@@ -112,10 +112,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const hasPermission = (permission: 'isAdmin' | 'isLoggedIn' | 'isSuperAdmin' | keyof UserProfile['permissions']) => {
     if (permission === 'isLoggedIn') return true;
-    const isSuperAdmin = userProfile?.email === 'admin@lhamascred.com.br';
+    const isSuperAdmin = userProfile?.role === 'super_admin';
     if (permission === 'isSuperAdmin') return isSuperAdmin;
     if (userProfile?.role === 'admin') return true;
-    if (permission === 'isAdmin') return false;
+    if (permission === 'isAdmin') return false; // This is now for team managers, not admins
     
     return !!userProfile?.permissions?.[permission];
   };
@@ -292,7 +292,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </Avatar>
               <div className="flex flex-col text-sm overflow-hidden">
                 <span className="font-medium truncate">{user?.email}</span>
-                <span className="text-xs text-sidebar-foreground/70">{userProfile?.role === 'admin' ? 'Administrador' : 'Usuário'}</span>
+                <span className="text-xs text-sidebar-foreground/70">{userProfile?.role === 'super_admin' ? 'Super Admin' : (userProfile?.role === 'admin' ? 'Admin' : 'Usuário')}</span>
               </div>
               <Button variant="ghost" size="icon" className="ml-auto size-7 text-sidebar-foreground/70 hover:text-sidebar-foreground" onClick={handleLogout}>
                 <LogOut />

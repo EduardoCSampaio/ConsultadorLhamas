@@ -46,6 +46,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 
 
 type UserStatus = UserProfile['status'];
+type UserRole = UserProfile['role'];
 
 const permissionLabels: Record<keyof UserPermissions, string> = {
     canViewFGTS: "Acesso a Consultas FGTS",
@@ -215,10 +216,19 @@ export default function AdminUsersPage() {
         }
     };
     
+    const getRoleText = (role: UserRole) => {
+        switch (role) {
+            case 'super_admin': return 'Super Admin';
+            case 'manager': return 'Gerente';
+            case 'user': return 'Usuário';
+            default: return role;
+        }
+    }
+
     const renderActionButtons = (user: UserProfile) => {
         const isUpdating = updatingId === user.uid;
 
-        if (user.role === 'admin') {
+        if (user.role === 'super_admin' || user.role === 'admin') {
             return <span className="text-xs text-muted-foreground">Admin</span>;
         }
 
@@ -293,7 +303,7 @@ export default function AdminUsersPage() {
                                             </TableRow>
                                         ))
                                     ) : (
-                                        users?.map((user) => (
+                                        users?.filter(u => u.email).map((user) => (
                                             <TableRow key={user.uid}>
                                                 <TableCell className="font-medium">{user.email}</TableCell>
                                                 <TableCell>
@@ -301,11 +311,11 @@ export default function AdminUsersPage() {
                                                         {getStatusText(user.status)}
                                                     </Badge>
                                                 </TableCell>
-                                                <TableCell className="capitalize">{user.role}</TableCell>
+                                                <TableCell className="capitalize">{getRoleText(user.role)}</TableCell>
                                                 <TableCell className="text-right">
                                                      <div className="flex gap-2 justify-end items-center">
                                                         {renderActionButtons(user)}
-                                                        {user.role !== 'admin' && (
+                                                        {user.role !== 'super_admin' && user.role !== 'admin' && (
                                                             <>
                                                                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenEditModal(user)}>
                                                                     <Pencil className="h-4 w-4" />

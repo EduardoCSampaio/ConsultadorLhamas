@@ -341,7 +341,7 @@ function AdminDashboardLoader() {
         <div className="flex flex-col gap-6">
             <PageHeader
                 title={<Skeleton className="h-8 w-64"/>}
-                description={<div className="h-5 w-80"><Skeleton className="h-full w-full"/></div>}
+                description={<Skeleton className="h-5 w-80"/>}
             >
                 <Skeleton className="h-10 w-44" />
             </PageHeader>
@@ -387,14 +387,14 @@ function AdminDashboardLoader() {
                  <Card>
                     <CardHeader>
                         <CardTitle><Skeleton className="h-6 w-48"/></CardTitle>
-                        <CardDescription><div className="h-4 w-72"><Skeleton className="h-full w-full"/></div></CardDescription>
+                        <CardDescription><Skeleton className="h-4 w-72"/></CardDescription>
                     </CardHeader>
                     <CardContent><Skeleton className="h-40 w-full"/></CardContent>
                 </Card>
                  <Card>
                     <CardHeader>
                         <CardTitle><Skeleton className="h-6 w-48"/></CardTitle>
-                        <CardDescription><div className="h-4 w-72"><Skeleton className="h-full w-full"/></div></CardDescription>
+                        <CardDescription><Skeleton className="h-4 w-72"/></CardDescription>
                     </CardHeader>
                     <CardContent><Skeleton className="h-40 w-full"/></CardContent>
                 </Card>
@@ -424,7 +424,7 @@ export default function DashboardPage() {
 
   React.useEffect(() => {
     async function fetchAdminData() {
-        if (userProfile?.role === 'admin' && !isProfileLoading) {
+        if (userProfile?.role === 'super_admin' && !isProfileLoading) {
             setIsAdminDataLoading(true);
             try {
                 const [{ users, error: usersError }, { logs, error: logsError }] = await Promise.all([
@@ -455,8 +455,8 @@ export default function DashboardPage() {
     return <AdminDashboardLoader />;
   }
 
-  if (userProfile?.role === 'admin') {
-    if (isAdminDataLoading) {
+  if (userProfile?.role === 'super_admin' || userProfile?.role === 'admin') {
+    if (isAdminDataLoading && userProfile?.role === 'super_admin') {
         return <AdminDashboardLoader />;
     }
     return <AdminDashboard initialUsers={adminData.users} activityLogs={adminData.logs} error={adminData.error} />;
@@ -469,5 +469,3 @@ export default function DashboardPage() {
   // Fallback or loading state if userProfile is not available for some reason.
   return <AdminDashboardLoader />;
 }
-
-    
