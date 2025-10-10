@@ -219,9 +219,9 @@ export default function EsteiraPage() {
                             <h3 className="text-2xl font-bold tracking-tight">
                                 Nenhum Lote na Esteira
                             </h3>
-                            <p className="text-sm text-muted-foreground">
+                            <div className="text-sm text-muted-foreground">
                                Envie um lote na página de <Link href="/fgts" className="text-primary underline">Consulta FGTS</Link> para começar.
-                            </p>
+                            </div>
                         </div>
                     </CardContent>
                 </Card>
@@ -237,16 +237,16 @@ export default function EsteiraPage() {
                                             Enviado em: {new Date(batch.createdAt).toLocaleString('pt-BR')}
                                         </p>
                                           {batch.status === 'processing' && (
-                                            <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                                            <div className="text-sm text-muted-foreground flex items-center gap-1.5">
                                                 <Timer className="h-3.5 w-3.5"/>
                                                 Em andamento por: {formatDuration(Date.now() - new Date(batch.createdAt).getTime())}
-                                            </p>
+                                            </div>
                                         )}
                                         {(batch.status === 'completed' || batch.status === 'error') && batch.completedAt && (
-                                             <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                                             <div className="text-sm text-muted-foreground flex items-center gap-1.5">
                                                 <CheckCircle className="h-3.5 w-3.5"/>
                                                 Concluído em: {formatDuration(new Date(batch.completedAt).getTime() - new Date(batch.createdAt).getTime())} - {new Date(batch.completedAt).toLocaleDateString('pt-BR')} às {new Date(batch.completedAt).toLocaleTimeString('pt-BR')}
-                                            </p>
+                                            </div>
                                         )}
                                     </div>
                                     <div className='flex items-center gap-2'>

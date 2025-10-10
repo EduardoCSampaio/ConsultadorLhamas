@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from "react";
@@ -180,13 +181,13 @@ export default function ChamadosPage() {
                             {isAdmin && (
                                 <p className="text-sm font-medium text-muted-foreground">{ticket.userEmail}</p>
                             )}
-                           <p className="text-sm text-muted-foreground mt-1">
+                           <div className="text-sm text-muted-foreground mt-1">
                                 Última atualização: {new Date(ticket.updatedAt).toLocaleString('pt-BR')}
-                           </p>
-                            <p className="text-sm text-muted-foreground line-clamp-1 flex items-center gap-2 mt-1">
+                           </div>
+                            <div className="text-sm text-muted-foreground line-clamp-1 flex items-center gap-2 mt-1">
                                 <MessageSquare className="h-3.5 w-3.5" />
                                 {ticket.lastMessage}
-                            </p>
+                            </div>
                        </div>
                        <Button variant="outline" size="sm" asChild>
                             <Link href={`/chamados/${ticket.id}`}>Ver Chamado</Link>
@@ -314,9 +315,9 @@ export default function ChamadosPage() {
                                     <h3 className="text-2xl font-bold tracking-tight">
                                         Nenhum Chamado Aberto
                                     </h3>
-                                    <p className="text-sm text-muted-foreground">
+                                    <div className="text-sm text-muted-foreground">
                                     {isAdmin ? "Nenhum chamado aberto corresponde aos filtros." : "Você não tem chamados em aberto."}
-                                    </p>
+                                    </div>
                                 </div>
                             ) : (
                                 <TicketList list={openTickets} />
@@ -345,9 +346,9 @@ export default function ChamadosPage() {
                                     <h3 className="text-2xl font-bold tracking-tight">
                                         Nenhum Chamado Resolvido
                                     </h3>
-                                     <p className="text-sm text-muted-foreground">
+                                     <div className="text-sm text-muted-foreground">
                                        {isAdmin ? "Nenhum chamado resolvido corresponde aos filtros." : "Você não tem chamados resolvidos."}
-                                    </p>
+                                    </div>
                                 </div>
                             ) : (
                                <TicketList list={resolvedTickets} />
