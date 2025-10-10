@@ -439,8 +439,8 @@ export default function MyTeamPage() {
                             <Separator />
 
                             <div>
-                                <Label className="text-base font-semibold">Permissões de Acesso</Label>
-                                <div className="space-y-3 mt-4">
+                                <h3 className="text-base font-semibold mb-4">Permissões de Acesso</h3>
+                                <div className="space-y-3">
                                     {(Object.keys(permissionLabels) as Array<keyof UserPermissions>).map((key) => (
                                         <div key={key} className="flex items-center space-x-3">
                                             <Checkbox
