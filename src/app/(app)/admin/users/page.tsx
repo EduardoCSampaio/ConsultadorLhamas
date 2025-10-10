@@ -251,8 +251,12 @@ export default function AdminUsersPage() {
     const renderActionButtons = (user: UserProfile) => {
         const isUpdating = updatingId === user.uid;
 
-        if (user.role === 'super_admin' || (user.role === 'manager' && adminUser?.email !== 'super@lhamascred.com.br')) {
-             return <span className="text-xs text-muted-foreground">Gerente</span>;
+        if (user.role === 'super_admin') {
+             return null; // No actions for super admin
+        }
+        
+        if (user.role === 'manager' && adminUser?.role !== 'super_admin') {
+             return <span className="text-xs text-muted-foreground">Gerenciado por Super Admin</span>;
         }
 
         switch (user.status) {
@@ -312,6 +316,7 @@ export default function AdminUsersPage() {
                                         <TableHead>Email</TableHead>
                                         <TableHead>Status</TableHead>
                                         <TableHead>Função</TableHead>
+                                        <TableHead>Time</TableHead>
                                         <TableHead className="text-right">Ações</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -322,6 +327,7 @@ export default function AdminUsersPage() {
                                                 <TableCell><Skeleton className="h-5 w-48" /></TableCell>
                                                 <TableCell><Skeleton className="h-5 w-20" /></TableCell>
                                                 <TableCell><Skeleton className="h-5 w-16" /></TableCell>
+                                                <TableCell><Skeleton className="h-5 w-24" /></TableCell>
                                                 <TableCell className="text-right"><Skeleton className="h-8 w-24 ml-auto" /></TableCell>
                                             </TableRow>
                                         ))
@@ -335,6 +341,7 @@ export default function AdminUsersPage() {
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell className="capitalize">{getRoleText(user.role)}</TableCell>
+                                                <TableCell className="font-mono text-xs">{user.teamId || 'N/A'}</TableCell>
                                                 <TableCell className="text-right">
                                                      <div className="flex gap-2 justify-end items-center">
                                                         {renderActionButtons(user)}
@@ -415,7 +422,7 @@ export default function AdminUsersPage() {
                                     <Select
                                         value={newRole || ''}
                                         onValueChange={(value) => setNewRole(value as UserRole)}
-                                        disabled={selectedUser.role === 'super_admin'}
+                                        disabled={selectedUser.role === 'super_admin' || (selectedUser.role === 'manager' && adminUser?.role !== 'super_admin')}
                                     >
                                         <SelectTrigger className="col-span-3">
                                             <SelectValue placeholder="Selecione uma função" />

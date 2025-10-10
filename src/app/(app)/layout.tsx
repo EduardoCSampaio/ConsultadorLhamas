@@ -34,6 +34,7 @@ import {
   CreditCard,
   LifeBuoy,
   ClipboardCheck,
+  Shield,
 } from "lucide-react";
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -50,13 +51,17 @@ import { NotificationBell } from '@/components/notification-bell';
 
 const allBaseMenuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard", permission: 'isLoggedIn' as const },
-  { href: "/esteira", icon: Workflow, label: "Esteira", permission: 'isAdmin' as const },
+  { href: "/esteira", icon: Workflow, label: "Esteira", permission: 'isSuperAdmin' as const },
   { href: "/admin/history", icon: BookMarked, label: "Histórico", permission: 'isSuperAdmin' as const },
 ];
 
 const adminBottomMenuItems = [
     { href: "/admin/users", icon: Users, label: "Gerenciar Usuários", permission: 'isSuperAdmin' as const },
     { href: "/admin/auxilio-propostas", icon: ClipboardCheck, label: "Auxílio Propostas", permission: 'isSuperAdmin' as const },
+];
+
+const managerMenuItems = [
+    { href: "/teams", icon: Shield, label: "Meu Time", permission: 'isManager' as const },
 ];
 
 const bottomMenuItems = [
@@ -110,12 +115,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return email.substring(0, 2).toUpperCase();
   }
 
-  const hasPermission = (permission: 'isAdmin' | 'isLoggedIn' | 'isSuperAdmin' | keyof UserProfile['permissions']) => {
+  const hasPermission = (permission: 'isManager' | 'isLoggedIn' | 'isSuperAdmin' | keyof UserProfile['permissions']) => {
     if (permission === 'isLoggedIn') return true;
+    
     const isSuperAdmin = userProfile?.role === 'super_admin';
+    const isManager = userProfile?.role === 'manager';
+
     if (permission === 'isSuperAdmin') return isSuperAdmin;
-    if (userProfile?.role === 'admin') return true;
-    if (permission === 'isAdmin') return false; // This is now for team managers, not admins
+    if (permission === 'isManager') return isManager;
     
     return !!userProfile?.permissions?.[permission];
   };
@@ -141,6 +148,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const baseMenuItems = allBaseMenuItems.filter(item => hasPermission(item.permission));
   const allBottomMenuItems = [
       ...adminBottomMenuItems.filter(item => hasPermission(item.permission)),
+      ...managerMenuItems.filter(item => hasPermission(item.permission)),
       ...bottomMenuItems.filter(item => hasPermission(item.permission)),
   ];
   
