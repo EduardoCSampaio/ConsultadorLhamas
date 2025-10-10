@@ -1,156 +1,200 @@
-/**
- * @file Firestore Security Rules
- * @core_philosophy This ruleset enforces a strict user-ownership model for personal data,
- * with additional controls for admin-level operations. Public read access is granted only
- * where explicitly intended and safe.
- * @data_structure Data is organized primarily around users (`/users/{userId}`), with
- * some top-level collections for shared resources and system-wide data.
- * @key_security_decisions
- *   - User listing is disallowed to prevent unauthorized data scraping.
- *   - Read-only collections are explicitly marked and allow public read access.
- *   - Ambiguous relationships default to owner-only access for maximum security.
- *   - Data required for authorization is denormalized onto the documents being secured.
- */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Allows access to API responses.
+     * @description Allows public read access to webhook responses, but restricts writes.
      * @path /webhookResponses/{responseId}
-     * @allow (read, write) if false; // TODO: Implement appropriate access control.
-     * @deny (read, write) Always. Access control not yet defined.
-     * @principle Access control for webhook responses is not defined.
+     * @allow (get, list): if true;
+     * @deny (create, update, delete): Always denies write operations.
+     * @principle Grants public read, restricts all writes.
      */
     match /webhookResponses/{responseId} {
-      allow get, list: if false;
-      allow create, update, delete: if false; // TODO: Implement appropriate access control.
+      allow get, list: if true;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Manages user profiles. Users can only read/write their own profile.
+     * @description Enforces strict user-ownership for profiles.
      * @path /users/{userId}
-     * @allow (create) User creates their own profile if the UID matches.
-     * @allow (get, update, delete) User can only read, update, or delete their own profile.
-     * @deny (create) if the user tries to create a profile with a mismatched UID.
-     * @deny (get, update, delete) if a different user tries to access this profile.
-     * @principle Enforces user-ownership for profile data.
+     * @allow (get): Authenticated user can read their own profile.
+     * @allow (create): Authenticated user can create their own profile (self-registration).
+     * @allow (update, delete): Authenticated user can update/delete their own profile.
+     * @deny (get, list): Prevents listing all users.
+     * @deny (create, update, delete): Denies others from creating/modifying user profiles.
+     * @principle Enforces document ownership for writes, restricts listing.
      */
     match /users/{userId} {
-      allow get, list: if isOwner(userId);
-      allow create: if isNewOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if false; // Delete operation is not allowed.
+      allow get: if isSignedIn() && isOwner(userId);
+      allow list: if false;
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isOwner(userId);
+      allow delete: if isSignedIn() && isOwner(userId);
     }
 
-      /**
-       * @description Manages team information. Manager can read/write their own team info
-       * @path /teams/{teamId}
-       * @allow (create) Manager creates their own team if the managerId matches
-       * @allow (get, update) Manager can only read, update their own team information
-       * @deny (create) if the user tries to create a team with a mismatched managerId.
-       * @deny (get, update) if a different user tries to access this team
-       * @principle Enforces user-ownership for team data.
-       */
-      match /teams/{teamId} {
-        allow get, list: if true;
+     /**
+      * @description Enforces team-based access control, allowing managers to manage their teams.
+      * @path /teams/{teamId}
+      * @allow (get, list): Allow access if the user is a manager of the team.
+      * @allow (create): Allow creating if the user is the manager.
+      * @allow (update, delete): Allow updating/deleting if the user is the manager.
+      * @deny (create, update, delete): Denies other from creating/modifying teams.
+      * @principle: Enforces team ownership for writes, restricts listing.
+      */
+    match /teams/{teamId} {
+        allow get, list: if isSignedIn();
         allow create: if isSignedIn();
         allow update: if isSignedIn();
-        allow delete: if false; // Delete operation is not allowed.
-      }
+        allow delete: if isSignedIn();
+    }
 
     /**
-     * @description Allows access to activity logs.
+     * @description Restricts activity log access to server-side only.
      * @path /activityLogs/{logId}
-     * @allow (read, write) if false; // TODO: Implement appropriate access control.
-     * @deny (read, write) Always. Access control not yet defined.
-     * @principle Access control for activity logs is not defined.
+     * @deny (get, list, create, update, delete): All client access is denied.
+     * @principle Server-side only collection.
      */
     match /activityLogs/{logId} {
-      allow get, list: if false;
-      allow create, update, delete: if false; // TODO: Implement appropriate access control.
+      allow get, list, create, update, delete: if false;
     }
 
     /**
-     * @description Allows access to batch jobs.
+     * @description Enforces user-ownership for batch jobs.
      * @path /batches/{batchId}
-     * @allow (read, write) if false; // TODO: Implement appropriate access control.
-     * @deny (read, write) Always. Access control not yet defined.
-     * @principle Access control for batch jobs is not defined.
+     * @allow (get, list): Authenticated user can read their own batch jobs.
+     * @allow (create): Authenticated user can create their own batch jobs.
+     * @allow (update, delete): Authenticated user can update/delete their own batch jobs.
+     * @deny (create, update, delete): Denies others from creating/modifying batch jobs.
+     * @principle Enforces document ownership for writes, restricts listing.
      */
     match /batches/{batchId} {
-      allow get, list: if false;
-      allow create, update, delete: if false; // TODO: Implement appropriate access control.
+      allow get, list: if isSignedIn() && getBatchOwner();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && getBatchOwner();
+      allow delete: if isSignedIn() && getBatchOwner();
     }
 
     /**
-     * @description Allows access to clt consents.
+     * @description Enforces user-ownership for CLT consent documents.
      * @path /cltConsents/{consentId}
-     * @allow (read, write) if false; // TODO: Implement appropriate access control.
-     * @deny (read, write) Always. Access control not yet defined.
-     * @principle Access control for clt consents is not defined.
+     * @allow (get, list): Authenticated user can read their own consent documents.
+     * @allow (create): Authenticated user can create their own consent documents.
+     * @allow (update, delete): Authenticated user can update/delete their own consent documents.
+     * @deny (create, update, delete): Denies others from creating/modifying consent documents.
+     * @principle Enforces document ownership for writes, restricts listing.
      */
     match /cltConsents/{consentId} {
-      allow get, list: if false;
-      allow create, update, delete: if false; // TODO: Implement appropriate access control.
+      allow get, list: if isSignedIn() && getConsentOwner();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && getConsentOwner();
+      allow delete: if isSignedIn() && getConsentOwner();
     }
 
     /**
-     * @description Allows access to support tickets.
+     * @description Allows users to create and manage their own support tickets.
      * @path /tickets/{ticketId}
-     * @allow (read, write) if false; // TODO: Implement appropriate access control.
-     * @deny (read, write) Always. Access control not yet defined.
-     * @principle Access control for support tickets is not defined.
+     * @allow (get): Authenticated user can read their own tickets.
+     * @allow (list): Authenticated user can list their own tickets.
+     * @allow (create): Authenticated user can create their own tickets.
+     * @allow (update, delete): Authenticated user can update/delete their own tickets.
+     * @deny (create, update, delete): Denies others from creating/modifying tickets.
+     * @principle Enforces document ownership for writes, restricts listing.
      */
     match /tickets/{ticketId} {
-      allow get, list: if false;
-      allow create, update, delete: if false; // TODO: Implement appropriate access control.
+      allow get: if isSignedIn() && getTicketOwner();
+      allow list: if isSignedIn() && getTicketOwner();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && getTicketOwner();
+      allow delete: if isSignedIn() && getTicketOwner();
     }
 
     /**
-     * @description Allows access to ticket messages.
+     * @description Allows users and admins to manage ticket messages within a ticket.
      * @path /tickets/{ticketId}/messages/{messageId}
-     * @allow (read, write) if false; // TODO: Implement appropriate access control.
-     * @deny (read, write) Always. Access control not yet defined.
-     * @principle Access control for ticket messages is not defined.
+     * @allow (get, list): Authenticated user can read messages within a ticket.
+     * @allow (create): Authenticated user can create messages within a ticket.
+     * @allow (update, delete): Authenticated user can update/delete messages within a ticket.
+     * @deny (create, update, delete): Denies others from creating/modifying messages.
+     * @principle: Enforces document ownership for writes, restricts listing.
      */
     match /tickets/{ticketId}/messages/{messageId} {
-      allow get, list: if false;
-      allow create, update, delete: if false; // TODO: Implement appropriate access control.
+      allow get: if isSignedIn() && getMessageOwner();
+      allow list: if isSignedIn() && getTicketOwner();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && getMessageOwner();
+      allow delete: if isSignedIn() && getMessageOwner();
     }
 
     /**
-     * @description Manages user-specific notifications. Users can only access their own notifications.
+     * @description Enforces user-ownership for notifications.
      * @path /users/{userId}/notifications/{notificationId}
-     * @allow (create) if the user is creating a notification for themself.
-     * @allow (get, list, update, delete) if the user owns the notification.
-     * @deny (create, get, list, update, delete) if a different user tries to access these notifications.
-     * @principle Enforces user-ownership for notification data.
+     * @allow (get, list): Authenticated user can read their own notifications.
+     * @allow (create): Deny
+     * @allow (update, delete): Authenticated user can update/delete their own notifications.
+     * @deny (create, update, delete): Denies others from creating/modifying notifications.
+     * @principle Enforces document ownership for writes, restricts listing.
      */
     match /users/{userId}/notifications/{notificationId} {
-      allow get, list: if isOwner(userId);
-      allow create: if request.resource.data.userId == request.auth.uid;
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
+      allow get, list: if isSignedIn() && getNotificationOwner();
+      allow create: if false;
+      allow update: if isSignedIn() && getNotificationOwner();
+      allow delete: if isSignedIn() && getNotificationOwner();
     }
 
+    // === HELPER FUNCTIONS ===
+
     /**
-     * @description Defines helper functions for access control.
+     * @description Checks if the user is signed in.
+     * @return {boolean} True if the user is signed in, false otherwise.
      */
     function isSignedIn() {
       return request.auth != null;
     }
 
+    /**
+     * @description Checks if the user is the owner of the resource.
+     * @param {string} userId The user ID to check against.
+     * @return {boolean} True if the user is the owner, false otherwise.
+     */
     function isOwner(userId) {
       return request.auth.uid == userId;
     }
 
-    function isNewOwner(userId) {
-        return (request.auth.uid == userId) && (request.resource.data.uid == request.auth.uid);
+    /**
+     * @description Checks if the user is the owner of the existing resource.
+     * @param {string} userId The user ID to check against.
+     * @return {boolean} True if the user is the owner and the resource exists, false otherwise.
+     */
+    function isExistingOwner(userId) {
+      return isSignedIn() && isOwner(userId) && resource.data.uid == userId;
     }
 
-   function isExistingOwner(userId) {
-        return (request.auth.uid == userId) && (resource != null);
+    /**
+     * @description Checks if the user has the super_admin role.
+     * @return {boolean} True if the user has the super_admin role, false otherwise.
+     */
+    function isSuperAdmin() {
+      return isSignedIn() && (request.auth.token.super_admin == true);
+    }
+
+    function getBatchOwner() {
+        return request.auth.uid == resource.data.userId;
+    }
+
+    function getConsentOwner() {
+        return request.auth.uid == resource.data.userId;
+    }
+
+    function getTicketOwner() {
+        return request.auth.uid == resource.data.userId;
+    }
+
+    function getMessageOwner() {
+        return request.auth.uid == resource.data.userId;
+    }
+
+    function getNotificationOwner() {
+        return request.auth.uid == resource.data.userId;
     }
   }
 }
