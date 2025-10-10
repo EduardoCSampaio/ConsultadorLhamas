@@ -111,7 +111,7 @@ export default function ChamadoDetalhePage() {
             }
        }
        checkAccessAndMarkRead();
-    }, [ticket, user, isAdmin, pageIsLoading, ticketId, router, toast, firestore, messages]);
+    }, [ticket, user, isAdmin, pageIsLoading, ticketId, router, toast, firestore, messages, participantProfiles]);
 
 
     useEffect(() => {
@@ -231,7 +231,7 @@ export default function ChamadoDetalhePage() {
                                {user?.uid !== message.senderId && (
                                    <Avatar className="h-8 w-8">
                                        <AvatarImage src={senderProfile?.photoURL ?? undefined} />
-                                       <AvatarFallback>{getInitials(message.senderEmail)}</AvatarFallback>
+                                       <AvatarFallback>{getInitials(senderProfile?.email ?? message.senderEmail)}</AvatarFallback>
                                    </Avatar>
                                )}
                                <div 
@@ -272,9 +272,9 @@ export default function ChamadoDetalhePage() {
                             }}
                             rows={1}
                             className="min-h-[40px] max-h-24 resize-y"
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || ticket.status === 'resolvido'}
                         />
-                        <Button onClick={handleSendMessage} disabled={isSubmitting || !newMessage.trim()}>
+                        <Button onClick={handleSendMessage} disabled={isSubmitting || !newMessage.trim() || ticket.status === 'resolvido'}>
                             {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                             <span className="sr-only">Enviar</span>
                         </Button>

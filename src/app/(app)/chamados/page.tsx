@@ -37,6 +37,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { cn } from "@/lib/utils";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 
 const newTicketSchema = z.object({
   title: z.string().min(5, "O título deve ter pelo menos 5 caracteres.").max(100, "O título deve ter no máximo 100 caracteres."),
@@ -154,6 +156,46 @@ export default function ChamadosPage() {
         });
     }, [tickets, emailFilter, ticketNumberFilter, isAdmin]);
 
+    const openTickets = useMemo(() => filteredTickets.filter(t => t.status !== 'resolvido'), [filteredTickets]);
+    const resolvedTickets = useMemo(() => filteredTickets.filter(t => t.status === 'resolvido'), [filteredTickets]);
+
+
+    const TicketList = ({ list }: { list: Ticket[] }) => (
+         <div className="space-y-3">
+           {list.map(ticket => {
+                const unreadCount = getUnreadCount(ticket);
+                return (
+                   <div key={ticket.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                       <div className="flex-1 mb-4 sm:mb-0">
+                           <div className="flex items-center gap-3 mb-2 flex-wrap">
+                                <span className="font-mono text-sm text-muted-foreground">{ticket.ticketNumber}</span>
+                                <Badge className={cn(statusColors[ticket.status])}>{statusLabels[ticket.status]}</Badge>
+                           </div>
+                           <div className="flex items-center gap-2">
+                                <h3 className="font-semibold text-lg">{ticket.title}</h3>
+                                {unreadCount > 0 && (
+                                    <Badge className="h-5 w-5 flex items-center justify-center p-0">{unreadCount}</Badge>
+                                )}
+                           </div>
+                            {isAdmin && (
+                                <p className="text-sm font-medium text-muted-foreground">{ticket.userEmail}</p>
+                            )}
+                           <p className="text-sm text-muted-foreground mt-1">
+                                Última atualização: {new Date(ticket.updatedAt).toLocaleString('pt-BR')}
+                           </p>
+                            <p className="text-sm text-muted-foreground line-clamp-1 flex items-center gap-2 mt-1">
+                                <MessageSquare className="h-3.5 w-3.5" />
+                                {ticket.lastMessage}
+                            </p>
+                       </div>
+                       <Button variant="outline" size="sm" asChild>
+                            <Link href={`/chamados/${ticket.id}`}>Ver Chamado</Link>
+                       </Button>
+                   </div>
+                );
+           })}
+       </div>
+    );
 
     return (
         <div className="flex flex-col gap-6">
@@ -246,69 +288,74 @@ export default function ChamadosPage() {
                 </Card>
             )}
 
-            <Card>
-                <CardContent className="pt-6">
-                     {isLoading ? (
-                        <div className="space-y-3">
-                            {Array.from({ length: 3 }).map((_, i) => (
-                                <div key={i} className="flex items-center justify-between p-4 border rounded-lg">
-                                    <div className="space-y-2">
-                                        <Skeleton className="h-5 w-40" />
-                                        <Skeleton className="h-4 w-60" />
-                                    </div>
-                                    <Skeleton className="h-6 w-24" />
+            <Tabs defaultValue="abertos" className="w-full">
+                <TabsList className="grid w-full grid-cols-2 max-w-md">
+                    <TabsTrigger value="abertos">Abertos</TabsTrigger>
+                    <TabsTrigger value="resolvidos">Resolvidos</TabsTrigger>
+                </TabsList>
+                <TabsContent value="abertos">
+                    <Card>
+                        <CardContent className="pt-6">
+                            {isLoading ? (
+                                <div className="space-y-3">
+                                    {Array.from({ length: 3 }).map((_, i) => (
+                                        <div key={i} className="flex items-center justify-between p-4 border rounded-lg">
+                                            <div className="space-y-2">
+                                                <Skeleton className="h-5 w-40" />
+                                                <Skeleton className="h-4 w-60" />
+                                            </div>
+                                            <Skeleton className="h-6 w-24" />
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
-                    ) : filteredTickets.length === 0 && !error ? (
-                        <div className="flex flex-col items-center justify-center gap-4 text-center h-60 border-2 border-dashed rounded-lg">
-                            <Inbox className="h-12 w-12 text-muted-foreground" />
-                            <h3 className="text-2xl font-bold tracking-tight">
-                                Nenhum Chamado Encontrado
-                            </h3>
-                            <p className="text-sm text-muted-foreground">
-                               {isAdmin ? "Nenhum chamado corresponde aos filtros aplicados." : "Você ainda não abriu nenhum chamado de suporte."}
-                            </p>
-                        </div>
-                    ) : (
-                       <div className="space-y-3">
-                           {filteredTickets.map(ticket => {
-                                const unreadCount = getUnreadCount(ticket);
-                                return (
-                                   <div key={ticket.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
-                                       <div className="flex-1 mb-4 sm:mb-0">
-                                           <div className="flex items-center gap-3 mb-2 flex-wrap">
-                                                <span className="font-mono text-sm text-muted-foreground">{ticket.ticketNumber}</span>
-                                                <Badge className={cn(statusColors[ticket.status])}>{statusLabels[ticket.status]}</Badge>
-                                           </div>
-                                           <div className="flex items-center gap-2">
-                                                <h3 className="font-semibold text-lg">{ticket.title}</h3>
-                                                {unreadCount > 0 && (
-                                                    <Badge className="h-5 w-5 flex items-center justify-center p-0">{unreadCount}</Badge>
-                                                )}
-                                           </div>
-                                            {isAdmin && (
-                                                <p className="text-sm font-medium text-muted-foreground">{ticket.userEmail}</p>
-                                            )}
-                                           <p className="text-sm text-muted-foreground mt-1">
-                                                Última atualização: {new Date(ticket.updatedAt).toLocaleString('pt-BR')}
-                                           </p>
-                                            <p className="text-sm text-muted-foreground line-clamp-1 flex items-center gap-2 mt-1">
-                                                <MessageSquare className="h-3.5 w-3.5" />
-                                                {ticket.lastMessage}
-                                            </p>
-                                       </div>
-                                       <Button variant="outline" size="sm" asChild>
-                                            <Link href={`/chamados/${ticket.id}`}>Ver Chamado</Link>
-                                       </Button>
-                                   </div>
-                               );
-                           })}
-                       </div>
-                    )}
-                </CardContent>
-            </Card>
+                            ) : openTickets.length === 0 && !error ? (
+                                <div className="flex flex-col items-center justify-center gap-4 text-center h-60 border-2 border-dashed rounded-lg">
+                                    <Inbox className="h-12 w-12 text-muted-foreground" />
+                                    <h3 className="text-2xl font-bold tracking-tight">
+                                        Nenhum Chamado Aberto
+                                    </h3>
+                                    <p className="text-sm text-muted-foreground">
+                                    {isAdmin ? "Nenhum chamado aberto corresponde aos filtros." : "Você não tem chamados em aberto."}
+                                    </p>
+                                </div>
+                            ) : (
+                                <TicketList list={openTickets} />
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+                 <TabsContent value="resolvidos">
+                    <Card>
+                        <CardContent className="pt-6">
+                             {isLoading ? (
+                                <div className="space-y-3">
+                                    {Array.from({ length: 1 }).map((_, i) => (
+                                        <div key={i} className="flex items-center justify-between p-4 border rounded-lg">
+                                            <div className="space-y-2">
+                                                <Skeleton className="h-5 w-40" />
+                                                <Skeleton className="h-4 w-60" />
+                                            </div>
+                                            <Skeleton className="h-6 w-24" />
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : resolvedTickets.length === 0 && !error ? (
+                                <div className="flex flex-col items-center justify-center gap-4 text-center h-60 border-2 border-dashed rounded-lg">
+                                    <Inbox className="h-12 w-12 text-muted-foreground" />
+                                    <h3 className="text-2xl font-bold tracking-tight">
+                                        Nenhum Chamado Resolvido
+                                    </h3>
+                                     <p className="text-sm text-muted-foreground">
+                                       {isAdmin ? "Nenhum chamado resolvido corresponde aos filtros." : "Você não tem chamados resolvidos."}
+                                    </p>
+                                </div>
+                            ) : (
+                               <TicketList list={resolvedTickets} />
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+            </Tabs>
         </div>
     );
 }
-    
