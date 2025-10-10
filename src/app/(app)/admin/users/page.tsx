@@ -345,7 +345,7 @@ export default function AdminUsersPage() {
                                                 <TableCell className="text-right">
                                                      <div className="flex gap-2 justify-end items-center">
                                                         {renderActionButtons(user)}
-                                                        {user.role !== 'super_admin' && (
+                                                        {user.role !== 'super_admin' && (adminUser?.role === 'super_admin' || user.role !== 'manager') && (
                                                             <>
                                                                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenEditModal(user)}>
                                                                     <Pencil className="h-4 w-4" />
@@ -422,7 +422,7 @@ export default function AdminUsersPage() {
                                     <Select
                                         value={newRole || ''}
                                         onValueChange={(value) => setNewRole(value as UserRole)}
-                                        disabled={selectedUser.role === 'super_admin' || (selectedUser.role === 'manager' && adminUser?.role !== 'super_admin')}
+                                        disabled={selectedUser.role === 'super_admin' || (adminUser?.role !== 'super_admin')}
                                     >
                                         <SelectTrigger className="col-span-3">
                                             <SelectValue placeholder="Selecione uma função" />

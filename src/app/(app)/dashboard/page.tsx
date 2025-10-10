@@ -228,7 +228,9 @@ function UserDashboard({ userProfile }: { userProfile: UserProfile }) {
       }
       setIsLoading(false);
     }
-    loadActivity();
+    if (userProfile.uid) {
+        loadActivity();
+    }
   }, [userProfile.uid]);
 
   const hasV8Creds = userProfile.v8_username && userProfile.v8_password && userProfile.v8_audience && userProfile.v8_client_id;
@@ -336,6 +338,42 @@ function UserDashboard({ userProfile }: { userProfile: UserProfile }) {
   )
 }
 
+function ManagerDashboard({ userProfile }: { userProfile: UserProfile }) {
+  // This dashboard is for managers. For now, it's a simple placeholder.
+  // In the future, we can add team statistics here.
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title={`Bem-vindo, Gerente ${userProfile.email.split('@')[0]}!`}
+        description="Gerencie sua equipe e acompanhe suas atividades."
+      >
+        <Button asChild>
+            <Link href="/teams">
+                Gerenciar minha Equipe
+                <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+        </Button>
+      </PageHeader>
+       <Card>
+        <CardHeader>
+            <CardTitle>Dashboard do Gerente</CardTitle>
+            <CardDescription>Visão geral da sua equipe.</CardDescription>
+        </CardHeader>
+        <CardContent>
+            <div className="flex flex-col items-center justify-center gap-4 text-center h-60 border-2 border-dashed rounded-lg">
+                <Users className="h-12 w-12 text-muted-foreground" />
+                <h3 className="text-2xl font-bold tracking-tight">Estatísticas em Breve</h3>
+                <div className="text-sm text-muted-foreground">
+                    Em breve você poderá ver as estatísticas de desempenho da sua equipe aqui.
+                </div>
+            </div>
+        </CardContent>
+       </Card>
+    </div>
+  )
+}
+
+
 function AdminDashboardLoader() {
     return (
         <div className="flex flex-col gap-6">
@@ -424,7 +462,7 @@ export default function DashboardPage() {
 
   React.useEffect(() => {
     async function fetchAdminData() {
-        if (userProfile?.role === 'super_admin' && !isProfileLoading) {
+        if (userProfile && ['super_admin', 'admin'].includes(userProfile.role) && !isProfileLoading) {
             setIsAdminDataLoading(true);
             try {
                 const [{ users, error: usersError }, { logs, error: logsError }] = await Promise.all([
@@ -454,12 +492,16 @@ export default function DashboardPage() {
   if (isUserLoading || isProfileLoading) {
     return <AdminDashboardLoader />;
   }
-
+  
   if (userProfile?.role === 'super_admin' || userProfile?.role === 'admin') {
-    if (isAdminDataLoading && userProfile?.role === 'super_admin') {
+    if (isAdminDataLoading) {
         return <AdminDashboardLoader />;
     }
     return <AdminDashboard initialUsers={adminData.users} activityLogs={adminData.logs} error={adminData.error} />;
+  }
+  
+  if (userProfile?.role === 'manager') {
+    return <ManagerDashboard userProfile={userProfile} />;
   }
 
   if (userProfile) {

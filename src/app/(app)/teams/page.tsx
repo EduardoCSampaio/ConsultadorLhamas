@@ -7,8 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useUser, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, query, where } from 'firebase/firestore';
+import { useUser, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
+import { collection, query, where, doc } from 'firebase/firestore';
 import { useCollection } from '@/firebase/firestore/use-collection';
 import type { UserProfile } from '@/app/actions/users';
 import { Copy, Users } from 'lucide-react';
@@ -39,30 +39,30 @@ export default function MyTeamPage() {
     const { user: manager } = useUser();
     const firestore = useFirestore();
     const { toast } = useToast();
-    const [teamId, setTeamId] = useState<string | null>(null);
 
-    // This is a bit indirect, but we need the manager's profile to find their teamId.
-    const managerProfileQuery = useMemoFirebase(() => {
+    // Directly get the teamId from the manager's profile
+    const managerProfileRef = useMemoFirebase(() => {
         if (!firestore || !manager) return null;
-        return query(collection(firestore, 'users'), where('uid', '==', manager.uid), where('role', '==', 'manager'));
+        return doc(firestore, 'users', manager.uid);
     }, [firestore, manager]);
-
-    const { data: managerProfileData, isLoading: isManagerLoading } = useCollection<UserProfile>(managerProfileQuery);
-
-    useEffect(() => {
-        if (managerProfileData && managerProfileData.length > 0) {
-            setTeamId(managerProfileData[0].teamId || null);
-        }
-    }, [managerProfileData]);
+    
+    const { data: managerProfile, isLoading: isManagerLoading } = useDoc<UserProfile>(managerProfileRef);
+    const teamId = managerProfile?.teamId;
 
     const teamMembersQuery = useMemoFirebase(() => {
         if (!firestore || !teamId) return null;
+        // Query for users that belong to the manager's team but are not the manager themselves.
         return query(collection(firestore, 'users'), where('teamId', '==', teamId));
     }, [firestore, teamId]);
 
     const { data: teamMembers, isLoading: areMembersLoading } = useCollection<UserProfile>(teamMembersQuery);
+    
+    const teamMembersFiltered = useMemo(() => {
+        return teamMembers?.filter(member => member.uid !== manager?.uid);
+    }, [teamMembers, manager]);
 
-    const isLoading = isManagerLoading || (teamId === null && !isManagerLoading) || areMembersLoading;
+
+    const isLoading = isManagerLoading || areMembersLoading;
     
     const invitationLink = useMemo(() => {
         if (typeof window !== 'undefined' && teamId) {
@@ -72,6 +72,7 @@ export default function MyTeamPage() {
     }, [teamId]);
 
     const copyToClipboard = () => {
+        if (!invitationLink) return;
         navigator.clipboard.writeText(invitationLink);
         toast({ title: "Link de convite copiado!" });
     };
@@ -98,7 +99,7 @@ export default function MyTeamPage() {
                                 value={invitationLink}
                                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                             />
-                            <Button onClick={copyToClipboard} size="icon">
+                            <Button onClick={copyToClipboard} size="icon" disabled={!invitationLink}>
                                 <Copy className="h-4 w-4" />
                             </Button>
                         </div>
@@ -132,8 +133,8 @@ export default function MyTeamPage() {
                                             <TableCell className="text-right"><Skeleton className="h-8 w-24" /></TableCell>
                                         </TableRow>
                                     ))
-                                ) : teamMembers && teamMembers.length > 0 ? (
-                                    teamMembers.map(member => (
+                                ) : teamMembersFiltered && teamMembersFiltered.length > 0 ? (
+                                    teamMembersFiltered.map(member => (
                                         <TableRow key={member.uid}>
                                             <TableCell className="font-medium">{member.email}</TableCell>
                                             <TableCell>

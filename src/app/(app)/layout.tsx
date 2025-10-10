@@ -115,19 +115,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return email.substring(0, 2).toUpperCase();
   }
 
-  const hasPermission = (permission: 'isManager' | 'isLoggedIn' | 'isSuperAdmin' | keyof UserProfile['permissions']) => {
+  const hasPermission = React.useCallback((permission: 'isManager' | 'isLoggedIn' | 'isSuperAdmin' | keyof UserProfile['permissions']) => {
+    if (!userProfile) return false;
     if (permission === 'isLoggedIn') return true;
-    
-    const isSuperAdmin = userProfile?.role === 'super_admin';
-    const isManager = userProfile?.role === 'manager';
 
+    const isSuperAdmin = userProfile.role === 'super_admin';
     if (permission === 'isSuperAdmin') return isSuperAdmin;
-    if (permission === 'isManager') return isManager;
-    
-    return !!userProfile?.permissions?.[permission];
-  };
+    if (isSuperAdmin) return true; // Super admin has all permissions
 
-  if (isUserLoading || isProfileLoading || !user) {
+    const isManager = userProfile.role === 'manager';
+    if (permission === 'isManager') return isManager;
+
+    // For granular permissions, check the user's profile
+    return !!userProfile?.permissions?.[permission as keyof UserProfile['permissions']];
+  }, [userProfile]);
+
+  if (isUserLoading || isProfileLoading || !user || !userProfile) {
     return (
         <div className="flex min-h-screen items-center justify-center bg-background">
             <Logo />
