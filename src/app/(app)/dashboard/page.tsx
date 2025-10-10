@@ -102,7 +102,7 @@ function AdminDashboard({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{pendingUsers.length}</div>
-            <p className="text-xs text-muted-foreground">Aguardando aprovação</p>
+            <div className="text-xs text-muted-foreground">Aguardando aprovação</div>
           </CardContent>
         </Card>
         <Card>
@@ -112,7 +112,7 @@ function AdminDashboard({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{activeUsers.length}</div>
-            <p className="text-xs text-muted-foreground">Usuários com acesso liberado</p>
+            <div className="text-xs text-muted-foreground">Usuários com acesso liberado</div>
           </CardContent>
         </Card>
         <Card>
@@ -122,7 +122,7 @@ function AdminDashboard({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold truncate" title={mostActiveUser.email}>{mostActiveUser.email}</div>
-            <p className="text-xs text-muted-foreground">{mostActiveUser.count} consultas realizadas</p>
+            <div className="text-xs text-muted-foreground">{mostActiveUser.count} consultas realizadas</div>
           </CardContent>
         </Card>
         <Card>
@@ -132,7 +132,7 @@ function AdminDashboard({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{activityLogs?.length || 0}</div>
-            <p className="text-xs text-muted-foreground">Consultas na plataforma</p>
+            <div className="text-xs text-muted-foreground">Consultas na plataforma</div>
           </CardContent>
         </Card>
       </div>
