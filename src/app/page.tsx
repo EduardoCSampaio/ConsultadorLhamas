@@ -68,16 +68,15 @@ export default function LoginPage() {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const newUser = userCredential.user;
         const isAdmin = newUser.email === 'admin@lhamascred.com.br';
-        const isSuperAdmin = newUser.email === 'super@lhamascred.com.br';
 
         // Create user profile in Firestore
         const userProfile = {
           uid: newUser.uid,
           email: newUser.email,
-          role: isSuperAdmin ? 'super_admin' : (isAdmin ? 'admin' : 'user'),
-          status: isSuperAdmin || isAdmin ? 'active' : 'pending',
+          role: isAdmin ? 'admin' : 'user',
+          status: isAdmin ? 'active' : 'pending',
           createdAt: serverTimestamp(),
-          permissions: (isSuperAdmin || isAdmin) ? {
+          permissions: (isAdmin) ? {
               canViewFGTS: true,
               canViewCLT: true,
               canViewINSS: true,
@@ -97,8 +96,8 @@ export default function LoginPage() {
         });
         
         // Set admin custom claim via server action if it's the admin user
-        if (isSuperAdmin || isAdmin) {
-          const claimResult = await setAdminClaim({ uid: newUser.uid, role: isSuperAdmin ? 'super_admin' : 'admin' });
+        if (isAdmin) {
+          const claimResult = await setAdminClaim({ uid: newUser.uid });
           if (!claimResult.success) {
             // This is not a fatal error for the user flow, but should be logged.
             console.error("Failed to set admin claim:", claimResult.error);

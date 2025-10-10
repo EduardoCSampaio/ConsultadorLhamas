@@ -71,7 +71,6 @@ const deleteUserSchema = z.object({
 
 const setAdminClaimSchema = z.object({
   uid: z.string().min(1, { message: "UID do usuário é obrigatório." }),
-  role: z.enum(['admin', 'super_admin']),
 });
 
 const getUserActivitySchema = z.object({
@@ -88,7 +87,7 @@ export type UserProfile = {
     uid: string;
     email: string;
     photoURL?: string;
-    role: 'super_admin' | 'manager' | 'user';
+    role: 'admin' | 'manager' | 'user';
     status: 'pending' | 'active' | 'rejected' | 'inactive';
     createdAt: string;
     teamId?: string;
@@ -268,12 +267,11 @@ export async function getUsers(): Promise<{users: UserProfile[] | null, error?: 
             // If a user exists in Auth but not in Firestore, create a profile for them
             if (!profileData) {
                 console.log(`User ${userRecord.email} found in Auth but not in Firestore. Creating profile...`);
-                const isSuperAdmin = userRecord.email === 'super@lhamascred.com.br';
                 const isAdmin = userRecord.email === 'admin@lhamascred.com.br';
                 const newProfile = {
                     uid: userRecord.uid,
                     email: userRecord.email,
-                    role: isSuperAdmin ? 'super_admin' : (isAdmin ? 'admin' : 'user'),
+                    role: isAdmin ? 'admin' : 'user',
                     status: 'pending',
                     createdAt: FieldValue.serverTimestamp(),
                     permissions: { canViewFGTS: false, canViewCLT: false, canViewINSS: false }
@@ -331,7 +329,7 @@ export async function setAdminClaim(input: z.infer<typeof setAdminClaimSchema>):
   try {
     initializeFirebaseAdmin();
     const auth = getAuth();
-    await auth.setCustomUserClaims(validation.data.uid, { [validation.data.role]: true });
+    await auth.setCustomUserClaims(validation.data.uid, { admin: true });
     return { success: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao definir a claim de admin.";
@@ -548,7 +546,7 @@ const getStatusText = (status: UserProfile['status']) => {
 
 const getRoleText = (role: UserProfile['role']) => {
     switch (role) {
-        case 'super_admin': return 'Super Admin';
+        case 'admin': return 'Admin';
         case 'manager': return 'Gerente';
         case 'user': return 'Usuário';
         default: return role;
@@ -610,5 +608,3 @@ export async function exportUsersToExcel(input: z.infer<typeof exportUsersSchema
         return { status: 'error', message };
     }
 }
-
-    

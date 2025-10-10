@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -51,13 +52,13 @@ import { NotificationBell } from '@/components/notification-bell';
 
 const allBaseMenuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard", permission: 'isLoggedIn' as const },
-  { href: "/esteira", icon: Workflow, label: "Esteira", permission: 'isSuperAdmin' as const },
-  { href: "/admin/history", icon: BookMarked, label: "Histórico", permission: 'isSuperAdmin' as const },
+  { href: "/esteira", icon: Workflow, label: "Esteira", permission: 'isAdmin' as const },
+  { href: "/admin/history", icon: BookMarked, label: "Histórico", permission: 'isAdmin' as const },
 ];
 
 const adminBottomMenuItems = [
-    { href: "/admin/users", icon: Users, label: "Gerenciar Usuários", permission: 'isSuperAdmin' as const },
-    { href: "/admin/auxilio-propostas", icon: ClipboardCheck, label: "Auxílio Propostas", permission: 'isSuperAdmin' as const },
+    { href: "/admin/users", icon: Users, label: "Gerenciar Usuários", permission: 'isAdmin' as const },
+    { href: "/admin/auxilio-propostas", icon: ClipboardCheck, label: "Auxílio Propostas", permission: 'isAdmin' as const },
 ];
 
 const managerMenuItems = [
@@ -115,13 +116,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return email.substring(0, 2).toUpperCase();
   }
 
-  const hasPermission = React.useCallback((permission: 'isManager' | 'isLoggedIn' | 'isSuperAdmin' | keyof UserProfile['permissions']) => {
+  const hasPermission = React.useCallback((permission: 'isManager' | 'isLoggedIn' | 'isAdmin' | keyof UserProfile['permissions']) => {
     if (!userProfile) return false;
     if (permission === 'isLoggedIn') return true;
 
-    const isSuperAdmin = userProfile.role === 'super_admin';
-    if (permission === 'isSuperAdmin') return isSuperAdmin;
-    if (isSuperAdmin) return true; // Super admin has all permissions
+    const isAdmin = userProfile.role === 'admin';
+    if (permission === 'isAdmin') return isAdmin;
+    if (isAdmin) return true; // Admin has all permissions
 
     const isManager = userProfile.role === 'manager';
     if (permission === 'isManager') return isManager;
@@ -141,7 +142,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const getRoleText = (role: UserProfile['role'] | undefined) => {
     if (!role) return 'Usuário';
     switch (role) {
-        case 'super_admin': return 'Super Admin';
+        case 'admin': return 'Admin';
         case 'manager': return 'Gerente';
         case 'user': return 'Usuário';
         default: return 'Usuário';

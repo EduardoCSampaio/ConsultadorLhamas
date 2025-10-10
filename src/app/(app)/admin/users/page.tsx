@@ -241,7 +241,7 @@ export default function AdminUsersPage() {
     
     const getRoleText = (role: UserRole) => {
         switch (role) {
-            case 'super_admin': return 'Super Admin';
+            case 'admin': return 'Admin';
             case 'manager': return 'Gerente';
             case 'user': return 'Usuário';
             default: return role;
@@ -251,12 +251,8 @@ export default function AdminUsersPage() {
     const renderActionButtons = (user: UserProfile) => {
         const isUpdating = updatingId === user.uid;
 
-        if (user.role === 'super_admin') {
-             return null; // No actions for super admin
-        }
-        
-        if (user.role === 'manager' && adminUser?.role !== 'super_admin') {
-             return <span className="text-xs text-muted-foreground">Gerenciado por Super Admin</span>;
+        if (user.role === 'admin') {
+             return null; 
         }
 
         switch (user.status) {
@@ -345,7 +341,7 @@ export default function AdminUsersPage() {
                                                 <TableCell className="text-right">
                                                      <div className="flex gap-2 justify-end items-center">
                                                         {renderActionButtons(user)}
-                                                        {user.role !== 'super_admin' && (adminUser?.role === 'super_admin' || user.role !== 'manager') && (
+                                                        {user.role !== 'admin' && (
                                                             <>
                                                                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenEditModal(user)}>
                                                                     <Pencil className="h-4 w-4" />
@@ -422,7 +418,7 @@ export default function AdminUsersPage() {
                                     <Select
                                         value={newRole || ''}
                                         onValueChange={(value) => setNewRole(value as UserRole)}
-                                        disabled={selectedUser.role === 'super_admin' || (adminUser?.role !== 'super_admin')}
+                                        disabled={selectedUser.role === 'admin'}
                                     >
                                         <SelectTrigger className="col-span-3">
                                             <SelectValue placeholder="Selecione uma função" />
