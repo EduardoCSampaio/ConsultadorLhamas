@@ -61,10 +61,19 @@
         "role": {
           "type": "string",
           "enum": [
-            "admin",
+            "super_admin",
+            "manager",
             "user"
           ],
-          "description": "The user's role in the system. The 'admin' role is primarily managed via custom claims."
+          "description": "The user's role in the system. 'super_admin' is the highest level, 'manager' can manage a team."
+        },
+        "teamId": {
+            "type": "string",
+            "description": "The ID of the team the user belongs to, if any."
+        },
+        "sector": {
+            "type": "string",
+            "description": "The name of the sector the user belongs to within their team."
         },
         "status": {
           "type": "string",
@@ -107,7 +116,7 @@
         },
         "permissions": {
           "type": "object",
-          "description": "Granular access control for different app features.",
+          "description": "Granular access control for different app features. For 'user' roles, these are determined by their team's sector.",
           "properties": {
             "canViewFGTS": { "type": "boolean", "description": "Access to FGTS batch and manual query pages." },
             "canViewCLT": { "type": "boolean", "description": "Access to CLT credit query pages." },
@@ -122,6 +131,38 @@
         "status",
         "createdAt"
       ]
+    },
+     "Team": {
+      "title": "Team",
+      "description": "Represents a team or organization within the platform, managed by a 'manager'.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID for the team." },
+        "name": { "type": "string", "description": "The name of the team." },
+        "managerId": { "type": "string", "description": "The UID of the user who manages this team." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "sectors": {
+          "type": "object",
+          "description": "A map of sectors (roles) within the team and their specific permissions.",
+          "patternProperties": {
+            "^[a-zA-Z0-9_ -]+$": {
+              "type": "object",
+              "properties": {
+                "isManager": { "type": "boolean", "description": "If true, users in this sector have manager-level permissions for the team." },
+                "permissions": {
+                  "type": "object",
+                  "properties": {
+                    "canViewFGTS": { "type": "boolean" },
+                    "canViewCLT": { "type": "boolean" },
+                    "canViewINSS": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "required": ["id", "name", "managerId", "createdAt"]
     },
     "ActivityLog": {
         "title": "Activity Log",
@@ -392,6 +433,20 @@
         "chave_pix": { "type": "string" }
       },
       "required": ["proposta", "data_digitacao", "cpf", "cliente"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Represents an in-app notification for a user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the user who will receive the notification." },
+        "title": { "type": "string", "description": "The title of the notification." },
+        "message": { "type": "string", "description": "The main content of the notification." },
+        "link": { "type": "string", "format": "uri", "description": "A URL to navigate to when the notification is clicked." },
+        "isRead": { "type": "boolean", "description": "Whether the user has read the notification." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "The timestamp when the notification was created." }
+      },
+      "required": ["userId", "title", "message", "isRead", "createdAt"]
     }
   },
   "auth": {
@@ -401,6 +456,9 @@
     ],
     "customClaims": {
       "admin": {
+        "type": "boolean"
+      },
+       "super_admin": {
         "type": "boolean"
       }
     }
@@ -417,6 +475,10 @@
         "$ref": "#/entities/UserProfile"
       },
       "description": "Stores user profiles. The userId is the same as the Firebase Auth UID."
+    },
+     "/teams/{teamId}": {
+      "schema": { "$ref": "#/entities/Team" },
+      "description": "Stores team information, including sectors and permissions."
     },
     "/activityLogs/{logId}": {
         "schema": {
@@ -439,6 +501,14 @@
     "/tickets/{ticketId}/messages/{messageId}": {
       "schema": { "$ref": "#/entities/TicketMessage" },
       "description": "Stores all messages related to a specific support ticket."
+    },
+     "/users/{userId}/notifications/{notificationId}": {
+      "schema": {
+        "$ref": "#/entities/Notification"
+      },
+      "description": "Stores notifications for a specific user."
     }
   }
 }
+
+    
