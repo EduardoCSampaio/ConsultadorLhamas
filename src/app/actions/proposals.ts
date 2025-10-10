@@ -19,15 +19,17 @@ export type FactaProposal = {
     proposta: string;
     data_digitacao: string;
     hora_digitacao: string;
-    situacao: string; // Not in new example, but was there before. Maybe it's status_proposta? Keeping for now.
+    data_efetivacao: string;
+    data_pgto_cliente: string;
+    situacao: string;
     convenio: string;
     cpf: string;
     cliente: string;
-    valor_liberado: number; // Not in new example, but was there before. Maybe it's valor_bruto?
+    valor_liberado: number;
     vlrprestacao: number;
     numeroprestacao: number;
     login_corretor: string;
-    nome_login: string; // Not in new example
+    nome_login: string;
     corretor: string;
     codigo_indicador: string;
     codigo_master: string;
@@ -63,8 +65,6 @@ export type FactaProposal = {
     assinatura_digital: string;
     tipo_chave_pix: string;
     chave_pix: string;
-    data_efetivacao: string;
-    data_pgto_cliente: string;
 };
 
 
@@ -131,8 +131,6 @@ async function getProposalsFromFacta(input: z.infer<typeof getProposalsSchema>):
         const url = new URL(`${FACTA_API_URL_PROD}/proposta/andamento-propostas`);
         url.searchParams.append('data_ini', dateFrom);
         url.searchParams.append('data_fim', dateTo);
-        // The API is paginated, but for now we fetch the first page (default 5000 records).
-        // For a full implementation, we would need to loop through pages.
         url.searchParams.append('quantidade', '5000'); 
 
         const response = await fetch(url.toString(), {
@@ -152,7 +150,6 @@ async function getProposalsFromFacta(input: z.infer<typeof getProposalsSchema>):
             return { success: true, message: 'Nenhuma proposta encontrada no período informado.', proposals: [] };
         }
         
-        // The actual data is in the `propostas` key
         return { success: true, message: 'Propostas encontradas com sucesso.', proposals: data.propostas };
 
     } catch (error) {
@@ -168,6 +165,8 @@ export async function getFactaProposalsReport(input: z.infer<typeof getProposals
     if (!validation.success) {
         return { success: false, message: 'Dados de entrada inválidos.' };
     }
+    
+    const { dateFrom, dateTo } = validation.data;
 
     const result = await getProposalsFromFacta(validation.data);
 
@@ -233,7 +232,6 @@ export async function getFactaProposalsReport(input: z.infer<typeof getProposals
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Propostas Facta');
 
-        // Set column widths
         if (dataToExport.length > 0) {
             const header = Object.keys(dataToExport[0]);
             worksheet['!cols'] = header.map(h => ({ wch: Math.max(h.length, 18) }));
@@ -243,8 +241,12 @@ export async function getFactaProposalsReport(input: z.infer<typeof getProposals
         const base64String = buffer.toString('base64');
         const fileContent = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64String}`;
         
-        const formattedDate = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
-        const fileName = `Relatorio_Propostas_Facta_${formattedDate}.xlsx`;
+        const now = new Date();
+        const horaAgora = `${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
+        const dataIniFormatted = dateFrom.replace(/\//g, '');
+        const dataFimFormatted = dateTo.replace(/\//g, '');
+        
+        const fileName = `WORKBANKFACTA_${dataIniFormatted}_${dataFimFormatted}_${horaAgora}.xlsx`;
 
         return {
             success: true,
