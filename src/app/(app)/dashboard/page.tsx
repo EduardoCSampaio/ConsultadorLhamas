@@ -132,7 +132,7 @@ function AdminDashboard({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{activityLogs?.length || 0}</div>
-            <div className="text-xs text-muted-foreground">Consultas na plataforma</div>
+            <p className="text-xs text-muted-foreground">Consultas na plataforma</p>
           </CardContent>
         </Card>
       </div>
@@ -342,10 +342,10 @@ function AdminDashboardLoader() {
                 <Skeleton className="h-10 w-44" />
             </PageHeader>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><Skeleton className="h-5 w-32"/></CardHeader><CardContent><Skeleton className="h-8 w-10"/></CardContent></Card>
-                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><Skeleton className="h-5 w-32"/></CardHeader><CardContent><Skeleton className="h-8 w-10"/></CardContent></Card>
-                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><Skeleton className="h-5 w-40"/></CardHeader><CardContent><Skeleton className="h-8 w-48"/></CardContent></Card>
-                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><Skeleton className="h-5 w-32"/></CardHeader><CardContent><Skeleton className="h-8 w-10"/></CardContent></Card>
+                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium"><Skeleton className="h-5 w-32"/></CardTitle></CardHeader><CardContent><Skeleton className="h-8 w-10"/></CardContent></Card>
+                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium"><Skeleton className="h-5 w-32"/></CardTitle></CardHeader><CardContent><Skeleton className="h-8 w-10"/></CardContent></Card>
+                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium"><Skeleton className="h-5 w-40"/></CardTitle></CardHeader><CardContent><Skeleton className="h-8 w-48"/></CardContent></Card>
+                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium"><Skeleton className="h-5 w-32"/></CardTitle></CardHeader><CardContent><Skeleton className="h-8 w-10"/></CardContent></Card>
             </div>
              <div className="grid gap-6 lg:grid-cols-2">
                  <Card>
