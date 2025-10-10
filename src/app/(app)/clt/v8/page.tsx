@@ -1,3 +1,4 @@
+
 'use client';
 
 import { PageHeader } from "@/components/page-header";
@@ -21,13 +22,15 @@ export default function V8ComingSoonPage() {
             <h3 className="text-2xl font-bold tracking-tight">
               Funcionalidade em Breve
             </h3>
-            <p className="text-sm text-muted-foreground">
+            <div className="text-sm text-muted-foreground">
               Estamos trabalhando para integrar a simulação de crédito privado
               CLT com o provedor V8.
-            </p>
+            </div>
           </div>
         </CardContent>
       </Card>
     </div>
   );
 }
+
+    

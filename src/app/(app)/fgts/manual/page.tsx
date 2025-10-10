@@ -193,9 +193,9 @@ export default function FgtsManualPage() {
                     <h3 className="text-2xl font-bold tracking-tight">
                         Nenhum Saldo Encontrado
                     </h3>
-                    <p className="text-sm text-muted-foreground">
+                    <div className="text-sm text-muted-foreground">
                        Não foi possível encontrar saldo liberado para este CPF nos provedores selecionados.
-                    </p>
+                    </div>
                 </div>
             </CardContent>
         </Card>
@@ -227,3 +227,5 @@ export default function FgtsManualPage() {
     </div>
   );
 }
+
+    

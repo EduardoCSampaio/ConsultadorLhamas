@@ -129,9 +129,9 @@ export default function FactaPage() {
                     <h3 className="text-2xl font-bold tracking-tight">
                         Nenhuma Oferta Encontrada
                     </h3>
-                    <p className="text-sm text-muted-foreground">
+                    <div className="text-sm text-muted-foreground">
                        {noOffersMessage}
-                    </p>
+                    </div>
                 </div>
             </CardContent>
         </Card>
@@ -222,3 +222,5 @@ export default function FactaPage() {
     </div>
   );
 }
+
+    
