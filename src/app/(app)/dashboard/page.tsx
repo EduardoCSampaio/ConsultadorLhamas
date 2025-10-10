@@ -266,9 +266,9 @@ function UserDashboard({ userProfile }: { userProfile: UserProfile }) {
                         <div className="flex flex-col items-center justify-center gap-4 text-center h-60 border-2 border-dashed rounded-lg">
                             <Inbox className="h-12 w-12 text-muted-foreground" />
                             <h3 className="text-2xl font-bold tracking-tight">Nenhuma atividade registrada</h3>
-                            <p className="text-sm text-muted-foreground">
+                            <div className="text-sm text-muted-foreground">
                                 Comece a usar o sistema para ver suas ações aqui.
-                            </p>
+                            </div>
                         </div>
                     ) : (
                         <div className="rounded-md border">
@@ -387,14 +387,14 @@ function AdminDashboardLoader() {
                  <Card>
                     <CardHeader>
                         <CardTitle><Skeleton className="h-6 w-48"/></CardTitle>
-                        <CardDescription><Skeleton className="h-4 w-72"/></CardDescription>
+                        <CardDescription><div className="h-4 w-72"><Skeleton className="h-full w-full"/></div></CardDescription>
                     </CardHeader>
                     <CardContent><Skeleton className="h-40 w-full"/></CardContent>
                 </Card>
                  <Card>
                     <CardHeader>
                         <CardTitle><Skeleton className="h-6 w-48"/></CardTitle>
-                        <CardDescription><Skeleton className="h-4 w-72"/></CardDescription>
+                        <CardDescription><div className="h-4 w-72"><Skeleton className="h-full w-full"/></div></CardDescription>
                     </CardHeader>
                     <CardContent><Skeleton className="h-40 w-full"/></CardContent>
                 </Card>
