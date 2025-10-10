@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "WebhookResponse": {
@@ -341,18 +342,70 @@
       "type": "object",
       "properties": {
         "proposta": { "type": "string" },
-        "data_digitacao": { "type": "string", "format": "date-time" },
+        "data_digitacao": { "type": "string" },
+        "hora_digitacao": { "type": "string" },
+        "data_efetivacao": { "type": "string" },
+        "data_pgto_cliente": { "type": "string" },
         "situacao": { "type": "string" },
         "convenio": { "type": "string" },
         "cpf": { "type": "string" },
         "cliente": { "type": "string" },
         "valor_liberado": { "type": "number" },
-        "valor_prestacao": { "type": "number" },
-        "prazo": { "type": "number" },
-        "login": { "type": "string" },
-        "nome_login": { "type": "string" }
+        "vlrprestacao": { "type": "number" },
+        "numeroprestacao": { "type": "number" },
+        "login_corretor": { "type": "string" },
+        "nome_login": { "type": "string" },
+        "corretor": { "type": "string" },
+        "codigo_indicador": { "type": "string" },
+        "codigo_master": { "type": "string" },
+        "data_movimento": { "type": "string" },
+        "data_movimento_ocorrencia": { "type": "string" },
+        "hora_movimento_ocorrencia": { "type": "string" },
+        "observacao_ocorrencia": { "type": "string" },
+        "averbador": { "type": "string" },
+        "codigo_af": { "type": "string" },
+        "numero_contrato": { "type": "string" },
+        "numero_contrato_refin": { "type": "string" },
+        "produto": { "type": "string" },
+        "saldo_devedor": { "type": "number" },
+        "status_proposta": { "type": "string" },
+        "status_crivo": { "type": "string" },
+        "tabela": { "type": "string" },
+        "tipo_operacao": { "type": "string" },
+        "valor_af": { "type": "number" },
+        "valor_bruto": { "type": "number" },
+        "taxa": { "type": "number" },
+        "valor_iof": { "type": "number" },
+        "valor_seguro": { "type": "number" },
+        "vendedor": { "type": "string" },
+        "matricula": { "type": "string" },
+        "especie_beneficio": { "type": "string" },
+        "meio_pagamento_beneficio": { "type": "string" },
+        "banco": { "type": "string" },
+        "agencia": { "type": "string" },
+        "conta": { "type": "string" },
+        "banco_desconto": { "type": "string" },
+        "agencia_desconto": { "type": "string" },
+        "conta_desconto": { "type": "string" },
+        "assinatura_digital": { "type": "string" },
+        "tipo_chave_pix": { "type": "string" },
+        "chave_pix": { "type": "string" }
       },
-      "required": ["proposta", "data_digitacao", "situacao", "cpf", "cliente"]
+      "required": ["proposta", "data_digitacao", "cpf", "cliente"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Represents an in-app notification for a user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the user who will receive the notification." },
+        "title": { "type": "string", "description": "The title of the notification." },
+        "message": { "type": "string", "description": "The main content of the notification." },
+        "link": { "type": "string", "format": "uri", "description": "A URL to navigate to when the notification is clicked." },
+        "isRead": { "type": "boolean", "description": "Whether the user has read the notification." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "The timestamp when the notification was created." }
+      },
+      "required": ["userId", "title", "message", "isRead", "createdAt"]
     }
   },
   "auth": {
@@ -400,6 +453,12 @@
     "/tickets/{ticketId}/messages/{messageId}": {
       "schema": { "$ref": "#/entities/TicketMessage" },
       "description": "Stores all messages related to a specific support ticket."
+    },
+     "/users/{userId}/notifications/{notificationId}": {
+      "schema": {
+        "$ref": "#/entities/Notification"
+      },
+      "description": "Stores notifications for a specific user."
     }
   }
 }

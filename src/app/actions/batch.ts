@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { type ApiCredentials, logActivity } from './users';
+import { createNotification } from './notifications';
 
 type Provider = "v8" | "facta";
 type V8Provider = 'qi' | 'cartos' | 'bms';
@@ -162,11 +163,13 @@ async function processFactaBatchInBackground(batchId: string) {
     const batchRef = firestore.collection('batches').doc(batchId);
     const CHUNK_SIZE = 25; 
 
+    let batchData: BatchJob;
+
     try {
         const batchDoc = await batchRef.get();
         if (!batchDoc.exists) throw new Error(`Lote ${batchId} não encontrado.`);
         
-        let batchData = batchDoc.data() as BatchJob;
+        batchData = batchDoc.data() as BatchJob;
         
         if (batchData.status === 'completed' || (batchData.status === 'error' && batchData.processedCpfs === batchData.totalCpfs)) {
             console.log(`[Batch ${batchId}] Batch already finished with status: ${batchData.status}.`);
@@ -189,11 +192,19 @@ async function processFactaBatchInBackground(batchId: string) {
         const cpfsToProcess = batchData.cpfs.filter(cpf => !processedCpfIds.has(cpf)).slice(0, CHUNK_SIZE);
 
         if (cpfsToProcess.length === 0) {
-            if (batchData.processedCpfs < batchData.totalCpfs) {
-                 await batchRef.update({ status: 'completed', processedCpfs: batchData.totalCpfs, message: "Todos os CPFs foram processados.", completedAt: FieldValue.serverTimestamp() });
-            } else if (batchData.status !== 'completed') {
-                await batchRef.update({ status: 'completed', message: "Todos os CPFs foram processados.", completedAt: FieldValue.serverTimestamp() });
-            }
+            const finalStatus = batchData.status === 'error' ? 'error' : 'completed';
+            const finalMessage = finalStatus === 'completed' 
+                ? "Todos os CPFs foram processados." 
+                : batchData.message || 'Lote processado com alguns erros.';
+
+            await batchRef.update({ status: finalStatus, processedCpfs: batchData.totalCpfs, message: finalMessage, completedAt: FieldValue.serverTimestamp() });
+            
+            await createNotification({
+                userId: batchData.userId,
+                title: `Lote "${batchData.fileName}" finalizado`,
+                message: `O processamento do seu lote foi concluído com status: ${finalStatus}.`,
+                link: '/esteira'
+            });
             console.log(`[Batch ${batchId}] All CPFs processed. Batch completed.`);
             return;
         }
@@ -229,7 +240,14 @@ async function processFactaBatchInBackground(batchId: string) {
             console.log(`[Batch ${batchId}] Chunk processed. Triggering next one.`);
             await processFactaBatchInBackground(batchId); // Recursive call
         } else {
-            await batchRef.update({ status: 'completed', message: "Todos os CPFs foram processados.", completedAt: FieldValue.serverTimestamp() });
+             const finalStatus = batchData.status === 'error' ? 'error' : 'completed';
+             await batchRef.update({ status: finalStatus, message: "Todos os CPFs foram processados.", completedAt: FieldValue.serverTimestamp() });
+             await createNotification({
+                userId: batchData.userId,
+                title: `Lote "${batchData.fileName}" concluído`,
+                message: `O processamento foi finalizado.`,
+                link: '/esteira'
+             });
             console.log(`[Batch ${batchId}] Final chunk processed. Batch completed.`);
         }
 
@@ -237,6 +255,14 @@ async function processFactaBatchInBackground(batchId: string) {
         const message = error instanceof Error ? error.message : "An unknown error occurred.";
         console.error(`[Batch ${batchId}] FACTA BATCH FATAL ERROR:`, error);
         await batchRef.update({ status: 'error', message: message, completedAt: FieldValue.serverTimestamp() });
+         if (batchData!) {
+            await createNotification({
+                userId: batchData.userId,
+                title: `Erro no lote "${batchData.fileName}"`,
+                message: `Ocorreu um erro fatal durante o processamento.`,
+                link: '/esteira'
+            });
+        }
     }
 }
 
@@ -315,15 +341,16 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
 
 async function processV8BatchInBackground(batchId: string) {
     console.log(`[Batch ${batchId}] Starting V8 background processing...`);
-    initializeFirebaseAdmin();
+    let batchData: BatchJob;
     const firestore = getFirestore();
     const batchRef = firestore.collection('batches').doc(batchId);
-    
+
     try {
+        initializeFirebaseAdmin();
         const batchDoc = await batchRef.get();
         if (!batchDoc.exists) throw new Error(`Lote ${batchId} não encontrado.`);
 
-        const batchData = batchDoc.data() as BatchJob;
+        batchData = batchDoc.data() as BatchJob;
         await batchRef.update({ status: 'processing', message: 'Enviando solicitações para a V8...' });
         
         const { cpfs, userId, userEmail, v8Provider } = batchData;
@@ -359,6 +386,14 @@ async function processV8BatchInBackground(batchId: string) {
         const message = error instanceof Error ? error.message : "An unknown error occurred.";
         console.error(`[Batch ${batchId}] V8 BATCH FATAL ERROR:`, error);
         await batchRef.update({ status: 'error', message: message, completedAt: FieldValue.serverTimestamp() });
+        if (batchData!) {
+            await createNotification({
+                userId: batchData.userId,
+                title: `Erro no lote "${batchData.fileName}"`,
+                message: `Ocorreu um erro fatal durante o processamento.`,
+                link: '/esteira'
+            });
+        }
     }
 }
 
@@ -456,7 +491,8 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
     
     const formattedDate = new Date(createdAt).toLocaleDateString('pt-BR').replace(/\//g, '-');
     const formattedTime = new Date(createdAt).toTimeString().split(' ')[0].replace(/:/g, '-');
-    const fileName = `HIGIENIZACAO_FGTS_${displayProvider.toUpperCase()}_${originalFileName.replace(/\.xlsx?$/i, '')}_${formattedDate}_${formattedTime}.xlsx`;
+    const fileName = `WORKBANK${displayProvider.toUpperCase()}_${formattedDate}_${formattedTime}.xlsx`;
+
 
     await logActivity({
         userId: userId,

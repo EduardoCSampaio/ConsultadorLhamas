@@ -16,7 +16,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, CheckCircle } from "lucide-react";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useFirestore } from "@/firebase";
-import { setAdminClaim } from "@/app/actions/users";
+import { setAdminClaim, logActivity } from "@/app/actions/users";
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -87,6 +87,12 @@ export default function LoginPage() {
         };
 
         await setDoc(doc(firestore, "users", newUser.uid), userProfile);
+        
+        await logActivity({
+            userId: newUser.uid,
+            action: 'User Registration',
+            details: `New user ${newUser.email} signed up.`
+        });
         
         // Set admin custom claim via server action if it's the admin user
         if (isAdmin) {

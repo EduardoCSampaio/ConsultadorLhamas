@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
+import { createNotification } from '@/app/actions/notifications';
 
 /**
  * Handles POST requests from the V8 API balance webhook.
@@ -32,11 +33,13 @@ export async function POST(request: NextRequest) {
 
     // Before writing, let's see if we can find a batchId from a pre-existing doc.
     let batchId: string | undefined = payload.batchId;
-    if (!batchId) {
-        const existingDoc = await docRef.get();
-        if (existingDoc.exists) {
-            batchId = existingDoc.data()?.batchId;
-        }
+    let userId: string | undefined;
+
+    const existingDoc = await docRef.get();
+    if (existingDoc.exists) {
+        const existingData = existingDoc.data();
+        if (!batchId) batchId = existingData?.batchId;
+        if (!userId) userId = existingData?.userId;
     }
 
     const v8Partner = payload.provider || 'qi';
@@ -55,7 +58,7 @@ export async function POST(request: NextRequest) {
         statusMessage = 'Webhook payload with balance successfully stored.';
     }
 
-    const dataToSet = {
+    const dataToSet: any = {
       responseBody: payload,
       updatedAt: FieldValue.serverTimestamp(), // Use a different field to avoid overwriting createdAt
       status: status,
@@ -65,6 +68,10 @@ export async function POST(request: NextRequest) {
       v8Provider: v8Partner,
       ...(batchId && { batchId: batchId }),
     };
+    if (userId) {
+        dataToSet.userId = userId;
+    }
+
 
     await docRef.set(dataToSet, { merge: true });
 
@@ -93,6 +100,16 @@ export async function POST(request: NextRequest) {
                     updates.status = 'completed';
                     updates.message = 'Processamento concluído via webhooks.';
                     updates.completedAt = FieldValue.serverTimestamp();
+                    
+                    // Create notification for user when batch is completed
+                    if (batchData.userId) {
+                         await createNotification({
+                            userId: batchData.userId,
+                            title: `Lote "${batchData.fileName}" concluído`,
+                            message: `O processamento do lote enviado para V8 foi finalizado.`,
+                            link: '/esteira'
+                        });
+                    }
                 }
 
                 transaction.update(batchRef, updates);

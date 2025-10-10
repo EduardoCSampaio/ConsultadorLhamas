@@ -46,6 +46,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from '@/lib/utils';
 import type { UserProfile } from '@/app/actions/users';
+import { NotificationBell } from '@/components/notification-bell';
 
 const allBaseMenuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard", permission: 'isLoggedIn' as const },
@@ -119,7 +120,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return !!userProfile?.permissions?.[permission];
   };
 
-  if (isUserLoading || isProfileLoading) {
+  if (isUserLoading || isProfileLoading || !user) {
     return (
         <div className="flex min-h-screen items-center justify-center bg-background">
             <Logo />
@@ -305,7 +306,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="flex-1">
             {/* We can add breadcrumbs here */}
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <NotificationBell userId={user.uid} />
+            <ThemeToggle />
+          </div>
         </header>
         <main className="flex-1 p-4 md:p-6">{children}</main>
       </SidebarInset>

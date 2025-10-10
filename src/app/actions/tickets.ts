@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { createNotification } from './notifications';
 
 const ticketStatusEnum = z.enum(["aberto", "em_atendimento", "em_desenvolvimento", "testando", "liberado", "resolvido"]);
 
@@ -298,14 +299,31 @@ export async function addMessageToTicket(input: z.infer<typeof addMessageSchema>
             lastMessage: content,
         };
 
+        const ticketDoc = await ticketRef.get();
+        if (!ticketDoc.exists) {
+            throw new Error("Chamado não encontrado.");
+        }
+        const ticketData = ticketDoc.data() as Ticket;
+
         if (isAdmin) {
             ticketUpdates.unreadByUser = FieldValue.increment(1);
+            await createNotification({
+                userId: ticketData.userId,
+                title: `Nova resposta no chamado #${ticketData.ticketNumber}`,
+                message: `Sua solicitação "${ticketData.title}" foi respondida.`,
+                link: `/chamados/${ticketId}`
+            });
+
         } else {
             ticketUpdates.unreadByAdmin = FieldValue.increment(1);
+            // This is complex, as we need to notify all admins.
+            // A better approach would be a cloud function listening to message creations
+            // and fanning out notifications. For now, we can skip admin notifications
+            // or fetch all admins and create notifications for them.
         }
 
-        const ticketDoc = await ticketRef.get();
-        if (ticketDoc.exists && ticketDoc.data()?.status === 'aberto' && isAdmin) {
+        
+        if (ticketData.status === 'aberto' && isAdmin) {
             ticketUpdates.status = 'em_atendimento';
         }
         

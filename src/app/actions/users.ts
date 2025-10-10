@@ -6,6 +6,7 @@ import { initializeFirebaseAdmin } from '@/firebase/server-init';
 import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import * as XLSX from 'xlsx';
+import { createNotificationsForAdmins } from './notifications';
 
 export type UserPermissions = {
   canViewFGTS?: boolean;
@@ -112,6 +113,16 @@ export async function logActivity(input: LogActivityInput) {
             userEmail: userEmail,
             createdAt: FieldValue.serverTimestamp(),
         });
+
+        if (input.action === 'User Registration') {
+            await createNotificationsForAdmins({
+                title: 'Novo Usuário Cadastrado',
+                message: `O usuário ${userEmail} se cadastrou e aguarda aprovação.`,
+                link: '/admin/users'
+            });
+        }
+
+
     } catch (logError) {
         console.error(`Failed to log activity "${input.action}":`, logError);
     }
