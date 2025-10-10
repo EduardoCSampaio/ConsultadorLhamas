@@ -100,6 +100,7 @@ type LogActivityInput = {
 
 export async function logActivity(input: LogActivityInput) {
     try {
+        initializeFirebaseAdmin();
         const firestore = getFirestore();
         const userDoc = await firestore.collection('users').doc(input.userId).get();
         if (!userDoc.exists) {
@@ -114,6 +115,7 @@ export async function logActivity(input: LogActivityInput) {
             createdAt: FieldValue.serverTimestamp(),
         });
 
+        // If the action is a new user registration, notify all admins.
         if (input.action === 'User Registration') {
             await createNotificationsForAdmins({
                 title: 'Novo Usuário Cadastrado',
