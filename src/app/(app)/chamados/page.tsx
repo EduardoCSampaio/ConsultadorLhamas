@@ -36,6 +36,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { cn } from "@/lib/utils";
 
 const newTicketSchema = z.object({
   title: z.string().min(5, "O título deve ter pelo menos 5 caracteres.").max(100, "O título deve ter no máximo 100 caracteres."),
@@ -50,6 +51,16 @@ const statusLabels: Record<Ticket['status'], string> = {
     liberado: "Liberação",
     resolvido: "Resolvido",
 };
+
+const statusColors: Record<Ticket['status'], string> = {
+    aberto: "bg-red-500 text-white",
+    em_atendimento: "bg-primary text-primary-foreground",
+    em_desenvolvimento: "bg-cyan-500 text-white",
+    testando: "bg-yellow-400 text-black",
+    liberado: "bg-pink-500 text-white",
+    resolvido: "bg-green-500 text-white",
+};
+
 
 export default function ChamadosPage() {
     const { toast } = useToast();
@@ -123,20 +134,6 @@ export default function ChamadosPage() {
             toast({ variant: 'destructive', title: 'Erro ao abrir chamado', description: result.message });
         }
         setIsSubmitting(false);
-    };
-    
-     const getStatusVariant = (status: Ticket['status']) => {
-        switch (status) {
-            case 'aberto': return 'secondary';
-            case 'em_atendimento':
-            case 'em_desenvolvimento':
-                return 'default';
-            case 'resolvido': return 'destructive'; // Assuming this is like a closed state
-            case 'testando':
-            case 'liberado':
-                 return 'outline';
-            default: return 'outline';
-        }
     };
     
     const isAdmin = userProfile?.role === 'admin';
@@ -282,7 +279,7 @@ export default function ChamadosPage() {
                                        <div className="flex-1 mb-4 sm:mb-0">
                                            <div className="flex items-center gap-3 mb-2 flex-wrap">
                                                 <span className="font-mono text-sm text-muted-foreground">{ticket.ticketNumber}</span>
-                                                <Badge variant={getStatusVariant(ticket.status)}>{statusLabels[ticket.status]}</Badge>
+                                                <Badge className={cn(statusColors[ticket.status])}>{statusLabels[ticket.status]}</Badge>
                                            </div>
                                            <div className="flex items-center gap-2">
                                                 <h3 className="font-semibold text-lg">{ticket.title}</h3>

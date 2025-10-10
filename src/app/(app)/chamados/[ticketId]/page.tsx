@@ -31,19 +31,15 @@ const statusLabels: Record<Ticket['status'], string> = {
     resolvido: "Resolvido",
 };
 
-const getStatusVariant = (status: Ticket['status']) => {
-    switch (status) {
-        case 'aberto': return 'secondary';
-        case 'em_atendimento':
-        case 'em_desenvolvimento':
-            return 'default';
-        case 'resolvido': return 'destructive';
-        case 'testando':
-        case 'liberado':
-             return 'outline';
-        default: return 'outline';
-    }
+const statusColors: Record<Ticket['status'], string> = {
+    aberto: "bg-red-500 text-white",
+    em_atendimento: "bg-primary text-primary-foreground",
+    em_desenvolvimento: "bg-cyan-500 text-white",
+    testando: "bg-yellow-400 text-black",
+    liberado: "bg-pink-500 text-white",
+    resolvido: "bg-green-500 text-white",
 };
+
 
 
 export default function ChamadoDetalhePage() {
@@ -172,7 +168,7 @@ export default function ChamadoDetalhePage() {
                         </Button>
                         <span className="truncate">{ticket.title}</span>
                          <Badge variant="secondary">{ticket.ticketNumber}</Badge>
-                         <Badge variant={getStatusVariant(ticket.status)}>{statusLabels[ticket.status]}</Badge>
+                         <Badge className={cn(statusColors[ticket.status])}>{statusLabels[ticket.status]}</Badge>
                     </div>
                 }
                 description={
