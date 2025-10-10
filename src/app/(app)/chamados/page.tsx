@@ -179,7 +179,7 @@ export default function ChamadosPage() {
                                 )}
                            </div>
                             {isAdmin && (
-                                <p className="text-sm font-medium text-muted-foreground">{ticket.userEmail}</p>
+                                <div className="text-sm font-medium text-muted-foreground">{ticket.userEmail}</div>
                             )}
                            <div className="text-sm text-muted-foreground mt-1">
                                 Última atualização: {new Date(ticket.updatedAt).toLocaleString('pt-BR')}

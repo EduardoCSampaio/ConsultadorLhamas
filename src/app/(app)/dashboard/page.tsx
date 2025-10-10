@@ -341,7 +341,7 @@ function AdminDashboardLoader() {
         <div className="flex flex-col gap-6">
             <PageHeader
                 title={<Skeleton className="h-8 w-64"/>}
-                description={<Skeleton className="h-5 w-80"/>}
+                description={<div className="h-5 w-80"><Skeleton className="h-full w-full"/></div>}
             >
                 <Skeleton className="h-10 w-44" />
             </PageHeader>
@@ -387,14 +387,14 @@ function AdminDashboardLoader() {
                  <Card>
                     <CardHeader>
                         <CardTitle><Skeleton className="h-6 w-48"/></CardTitle>
-                        <CardDescription><Skeleton className="h-4 w-72"/></CardDescription>
+                        <CardDescription><div className="h-4 w-72"><Skeleton className="h-full w-full"/></div></CardDescription>
                     </CardHeader>
                     <CardContent><Skeleton className="h-40 w-full"/></CardContent>
                 </Card>
                  <Card>
                     <CardHeader>
                         <CardTitle><Skeleton className="h-6 w-48"/></CardTitle>
-                        <CardDescription><Skeleton className="h-4 w-72"/></CardDescription>
+                        <CardDescription><div className="h-4 w-72"><Skeleton className="h-full w-full"/></div></CardDescription>
                     </CardHeader>
                     <CardContent><Skeleton className="h-40 w-full"/></CardContent>
                 </Card>
@@ -469,3 +469,5 @@ export default function DashboardPage() {
   // Fallback or loading state if userProfile is not available for some reason.
   return <AdminDashboardLoader />;
 }
+
+    

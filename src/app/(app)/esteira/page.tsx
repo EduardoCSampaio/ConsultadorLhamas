@@ -233,9 +233,9 @@ export default function EsteiraPage() {
                                 <div className="flex justify-between items-start">
                                     <div>
                                         <h3 className="font-semibold">{batch.fileName} ({batch.provider.toUpperCase()})</h3>
-                                        <p className="text-sm text-muted-foreground">
+                                        <div className="text-sm text-muted-foreground">
                                             Enviado em: {new Date(batch.createdAt).toLocaleString('pt-BR')}
-                                        </p>
+                                        </div>
                                           {batch.status === 'processing' && (
                                             <div className="text-sm text-muted-foreground flex items-center gap-1.5">
                                                 <Timer className="h-3.5 w-3.5"/>

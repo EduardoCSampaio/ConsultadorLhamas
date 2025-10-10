@@ -208,16 +208,16 @@ export default function FgtsManualPage() {
                     <div className="mb-4">
                         {result.provider === 'V8DIGITAL' ? (
                             <>
-                                <p className="text-xl font-bold uppercase">{result.provider}</p>
-                                <p className="text-sm uppercase text-muted-foreground">{result.v8Provider}</p>
+                                <div className="text-xl font-bold uppercase">{result.provider}</div>
+                                <div className="text-sm uppercase text-muted-foreground">{result.v8Provider}</div>
                             </>
                         ) : (
-                            <p className="text-xl font-bold uppercase">{result.provider}</p>
+                            <div className="text-xl font-bold uppercase">{result.provider}</div>
                         )}
                     </div>
                     <div>
-                        <p className="text-sm text-muted-foreground">Saldo Disponível</p>
-                        <p className="text-2xl font-bold font-headline">{formatCurrency(result.balance)}</p>
+                        <div className="text-sm text-muted-foreground">Saldo Disponível</div>
+                        <div className="text-2xl font-bold font-headline">{formatCurrency(result.balance)}</div>
                     </div>
                 </Card>
             ))}
