@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Send, ArrowLeft, AlertCircle } from 'lucide-react';
-import { getTicketById, addMessageToTicket, markTicketAsRead, updateTicketStatus, type Ticket, type TicketMessage } from '@/app/actions/tickets';
+import { addMessageToTicket, markTicketAsRead, updateTicketStatus, type Ticket, type TicketMessage } from '@/app/actions/tickets';
 import { useUser, useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase";
 import { doc, collection, orderBy, query, getDoc } from 'firebase/firestore';
 import type { UserProfile } from '@/app/actions/users';
@@ -51,7 +51,6 @@ export default function ChamadoDetalhePage() {
     const ticketId = params.ticketId as string;
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [newMessage, setNewMessage] = useState("");
@@ -80,38 +79,42 @@ export default function ChamadoDetalhePage() {
     const isAdmin = userProfile?.role === 'admin';
 
     useEffect(() => {
-       async function checkAccessAndMarkRead() {
+       async function processTicketAndMessages() {
            if (pageIsLoading || !ticket || !user || !firestore) return;
            
-            // Security check
-            if (!isAdmin && user?.uid !== ticket.userId) {
+            if (!isAdmin && user.uid !== ticket.userId) {
                 toast({ variant: 'destructive', title: 'Acesso Negado' });
                 router.push('/chamados');
                 return;
             }
             
-            // Mark as read after fetching and confirming access
             await markTicketAsRead({ ticketId, userId: user.uid });
 
-            // Fetch profiles of all participants (creator + message senders)
             const messageSenderIds = messages?.map(m => m.senderId) || [];
-            const allParticipantIds = Array.from(new Set([ticket.userId, ...messageSenderIds]));
+            const allParticipantIds = Array.from(new Set([ticket.userId, user.uid, ...messageSenderIds]));
             
             const profilesToFetch = allParticipantIds.filter(id => id && !participantProfiles[id]);
 
             if (profilesToFetch.length > 0) {
                 const newProfiles: Record<string, UserProfile | null> = {};
                 for (const id of profilesToFetch) {
-                    const userDoc = await getDoc(doc(firestore, 'users', id));
-                    if (userDoc.exists()) {
-                        newProfiles[id] = userDoc.data() as UserProfile;
+                    try {
+                        const userDoc = await getDoc(doc(firestore, 'users', id));
+                        if (userDoc.exists()) {
+                            newProfiles[id] = userDoc.data() as UserProfile;
+                        } else {
+                            newProfiles[id] = null; // Store null if user doc doesn't exist
+                        }
+                    } catch (e) {
+                         newProfiles[id] = null;
+                         console.error(`Failed to fetch profile for user ${id}:`, e);
                     }
                 }
                 setParticipantProfiles(prev => ({ ...prev, ...newProfiles }));
             }
        }
-       checkAccessAndMarkRead();
-    }, [ticket, user, isAdmin, pageIsLoading, ticketId, router, toast, firestore, messages, participantProfiles]);
+       processTicketAndMessages();
+    }, [ticket, messages, user, isAdmin, pageIsLoading, ticketId, router, toast, firestore]);
 
 
     useEffect(() => {
@@ -223,17 +226,27 @@ export default function ChamadoDetalhePage() {
                    )}
                    {messages?.map(message => {
                         const senderProfile = participantProfiles[message.senderId];
+                        const isProfileLoading = senderProfile === undefined;
+                        
+                        const renderAvatar = (profile: UserProfile | null | undefined, email: string) => (
+                           <Avatar className="h-8 w-8">
+                                {isProfileLoading ? (
+                                    <Skeleton className="h-full w-full rounded-full" />
+                                ) : (
+                                    <>
+                                       <AvatarImage src={profile?.photoURL ?? undefined} />
+                                       <AvatarFallback>{getInitials(email)}</AvatarFallback>
+                                    </>
+                                )}
+                           </Avatar>
+                        );
+
                         return (
                            <div 
                             key={message.id} 
                             className={cn("flex items-end gap-3", user?.uid === message.senderId ? "justify-end" : "justify-start")}
                            >
-                               {user?.uid !== message.senderId && (
-                                   <Avatar className="h-8 w-8">
-                                       <AvatarImage src={senderProfile?.photoURL ?? undefined} />
-                                       <AvatarFallback>{getInitials(senderProfile?.email ?? message.senderEmail)}</AvatarFallback>
-                                   </Avatar>
-                               )}
+                               {user?.uid !== message.senderId && renderAvatar(senderProfile, message.senderEmail)}
                                <div 
                                 className={cn(
                                     "max-w-md p-3 rounded-lg",
@@ -247,12 +260,7 @@ export default function ChamadoDetalhePage() {
                                        {new Date(message.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                                    </p>
                                </div>
-                                 {user?.uid === message.senderId && (
-                                   <Avatar className="h-8 w-8">
-                                       <AvatarImage src={userProfile?.photoURL ?? undefined} />
-                                       <AvatarFallback>{getInitials(message.senderEmail)}</AvatarFallback>
-                                   </Avatar>
-                               )}
+                                {user?.uid === message.senderId && renderAvatar(userProfile, message.senderEmail)}
                            </div>
                         );
                    })}
