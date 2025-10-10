@@ -69,7 +69,8 @@ export default function AdminUsersPage() {
             });
             setUsers([]);
         } else {
-            setUsers(fetchedUsers || []);
+            // Filter out users without an email on the client-side as a safeguard
+            setUsers(fetchedUsers?.filter(u => u.email) || []);
         }
         setIsLoading(false);
     };

@@ -244,8 +244,8 @@ export async function getUsers(): Promise<{users: UserProfile[] | null, error?: 
             let profileData = firestoreProfiles.get(userRecord.uid);
             const isAdmin = userRecord.email === 'admin@lhamascred.com.br';
 
-            // If a user exists in Auth but not in Firestore, create a profile for them
-            if (!profileData) {
+            // If a user exists in Auth but not in Firestore, and has an email, create a profile for them
+            if (!profileData && userRecord.email) {
                 console.log(`User ${userRecord.email} found in Auth but not in Firestore. Creating profile...`);
                 const newProfile = {
                     uid: userRecord.uid,
@@ -259,6 +259,11 @@ export async function getUsers(): Promise<{users: UserProfile[] | null, error?: 
                 profileData = newProfile;
             }
 
+            // Only process users that have an email
+            if (!userRecord.email) {
+                return null;
+            }
+            
             const createdAt = profileData.createdAt;
             let serializableCreatedAt = new Date().toISOString();
             if (createdAt instanceof Timestamp) {
@@ -269,7 +274,7 @@ export async function getUsers(): Promise<{users: UserProfile[] | null, error?: 
 
             return {
                 uid: userRecord.uid,
-                email: userRecord.email || '',
+                email: userRecord.email,
                 photoURL: userRecord.photoURL || profileData.photoURL,
                 role: profileData.role || 'user',
                 status: profileData.status || 'pending',
@@ -284,10 +289,11 @@ export async function getUsers(): Promise<{users: UserProfile[] | null, error?: 
             } as UserProfile;
         }));
 
-        // Sort by creation date descending
-        users.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        // Filter out null users (those without email) and sort
+        const validUsers = users.filter((user): user is UserProfile => user !== null);
+        validUsers.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-        return { users };
+        return { users: validUsers };
     } catch (error) {
         const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao buscar usuários.";
         console.error("Erro ao buscar usuários:", message);
