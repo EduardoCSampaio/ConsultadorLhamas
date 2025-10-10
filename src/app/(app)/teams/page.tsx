@@ -8,11 +8,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUser, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
-import { collection, query, where, doc } from 'firebase/firestore';
-import { useCollection } from '@/firebase/firestore/use-collection';
+import { collection, query, where, doc, getDoc, getDocs } from 'firebase/firestore';
 import type { UserProfile } from '@/app/actions/users';
 import { Copy, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import type { Team } from '@/app/actions/teams';
 
 type UserStatus = UserProfile['status'];
 
@@ -40,7 +40,9 @@ export default function MyTeamPage() {
     const firestore = useFirestore();
     const { toast } = useToast();
 
-    // Directly get the teamId from the manager's profile
+    const [teamMembers, setTeamMembers] = useState<UserProfile[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
     const managerProfileRef = useMemoFirebase(() => {
         if (!firestore || !manager) return null;
         return doc(firestore, 'users', manager.uid);
@@ -49,22 +51,32 @@ export default function MyTeamPage() {
     const { data: managerProfile, isLoading: isManagerProfileLoading } = useDoc<UserProfile>(managerProfileRef);
     const teamId = managerProfile?.teamId;
 
-    const teamMembersQuery = useMemoFirebase(() => {
-        if (!firestore || !teamId) return null;
-        // Query for users that belong to the manager's team.
-        return query(collection(firestore, 'users'), where('teamId', '==', teamId));
-    }, [firestore, teamId]);
+    useEffect(() => {
+        const fetchTeamMembers = async () => {
+            if (!firestore || !teamId) {
+                if(!isManagerProfileLoading) setIsLoading(false);
+                return;
+            };
+            
+            setIsLoading(true);
+            try {
+                const membersQuery = query(collection(firestore, 'users'), where('teamId', '==', teamId));
+                const querySnapshot = await getDocs(membersQuery);
+                const members = querySnapshot.docs.map(doc => doc.data() as UserProfile);
+                setTeamMembers(members.filter(member => member.uid !== manager?.uid)); // Filter out the manager
+            } catch (error) {
+                console.error("Error fetching team members:", error);
+                toast({ variant: 'destructive', title: 'Erro ao buscar membros', description: 'Você não tem permissão para listar os usuários da equipe.' });
+            } finally {
+                setIsLoading(false);
+            }
+        };
 
-    const { data: teamMembers, isLoading: areMembersLoading } = useCollection<UserProfile>(teamMembersQuery);
-    
-    const teamMembersFiltered = useMemo(() => {
-        // Also filter out the manager themselves from the list
-        return teamMembers?.filter(member => member.uid !== manager?.uid);
-    }, [teamMembers, manager]);
+        fetchTeamMembers();
+
+    }, [firestore, teamId, manager?.uid, toast, isManagerProfileLoading]);
 
 
-    const isLoading = isManagerAuthLoading || isManagerProfileLoading || areMembersLoading;
-    
     const invitationLink = useMemo(() => {
         if (typeof window !== 'undefined' && teamId) {
             return `${window.location.origin}/signup?convite=${teamId}`;
@@ -77,6 +89,8 @@ export default function MyTeamPage() {
         navigator.clipboard.writeText(invitationLink);
         toast({ title: "Link de convite copiado!" });
     };
+    
+    const finalLoadingState = isLoading || isManagerAuthLoading || isManagerProfileLoading;
 
     return (
         <div className="flex flex-col gap-6">
@@ -125,7 +139,7 @@ export default function MyTeamPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {isLoading ? (
+                                {finalLoadingState ? (
                                     Array.from({ length: 3 }).map((_, i) => (
                                         <TableRow key={i}>
                                             <TableCell><Skeleton className="h-5 w-40" /></TableCell>
@@ -134,8 +148,8 @@ export default function MyTeamPage() {
                                             <TableCell className="text-right"><Skeleton className="h-8 w-24" /></TableCell>
                                         </TableRow>
                                     ))
-                                ) : teamMembersFiltered && teamMembersFiltered.length > 0 ? (
-                                    teamMembersFiltered.map(member => (
+                                ) : teamMembers && teamMembers.length > 0 ? (
+                                    teamMembers.map(member => (
                                         <TableRow key={member.uid}>
                                             <TableCell className="font-medium">{member.email}</TableCell>
                                             <TableCell>
