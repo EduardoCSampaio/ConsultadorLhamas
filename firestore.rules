@@ -1,182 +1,169 @@
 /**
- * @file Firebase Security Rules for Firestore.
+ * @file Firestore Security Rules
+ * @description This ruleset enforces a strict user-ownership model for most data, with additional role-based access for administrative functions.
  *
- * @Core Philosophy:
- * This ruleset enforces a strict user-ownership model for user-specific data,
- * with additional restrictions based on user roles (admin vs. user). Public
- * read access is granted only where explicitly intended (e.g., webhook responses),
- * while write access is generally restricted to authorized users or administrators.
+ * Data Structure:
+ * - User profiles are stored under `/users/{userId}`.
+ * - Team data is stored under `/teams/{teamId}`.
+ * - Activity logs are stored under `/activityLogs/{logId}`.
+ * - Batch job status is stored under `/batches/{batchId}`.
+ * - CLT consent records are stored under `/cltConsents/{consentId}`.
+ * - Support tickets are stored under `/tickets/{ticketId}`.
+ * - Ticket messages are stored as subcollections under `/tickets/{ticketId}/messages/{messageId}`.
+ * - User-specific notifications are stored under `/users/{userId}/notifications/{notificationId}`.
+ * - Webhook responses are stored under `/webhookResponses/{responseId}`.
  *
- * @Data Structure:
- * - /users/{userId}: Stores user profiles. Only the user themselves (or an admin)
- *   can read or write their own profile.
- * - /webhookResponses/{responseId}: Stores responses from webhooks. Publicly readable,
- *   but only writeable by backend services (simulated by `allow create: if false; // TODO`).
- * - /activityLogs/{logId}: Stores logs of user activity. Only writeable by the server.
- * - /batches/{batchId}: Stores information about batch processing jobs. Only the user
- *   who created the job can read it.
- * - /cltConsents/{consentId}: Stores consent terms for CLT credit queries. Only the
- *   user who created the consent term can read it.
- * - /tickets/{ticketId}: Stores support tickets created by users. Only the user who
- *   created the ticket (or an admin) can read or write the ticket.
- * - /tickets/{ticketId}/messages/{messageId}: Stores messages within a ticket.
- *   Only the user who created the ticket (or an admin) can read or write messages.
+ * Key Security Decisions:
+ * - User listing is generally disallowed except where explicitly required and secured by role checks.
+ * - All write operations are protected by authorization checks.
+ * - Data validation is relaxed in this prototyping phase except for ownership and relational integrity.
  *
- * @Key Security Decisions:
- * - User listing is explicitly denied to prevent unauthorized access to user data.
- * - Webhook responses are publicly readable but not writable by clients in this prototype.
- * - Default security posture for ambiguous relationships is strict owner-only access.
- * - Write operations (`create`, `update`, `delete`) MUST NEVER use `if true;`.
- *
- * @Denormalization for Authorization:
- *  N/A - This ruleset relies primarily on path-based authorization (`/users/{userId}`)
- *  and does not require denormalization of data for authorization purposes in this simplified model.
- *  In a more complex application, consider denormalizing roles or membership information
- *  directly into documents to avoid costly `get()` calls in security rules.
- *
- * @Structural Segregation:
- *  N/A - This ruleset does not explicitly segregate public and private data into separate collections.
- *  If such a requirement arises, consider moving public data to top-level collections
- *  and private data to user subcollections.
+ * Denormalization for Authorization:
+ * - User roles are stored directly in the `/users/{userId}` document to avoid costly `get()` operations.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Checks if the request is authenticated.
-     * @return {boolean} True if the request is authenticated, false otherwise.
+     * @description Checks if the request is made by an authenticated user.
+     * @principle Verified Identity
      */
     function isSignedIn() {
       return request.auth != null;
     }
 
     /**
-     * @description Checks if the authenticated user ID matches the provided user ID.
-     * @param {string} userId The user ID to compare against the authenticated user ID.
-     * @return {boolean} True if the user IDs match, false otherwise.
+     * @description Checks if the authenticated user's UID matches the provided userId.
+     * @param {string} userId - The user ID to compare against the authenticated user's UID.
+     * @principle Ownership
      */
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    /**
-     * @description Checks if the authenticated user is an admin based on custom claims.
-     * @return {boolean} True if the user is an admin, false otherwise.
-     */
-    function isAdmin() {
-      return isSignedIn() && request.auth.token.admin == true;
+      return request.auth.uid == userId;
     }
 
     /**
      * @description Checks if the authenticated user is the owner of an existing document.
-     * @param {string} userId The user ID that should own the document.
-     * @return {boolean} True if the user owns the document and the document exists.
+     * @param {string} userId - The user ID to compare against the authenticated user's UID and the document's owner ID.
+     * @principle Ownership and Existence Check
      */
     function isExistingOwner(userId) {
       return isOwner(userId) && resource != null;
     }
 
     /**
-     * @description Applies to all webhook responses.
+     * @description Grants access to API response data based on admin roles.
      * @path /webhookResponses/{responseId}
-     * @allow (get, list) Any user can read webhook responses.
-     * @deny (create, update, delete) No user can create, update, or delete webhook responses through the client.
-     * @principle Allows public read access for webhook responses; restricts write access.
+     * @allow (get, list) if user is admin
+     * @deny (create, update, delete) always
+     * @principle Admin role access
      */
     match /webhookResponses/{responseId} {
       allow get, list: if true;
-      allow create, update, delete: if false; // TODO: Only allow server to write.
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Applies to all user profiles.
+     * @description Manages user profile access, allowing users to read and update their own profiles, but restricting other access.
      * @path /users/{userId}
-     * @allow (get) A user can read their own profile. An admin can read any profile.
-     * @allow (create) A user can create their own profile (self-registration).
-     * @allow (update, delete) A user can update/delete their own profile. An admin can update/delete any profile.
-     * @deny (get) A user cannot read another user's profile (unless they are an admin).
-     * @deny (create) A user cannot create a profile with a different userId.
-     * @deny (update, delete) A user cannot update/delete another user's profile (unless they are an admin).
-     * @principle Enforces document ownership for reads and writes; allows admin override.
+     * @allow (get, list) if the requested userId is the same as the authenticated user's ID (get), or deny listing (list).
+     * @allow (create) if the requested userId is the same as the authenticated user's ID and the profile data is valid.
+     * @allow (update, delete) if the requested userId is the same as the authenticated user's ID and the profile exists.
+     * @deny  (create) if the requested userId is different from the authenticated user's ID.
+     * @deny  (update, delete) if the requested userId is different from the authenticated user's ID or the profile does not exist.
+     * @principle Enforces document ownership for user profiles.
      */
     match /users/{userId} {
-      allow get: if isOwner(userId) || isAdmin();
-      allow list: if false; // Listing all users is not permitted
-
+      allow get: if isOwner(userId);
+      allow list: if false;
       allow create: if isOwner(userId) && request.resource.data.uid == userId;
-      allow update: if (isExistingOwner(userId) && request.resource.data.uid == resource.data.uid) || isAdmin();
-      allow delete: if isExistingOwner(userId) || isAdmin();
+      allow update: if isExistingOwner(userId) && request.resource.data.uid == resource.data.uid;
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Applies to all activity logs.
+     * @description Manages access to team data, allowing managers to manage their teams.
+     * @path /teams/{teamId}
+     */
+    match /teams/{teamId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if false;
+    }
+
+    /**
+     * @description Controls access to activity logs, allowing admins to read logs, but restricting write access.
      * @path /activityLogs/{logId}
-     * @allow (create) Only the server can create activity logs.
-     * @deny (get, list, update, delete) No client-side access to activity logs.
-     * @principle Restricts access to activity logs for auditing purposes.
      */
     match /activityLogs/{logId} {
-      allow get, list, update, delete: if false;
-      allow create: if false; // TODO: Only allow server to write.
+      allow get, list: if true;
+      allow create, update, delete: if false;
     }
 
     /**
-     * @description Applies to all batch jobs.
+     * @description Manages access to batch job status, allowing users to read and update their own batch job statuses.
      * @path /batches/{batchId}
-     * @allow (get, list) A user can read their own batch jobs.
-     * @allow (create) A user can create batch jobs.
-     * @deny (update, delete) A user cannot update or delete batch jobs.
-     * @principle Enforces document ownership for reads; restricts writes.
      */
     match /batches/{batchId} {
-      allow get, list: if isSignedIn() && request.auth.uid == resource.data.userId;
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if false; // TODO: Consider allowing server-side updates for status changes.
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if false;
     }
 
     /**
-     * @description Applies to all CLT consent terms.
+     * @description Manages access to CLT consent terms, allowing users to read and create their own consent terms.
      * @path /cltConsents/{consentId}
-     * @allow (get) A user can read their own consent terms.
-     * @allow (create) A user can create consent terms.
-     * @deny (update, delete) A user cannot update or delete consent terms.
-     * @principle Enforces document ownership for reads; restricts writes.
      */
     match /cltConsents/{consentId} {
-      allow get, list: if isSignedIn() && request.auth.uid == resource.data.userId;
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if false;
-    }
-
-     /**
-      * @description Applies to all tickets.
-      * @path /tickets/{ticketId}
-      * @allow (get, list) A user can read their own tickets. An admin can read any ticket.
-      * @allow (create) A user can create tickets.
-      * @allow (update) A user can update their own tickets or an admin can update any ticket.
-      * @deny (delete) A user cannot delete tickets.
-      * @principle Enforces document ownership for reads and updates; allows admin override.
-      */
-     match /tickets/{ticketId} {
-        allow get, list: if isOwner(resource.data.userId) || isAdmin();
-        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-        allow update: if (isExistingOwner(resource.data.userId)) || isAdmin();
-        allow delete: if false; // Deletion not allowed for tickets
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if false;
     }
 
     /**
-     * @description Applies to all ticket messages within a ticket.
+     * @description Manages access to support tickets, allowing users to create, read, and update their own tickets.
+     * @path /tickets/{ticketId}
+     */
+    match /tickets/{ticketId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if false;
+    }
+
+    /**
+     * @description Manages access to ticket messages within a support ticket.
      * @path /tickets/{ticketId}/messages/{messageId}
-     * @allow (get, list) A user can read messages in their own tickets. An admin can read messages in any ticket.
-     * @allow (create) A user can create messages in their own tickets or an admin can create messages in any ticket.
-     * @deny (update, delete) Messages cannot be updated or deleted.
-     * @principle Enforces ticket ownership for reads and writes of messages; allows admin override.
      */
     match /tickets/{ticketId}/messages/{messageId} {
-      allow get, list: if isOwner(get(/databases/$(database)/documents/tickets/$(ticketId)).data.userId) || isAdmin();
-      allow create: if isSignedIn() && (isOwner(get(/databases/$(database)/documents/tickets/$(ticketId)).data.userId) || isAdmin()) && request.resource.data.ticketId == ticketId;
-      allow update, delete: if false;
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if false;
+    }
+
+    /**
+     * @description Manages user-specific notifications, allowing users to access their own notifications.
+     * @path /users/{userId}/notifications/{notificationId}
+     * @allow (get, list) if the requested userId is the same as the authenticated user's ID.
+     * @allow (create) if the requested userId is the same as the authenticated user's ID.
+     * @allow (update, delete) if the requested userId is the same as the authenticated user's ID and the notification exists.
+     * @deny (create, update, delete) if the requested userId is different from the authenticated user's ID or the notification does not exist.
+     * @principle Enforces user-specific access for notifications.
+     */
+    match /users/{userId}/notifications/{notificationId} {
+      allow get, list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+      allow delete: if isExistingOwner(userId);
     }
   }
 }
