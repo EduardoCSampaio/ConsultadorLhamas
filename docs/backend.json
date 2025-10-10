@@ -343,6 +343,9 @@
       "properties": {
         "proposta": { "type": "string" },
         "data_digitacao": { "type": "string" },
+        "hora_digitacao": { "type": "string" },
+        "data_efetivacao": { "type": "string" },
+        "data_pgto_cliente": { "type": "string" },
         "situacao": { "type": "string" },
         "convenio": { "type": "string" },
         "cpf": { "type": "string" },
@@ -353,9 +356,12 @@
         "login_corretor": { "type": "string" },
         "nome_login": { "type": "string" },
         "corretor": { "type": "string" },
+        "codigo_indicador": { "type": "string" },
+        "codigo_master": { "type": "string" },
         "data_movimento": { "type": "string" },
         "data_movimento_ocorrencia": { "type": "string" },
         "hora_movimento_ocorrencia": { "type": "string" },
+        "observacao_ocorrencia": { "type": "string" },
         "averbador": { "type": "string" },
         "codigo_af": { "type": "string" },
         "numero_contrato": { "type": "string" },
@@ -380,9 +386,12 @@
         "conta": { "type": "string" },
         "banco_desconto": { "type": "string" },
         "agencia_desconto": { "type": "string" },
-        "conta_desconto": { "type": "string" }
+        "conta_desconto": { "type": "string" },
+        "assinatura_digital": { "type": "string" },
+        "tipo_chave_pix": { "type": "string" },
+        "chave_pix": { "type": "string" }
       },
-      "required": ["proposta", "data_digitacao", "situacao", "cpf", "cliente"]
+      "required": ["proposta", "data_digitacao", "cpf", "cliente"]
     }
   },
   "auth": {

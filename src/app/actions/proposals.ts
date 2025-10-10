@@ -18,19 +18,23 @@ const getProposalsSchema = z.object({
 export type FactaProposal = {
     proposta: string;
     data_digitacao: string;
-    situacao: string;
+    hora_digitacao: string;
+    situacao: string; // Not in new example, but was there before. Maybe it's status_proposta? Keeping for now.
     convenio: string;
     cpf: string;
     cliente: string;
-    valor_liberado: number;
-    valor_prestacao: number;
-    prazo: number;
-    login: string;
-    nome_login: string;
+    valor_liberado: number; // Not in new example, but was there before. Maybe it's valor_bruto?
+    vlrprestacao: number;
+    numeroprestacao: number;
+    login_corretor: string;
+    nome_login: string; // Not in new example
     corretor: string;
+    codigo_indicador: string;
+    codigo_master: string;
     data_movimento: string;
     data_movimento_ocorrencia: string;
     hora_movimento_ocorrencia: string;
+    observacao_ocorrencia: string;
     averbador: string;
     codigo_af: string;
     numero_contrato: string;
@@ -56,7 +60,13 @@ export type FactaProposal = {
     banco_desconto: string;
     agencia_desconto: string;
     conta_desconto: string;
+    assinatura_digital: string;
+    tipo_chave_pix: string;
+    chave_pix: string;
+    data_efetivacao: string;
+    data_pgto_cliente: string;
 };
+
 
 type GetProposalsResult = {
   success: boolean;
@@ -170,22 +180,31 @@ export async function getFactaProposalsReport(input: z.infer<typeof getProposals
     }
     
     try {
-        // We can customize which fields to export here
         const dataToExport = result.proposals.map(p => ({
             'Proposta': p.proposta,
             'Data Digitação': p.data_digitacao,
+            'Hora Digitação': p.hora_digitacao,
+            'Data Efetivação': p.data_efetivacao,
+            'Data Pgto Cliente': p.data_pgto_cliente,
             'Situação': p.status_proposta,
             'CPF': p.cpf,
             'Cliente': p.cliente,
-            'Valor Liberado': p.valor_liberado,
+            'Valor Liberado (AF)': p.valor_af,
+            'Valor Bruto': p.valor_bruto,
             'Valor Prestação': p.vlrprestacao,
             'Prazo': p.numeroprestacao,
-            'Login': p.login_corretor,
-            'Correspondente': p.nome_login,
+            'Taxa': p.taxa,
+            'Valor IOF': p.valor_iof,
+            'Valor Seguro': p.valor_seguro,
+            'Login Corretor': p.login_corretor,
             'Corretor': p.corretor,
+            'Código Indicador': p.codigo_indicador,
+            'Código Master': p.codigo_master,
+            'Vendedor': p.vendedor,
             'Data Movimento': p.data_movimento,
             'Data Mov. Ocorrência': p.data_movimento_ocorrencia,
             'Hora Mov. Ocorrência': p.hora_movimento_ocorrencia,
+            'Observação Ocorrência': p.observacao_ocorrencia,
             'Averbador': p.averbador,
             'Código AF': p.codigo_af,
             'Contrato': p.numero_contrato,
@@ -196,12 +215,6 @@ export async function getFactaProposalsReport(input: z.infer<typeof getProposals
             'Status Crivo': p.status_crivo,
             'Tabela': p.tabela,
             'Tipo Operação': p.tipo_operacao,
-            'Valor AF': p.valor_af,
-            'Valor Bruto': p.valor_bruto,
-            'Taxa': p.taxa,
-            'Valor IOF': p.valor_iof,
-            'Valor Seguro': p.valor_seguro,
-            'Vendedor': p.vendedor,
             'Matrícula': p.matricula,
             'Espécie Benefício': p.especie_beneficio,
             'Meio Pagamento': p.meio_pagamento_beneficio,
@@ -210,7 +223,10 @@ export async function getFactaProposalsReport(input: z.infer<typeof getProposals
             'Conta': p.conta,
             'Banco Desconto': p.banco_desconto,
             'Agência Desconto': p.agencia_desconto,
-            'Conta Desconto': p.conta_desconto
+            'Conta Desconto': p.conta_desconto,
+            'Assinatura Digital': p.assinatura_digital,
+            'Tipo Chave PIX': p.tipo_chave_pix,
+            'Chave PIX': p.chave_pix,
         }));
 
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
@@ -218,8 +234,10 @@ export async function getFactaProposalsReport(input: z.infer<typeof getProposals
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Propostas Facta');
 
         // Set column widths
-        const header = Object.keys(dataToExport[0]);
-        worksheet['!cols'] = header.map(h => ({ wch: Math.max(h.length, 18) }));
+        if (dataToExport.length > 0) {
+            const header = Object.keys(dataToExport[0]);
+            worksheet['!cols'] = header.map(h => ({ wch: Math.max(h.length, 18) }));
+        }
         
         const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
         const base64String = buffer.toString('base64');
