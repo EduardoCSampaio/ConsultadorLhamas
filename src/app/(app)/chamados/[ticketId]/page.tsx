@@ -91,7 +91,7 @@ export default function ChamadoDetalhePage() {
             await markTicketAsRead({ ticketId, userId: user.uid });
 
             const messageSenderIds = messages?.map(m => m.senderId) || [];
-            const allParticipantIds = Array.from(new Set([ticket.userId, user.uid, ...messageSenderIds]));
+            const allParticipantIds = Array.from(new Set([ticket.userId, ...messageSenderIds]));
             
             const profilesToFetch = allParticipantIds.filter(id => id && !participantProfiles[id]);
 
@@ -103,7 +103,7 @@ export default function ChamadoDetalhePage() {
                         if (userDoc.exists()) {
                             newProfiles[id] = userDoc.data() as UserProfile;
                         } else {
-                            newProfiles[id] = null; // Store null if user doc doesn't exist
+                            newProfiles[id] = null; 
                         }
                     } catch (e) {
                          newProfiles[id] = null;
@@ -114,7 +114,7 @@ export default function ChamadoDetalhePage() {
             }
        }
        processTicketAndMessages();
-    }, [ticket, messages, user, isAdmin, pageIsLoading, ticketId, router, toast, firestore]);
+    }, [ticket, messages, user, isAdmin, pageIsLoading, ticketId, router, toast, firestore, participantProfiles]);
 
 
     useEffect(() => {
@@ -260,7 +260,7 @@ export default function ChamadoDetalhePage() {
                                        {new Date(message.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                                    </p>
                                </div>
-                                {user?.uid === message.senderId && renderAvatar(userProfile, message.senderEmail)}
+                                {user?.uid === message.senderId && renderAvatar(senderProfile, message.senderEmail)}
                            </div>
                         );
                    })}
