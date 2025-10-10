@@ -93,9 +93,11 @@ export default function ChamadoDetalhePage() {
             // Mark as read after fetching and confirming access
             await markTicketAsRead({ ticketId, userId: user.uid });
 
-            // Fetch profiles of participants
-            const participantIds = Array.from(new Set(messages?.map(m => m.senderId)));
-            const profilesToFetch = participantIds.filter(id => !participantProfiles[id]);
+            // Fetch profiles of all participants (creator + message senders)
+            const messageSenderIds = messages?.map(m => m.senderId) || [];
+            const allParticipantIds = Array.from(new Set([ticket.userId, ...messageSenderIds]));
+            
+            const profilesToFetch = allParticipantIds.filter(id => id && !participantProfiles[id]);
 
             if (profilesToFetch.length > 0) {
                 const newProfiles: Record<string, UserProfile | null> = {};
@@ -109,7 +111,7 @@ export default function ChamadoDetalhePage() {
             }
        }
        checkAccessAndMarkRead();
-    }, [ticket, user, isAdmin, pageIsLoading, ticketId, router, toast, firestore, messages, participantProfiles]);
+    }, [ticket, user, isAdmin, pageIsLoading, ticketId, router, toast, firestore, messages]);
 
 
     useEffect(() => {
