@@ -35,7 +35,7 @@ export async function uploadImageToImgBB(base64Image: string): Promise<UploadRes
     // A API do ImgBB espera apenas a string base64, sem o prefixo data URI.
     const base64Data = base64Image.split(',').pop() || base64Image;
 
-    // A API do ImgBB funciona bem com FormData.
+    // Use FormData para enviar a imagem, que é o método mais robusto.
     const formData = new FormData();
     formData.append('image', base64Data);
 
@@ -45,7 +45,7 @@ export async function uploadImageToImgBB(base64Image: string): Promise<UploadRes
       {
         headers: {
             // O Axios definirá o 'Content-Type' como 'multipart/form-data' automaticamente
-            // ao usar um objeto FormData.
+            // ao usar um objeto FormData. Não é necessário definir manualmente.
         },
       }
     );
@@ -54,7 +54,7 @@ export async function uploadImageToImgBB(base64Image: string): Promise<UploadRes
 
     if (!parsedResponse.success || !parsedResponse.data.success) {
       console.error('ImgBB API Error:', parsedResponse.error || response.data);
-      const apiErrorMessage = parsedResponse.success ? response.data?.error?.message : 'A resposta da API de imagem foi inválida.';
+      const apiErrorMessage = parsedResponse.success ? (response.data?.error?.message || 'Erro desconhecido da API') : 'A resposta da API de imagem foi inválida.';
       return { success: false, message: `Erro da API ImgBB: ${apiErrorMessage}` };
     }
 
