@@ -1,4 +1,3 @@
-
 'use server';
 
 import { z } from 'zod';
@@ -242,7 +241,14 @@ export async function getFactaProposalsReport(input: z.infer<typeof getProposals
         const fileContent = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64String}`;
         
         const now = new Date();
-        const horaAgora = `${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
+        const horaAgora = new Intl.DateTimeFormat('en-GB', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            timeZone: 'America/Sao_Paulo',
+            hour12: false
+        }).format(now).replace(/:/g, '');
+
         const dataIniFormatted = dateFrom.replace(/\//g, '');
         const dataFimFormatted = dateTo.replace(/\//g, '');
         
