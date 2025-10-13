@@ -205,7 +205,7 @@ export async function getTeamAndManager(input: z.infer<typeof getTeamAndManagerS
 
     } catch (error) {
         const message = error instanceof Error ? error.message : "Ocorreu um erro ao buscar os dados do time.";
-        console.error(`[getTeamAndManager] Error:`, message);
+        console.error(`[getTeamAndManager] Error:`, error);
         return { success: false, error: message };
     }
 }
