@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { firestore } from '@/firebase/server-init';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logActivity } from './users';
 import type { UserPermissions, UserProfile } from './users';
 
@@ -184,21 +184,38 @@ export async function getTeamAndManager(input: z.infer<typeof getTeamAndManagerS
     try {
         const teamDoc = await firestore.collection('teams').doc(teamId).get();
         const teamData = teamDoc.data();
-
+        
         if (!teamData) {
             return { success: false, error: "Time não encontrado." };
         }
-        
+
         const managerDoc = await firestore.collection('users').doc(teamData.managerId).get();
         const managerData = managerDoc.data();
 
         if (!managerData) {
             return { success: false, error: "Gerente do time não encontrado." };
         }
+        
+        // Convert Timestamp to ISO string for serialization
+        const createdAt = teamData.createdAt;
+        let serializableCreatedAt = new Date().toISOString();
+        if (createdAt instanceof Timestamp) {
+            serializableCreatedAt = createdAt.toDate().toISOString();
+        } else if (typeof createdAt === 'string') {
+            serializableCreatedAt = createdAt; // Assuming it's already an ISO string
+        }
+
+        const serializableTeam: Team = {
+            id: teamDoc.id,
+            name: teamData.name,
+            managerId: teamData.managerId,
+            sectors: teamData.sectors,
+            createdAt: serializableCreatedAt,
+        };
 
         return {
             success: true,
-            team: { ...(teamData as Team), id: teamDoc.id },
+            team: serializableTeam,
             manager: {
                 email: managerData.email,
                 name: managerData.email.split('@')[0], // Simple name extraction
@@ -207,7 +224,7 @@ export async function getTeamAndManager(input: z.infer<typeof getTeamAndManagerS
 
     } catch (error) {
         const message = error instanceof Error ? error.message : "Ocorreu um erro ao buscar os dados do time.";
-        console.error(`[getTeamAndManager] Error:`, message);
+        console.error(`[getTeamAndManager] Error:`, error);
         return { success: false, error: message };
     }
 }
