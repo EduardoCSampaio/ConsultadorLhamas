@@ -25,6 +25,9 @@ export default function SignUpPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPendingMessage, setShowPendingMessage] = useState(false);
+  const [isInvitationValid, setIsInvitationValid] = useState<boolean | null>(null);
+  const [teamName, setTeamName] = useState<string>('');
+
 
   const auth = useAuth();
   const firestore = useFirestore();
@@ -38,11 +41,36 @@ export default function SignUpPage() {
     if (!isUserLoading && user) {
       router.push('/dashboard');
     }
-    if (!teamId) {
-        // Redirect to main login page if there's no invitation code
-        router.push('/');
+  }, [user, isUserLoading, router]);
+
+  useEffect(() => {
+    async function validateInvitation() {
+        if (!teamId) {
+            router.push('/');
+            return;
+        }
+        if (!firestore) {
+            // Firestore might not be ready yet, wait.
+            return;
+        }
+        
+        try {
+            const teamRef = doc(firestore, "teams", teamId);
+            const teamSnap = await getDoc(teamRef);
+            if (teamSnap.exists()) {
+                setIsInvitationValid(true);
+                setTeamName(teamSnap.data()?.name || 'equipe');
+            } else {
+                setIsInvitationValid(false);
+                setError("O link de convite é inválido ou a equipe não existe mais.");
+            }
+        } catch (e) {
+             setIsInvitationValid(false);
+             setError("Ocorreu um erro ao validar o convite.");
+        }
     }
-  }, [user, isUserLoading, router, teamId]);
+    validateInvitation();
+  }, [teamId, firestore, router]);
 
   const handleAuth = async (e: FormEvent) => {
     e.preventDefault();
@@ -50,39 +78,25 @@ export default function SignUpPage() {
     setError(null);
     setShowPendingMessage(false);
 
-    if (!auth || !firestore || !teamId) {
+    if (!auth || !firestore || !teamId || !isInvitationValid) {
       setError("Link de convite inválido ou serviços de autenticação indisponíveis.");
       setIsLoading(false);
       return;
     }
     
-     // Check if the team exists before creating the user
-    const teamRef = doc(firestore, "teams", teamId);
-    const teamSnap = await getDoc(teamRef);
-
-    if (!teamSnap.exists()) {
-        setError("O time para o qual você foi convidado não existe mais.");
-        setIsLoading(false);
-        return;
-    }
-    const teamData = teamSnap.data() as Team;
-
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const newUser = userCredential.user;
 
-        // Find the default sector for the team (if any), or assign a default one
-        // For now, let's assume there is no default sector and leave it blank.
-        // A manager would have to assign it.
         const userProfile = {
           uid: newUser.uid,
           email: newUser.email,
           role: 'user',
-          status: 'pending', // Users joining via link must be approved
+          status: 'pending',
           createdAt: serverTimestamp(),
           teamId: teamId,
-          sector: '', // Initially no sector assigned
-          permissions: { // Users from invitation link start with no permissions
+          sector: '',
+          permissions: {
               canViewFGTS: false,
               canViewCLT: false,
               canViewINSS: false,
@@ -124,7 +138,7 @@ export default function SignUpPage() {
     }
   };
 
-  if (isUserLoading || user || !teamId) {
+  if (isUserLoading || user || isInvitationValid === null) {
     return <div className="flex min-h-screen items-center justify-center bg-background"><Logo /></div>;
   }
 
@@ -160,7 +174,7 @@ export default function SignUpPage() {
                   Criar Conta para Equipe
                 </CardTitle>
                 <CardDescription>
-                  Você foi convidado para uma equipe. Preencha seus dados para se registrar.
+                  Você foi convidado para a equipe <strong>{teamName}</strong>. Preencha seus dados para se registrar.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -180,7 +194,7 @@ export default function SignUpPage() {
                     required 
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    disabled={isLoading}
+                    disabled={isLoading || !isInvitationValid}
                     autoComplete="email"
                   />
                 </div>
@@ -192,13 +206,13 @@ export default function SignUpPage() {
                     required 
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    disabled={isLoading}
+                    disabled={isLoading || !isInvitationValid}
                     autoComplete="new-password"
                   />
                 </div>
               </CardContent>
               <CardFooter className="flex flex-col gap-4">
-                <Button className="w-full" type="submit" disabled={isLoading}>
+                <Button className="w-full" type="submit" disabled={isLoading || !isInvitationValid}>
                   {isLoading ? "Criando conta..." : "Criar conta e solicitar acesso"}
                 </Button>
                  <div className="text-center text-sm text-muted-foreground">

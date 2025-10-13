@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
 import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
-import { getAuth } from 'firebase-admin/auth';
+import { getAuth, UserRecord } from 'firebase-admin/auth';
 import * as XLSX from 'xlsx';
 import { createNotificationsForAdmins } from './notifications';
 import { createTeam } from './teams';
@@ -244,80 +244,78 @@ export async function getUserActivityLogs(input: z.infer<typeof getUserActivityS
 }
 
 
-// Nova Server Action para buscar todos os usuários
+const combineUserData = async (userRecord: UserRecord, firestore: FirebaseFirestore.Firestore): Promise<UserProfile | null> => {
+    // Only process users that have an email
+    if (!userRecord.email) {
+        return null;
+    }
+
+    const userDocRef = firestore.collection('users').doc(userRecord.uid);
+    const userDoc = await userDoc.get();
+    let profileData = userDoc.data();
+
+    // If a user exists in Auth but not in Firestore, create a profile for them
+    if (!profileData) {
+        console.log(`User ${userRecord.email} found in Auth but not in Firestore. Creating profile...`);
+        const isSuperAdmin = userRecord.email === 'admin@lhamascred.com.br';
+        const newProfile = {
+            uid: userRecord.uid,
+            email: userRecord.email,
+            role: isSuperAdmin ? 'super_admin' : 'user',
+            status: isSuperAdmin ? 'active' : 'pending',
+            createdAt: FieldValue.serverTimestamp(),
+            permissions: { 
+                canViewFGTS: isSuperAdmin, 
+                canViewCLT: isSuperAdmin, 
+                canViewINSS: isSuperAdmin 
+            }
+        };
+        await userDocRef.set(newProfile);
+        profileData = newProfile;
+    }
+    
+    const createdAt = profileData.createdAt;
+    let serializableCreatedAt = new Date().toISOString();
+    if (createdAt instanceof Timestamp) {
+        serializableCreatedAt = createdAt.toDate().toISOString();
+    } else if (typeof createdAt === 'string') {
+        serializableCreatedAt = createdAt;
+    }
+
+    return {
+        uid: userRecord.uid,
+        email: userRecord.email,
+        photoURL: userRecord.photoURL || profileData.photoURL,
+        role: profileData.role || 'user',
+        status: profileData.status || 'pending',
+        createdAt: serializableCreatedAt,
+        teamId: profileData.teamId,
+        sector: profileData.sector,
+        v8_username: profileData.v8_username,
+        v8_password: profileData.v8_password,
+        v8_audience: profileData.v8_audience,
+        v8_client_id: profileData.v8_client_id,
+        facta_username: profileData.facta_username,
+        facta_password: profileData.facta_password,
+        c6_username: profileData.c6_username,
+        c6_password: profileData.c6_password,
+        permissions: profileData.permissions || {},
+    } as UserProfile;
+};
+
+
 export async function getUsers(): Promise<{users: UserProfile[] | null, error?: string}> {
     try {
         initializeFirebaseAdmin();
         const auth = getAuth();
         const firestore = getFirestore();
         
-        // 1. Get all users from Firebase Auth
         const listUsersResult = await auth.listUsers();
         const authUsers = listUsersResult.users;
 
-        // 2. Get all user profiles from Firestore
-        const usersSnapshot = await firestore.collection('users').get();
-        const firestoreProfiles = new Map(usersSnapshot.docs.map(doc => [doc.id, doc.data()]));
+        const userPromises = authUsers.map(userRecord => combineUserData(userRecord, firestore));
+        const users = await Promise.all(userPromises);
 
-        // 3. Merge Auth users with Firestore profiles
-        const users = await Promise.all(authUsers.map(async (userRecord) => {
-            let profileData = firestoreProfiles.get(userRecord.uid);
-            
-            // Only process users that have an email
-            if (!userRecord.email) {
-                return null;
-            }
-
-            // If a user exists in Auth but not in Firestore, create a profile for them
-            if (!profileData) {
-                console.log(`User ${userRecord.email} found in Auth but not in Firestore. Creating profile...`);
-                const isSuperAdmin = userRecord.email === 'admin@lhamascred.com.br';
-                const newProfile = {
-                    uid: userRecord.uid,
-                    email: userRecord.email,
-                    role: isSuperAdmin ? 'super_admin' : 'user',
-                    status: isSuperAdmin ? 'active' : 'pending',
-                    createdAt: FieldValue.serverTimestamp(),
-                    permissions: { 
-                        canViewFGTS: isSuperAdmin, 
-                        canViewCLT: isSuperAdmin, 
-                        canViewINSS: isSuperAdmin 
-                    }
-                };
-                await firestore.collection('users').doc(userRecord.uid).set(newProfile);
-                profileData = newProfile;
-            }
-            
-            const createdAt = profileData.createdAt;
-            let serializableCreatedAt = new Date().toISOString();
-            if (createdAt instanceof Timestamp) {
-                serializableCreatedAt = createdAt.toDate().toISOString();
-            } else if (typeof createdAt === 'string') {
-                serializableCreatedAt = createdAt;
-            }
-
-            return {
-                uid: userRecord.uid,
-                email: userRecord.email,
-                photoURL: userRecord.photoURL || profileData.photoURL,
-                role: profileData.role || 'user',
-                status: profileData.status || 'pending',
-                createdAt: serializableCreatedAt,
-                teamId: profileData.teamId,
-                sector: profileData.sector,
-                v8_username: profileData.v8_username,
-                v8_password: profileData.v8_password,
-                v8_audience: profileData.v8_audience,
-                v8_client_id: profileData.v8_client_id,
-                facta_username: profileData.facta_username,
-                facta_password: profileData.facta_password,
-                c6_username: profileData.c6_username,
-                c6_password: profileData.c6_password,
-                permissions: profileData.permissions || {},
-            } as UserProfile;
-        }));
-
-        // Filter out null users (those without email) and sort
         const validUsers = users.filter((user): user is UserProfile => user !== null);
         validUsers.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 

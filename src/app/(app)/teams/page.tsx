@@ -92,24 +92,22 @@ export default function MyTeamPage() {
     const { data: managerProfile, isLoading: isManagerProfileLoading } = useDoc<UserProfile>(managerProfileRef);
     const teamId = managerProfile?.teamId;
 
-    const fetchTeamData = useCallback(async () => {
-        if (!firestore || !teamId) {
-            if(!isManagerProfileLoading) setIsLoading(false);
-            return;
-        };
+    const fetchTeamData = useCallback(async (id: string) => {
+        if (!firestore) return;
         
         setIsLoading(true);
         try {
             // Fetch team document
-            const teamDoc = await getDoc(doc(firestore, 'teams', teamId));
+            const teamDoc = await getDoc(doc(firestore, 'teams', id));
             if (teamDoc.exists()) {
                 setTeam(teamDoc.data() as Team);
             } else {
                  toast({ variant: 'destructive', title: 'Erro ao buscar time', description: 'Time não encontrado.' });
+                 setTeam(null);
             }
 
             // Fetch team members
-            const membersQuery = query(collection(firestore, 'users'), where('teamId', '==', teamId));
+            const membersQuery = query(collection(firestore, 'users'), where('teamId', '==', id));
             const querySnapshot = await getDocs(membersQuery);
             const members = querySnapshot.docs.map(doc => doc.data() as UserProfile);
             setTeamMembers(members.filter(member => member.uid !== manager?.uid));
@@ -123,11 +121,15 @@ export default function MyTeamPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [firestore, teamId, manager?.uid, toast, isManagerProfileLoading]);
+    }, [firestore, manager?.uid, toast]);
 
     useEffect(() => {
-        fetchTeamData();
-    }, [fetchTeamData]);
+        if (teamId) {
+            fetchTeamData(teamId);
+        } else if (!isManagerProfileLoading) {
+            setIsLoading(false);
+        }
+    }, [teamId, isManagerProfileLoading, fetchTeamData]);
 
     const handleStatusChange = async (uid: string, status: UserStatus) => {
         setUpdatingId(uid);
@@ -136,7 +138,7 @@ export default function MyTeamPage() {
             toast({
                 title: "Status do usuário atualizado!",
             });
-            await fetchTeamData();
+            if (teamId) await fetchTeamData(teamId);
         } else {
             toast({
                 variant: "destructive",
@@ -197,7 +199,7 @@ export default function MyTeamPage() {
         if (result.success) {
             toast({ title: 'Setores atualizados com sucesso!' });
             setIsSectorModalOpen(false);
-            await fetchTeamData(); // Refresh team data
+            if (teamId) await fetchTeamData(teamId);
         } else {
             toast({ variant: 'destructive', title: 'Erro ao salvar setores', description: result.message });
         }
@@ -220,7 +222,7 @@ export default function MyTeamPage() {
         const result = await updateTeamSectors({ teamId, sectors: newSectors });
         if (result.success) {
             toast({ title: 'Setor excluído com sucesso!' });
-            await fetchTeamData();
+            if (teamId) await fetchTeamData(teamId);
         } else {
              toast({ variant: 'destructive', title: 'Erro ao excluir setor', description: result.message });
         }
@@ -445,23 +447,28 @@ export default function MyTeamPage() {
                             <div>
                                 <h3 className="text-base font-semibold mb-4">Permissões de Acesso</h3>
                                 <div className="space-y-3">
-                                    {(Object.keys(permissionLabels) as Array<keyof UserPermissions>).map((key) => (
-                                        <div key={key} className="flex items-center space-x-3">
-                                            <Checkbox
-                                                id={`perm-${key}`}
-                                                checked={!!currentSector.permissions[key]}
-                                                onCheckedChange={(checked) => {
-                                                    setCurrentSector(prev => prev ? {
-                                                        ...prev,
-                                                        permissions: { ...prev.permissions, [key]: !!checked }
-                                                    } : null);
-                                                }}
-                                            />
-                                            <Label htmlFor={`perm-${key}`} className="font-normal text-sm">
-                                                {permissionLabels[key]}
-                                            </Label>
-                                        </div>
-                                    ))}
+                                    {(Object.keys(permissionLabels) as Array<keyof UserPermissions>).map((key) => {
+                                        const managerHasPermission = managerProfile?.permissions?.[key] ?? false;
+                                        return (
+                                            <div key={key} className="flex items-center space-x-3">
+                                                <Checkbox
+                                                    id={`perm-${key}`}
+                                                    checked={!!currentSector.permissions[key]}
+                                                    onCheckedChange={(checked) => {
+                                                        setCurrentSector(prev => prev ? {
+                                                            ...prev,
+                                                            permissions: { ...prev.permissions, [key]: !!checked }
+                                                        } : null);
+                                                    }}
+                                                    disabled={!managerHasPermission}
+                                                />
+                                                <Label htmlFor={`perm-${key}`} className={`font-normal text-sm ${!managerHasPermission && 'text-muted-foreground'}`}>
+                                                    {permissionLabels[key]}
+                                                    {!managerHasPermission && <span className='text-xs'> (Você não possui esta permissão)</span>}
+                                                </Label>
+                                            </div>
+                                        )
+                                    })}
                                 </div>
                             </div>
                          </div>
@@ -508,5 +515,3 @@ export default function MyTeamPage() {
         </>
     );
 }
-
-    
