@@ -244,7 +244,10 @@ export async function getUserActivityLogs(input: z.infer<typeof getUserActivityS
 }
 
 
-const combineUserData = async (userRecord: UserRecord, firestore: FirebaseFirestore.Firestore): Promise<UserProfile | null> => {
+const combineUserData = async (userRecord: UserRecord): Promise<UserProfile | null> => {
+    const app = initializeFirebaseAdmin();
+    const firestore = getFirestore(app);
+
     // Only process users that have an email
     if (!userRecord.email) {
         return null;
@@ -308,12 +311,11 @@ export async function getUsers(): Promise<{users: UserProfile[] | null, error?: 
     try {
         const app = initializeFirebaseAdmin();
         const auth = getAuth(app);
-        const firestore = getFirestore(app);
         
         const listUsersResult = await auth.listUsers();
         const authUsers = listUsersResult.users;
 
-        const userPromises = authUsers.map(userRecord => combineUserData(userRecord, firestore));
+        const userPromises = authUsers.map(userRecord => combineUserData(userRecord));
         
         const usersWithNulls = await Promise.all(userPromises);
         const validUsers = usersWithNulls.filter((user): user is UserProfile => user !== null);
@@ -617,3 +619,5 @@ export async function exportUsersToExcel(input: z.infer<typeof exportUsersSchema
         return { status: 'error', message };
     }
 }
+
+    
