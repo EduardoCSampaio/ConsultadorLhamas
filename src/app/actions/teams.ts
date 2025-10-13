@@ -183,20 +183,22 @@ export async function getTeamAndManager(input: z.infer<typeof getTeamAndManagerS
 
     try {
         const teamDoc = await firestore.collection('teams').doc(teamId).get();
-        if (!teamDoc.exists()) {
+        const teamData = teamDoc.data();
+
+        if (!teamData) {
             return { success: false, error: "Time não encontrado." };
         }
-        const teamData = teamDoc.data() as Team;
-
+        
         const managerDoc = await firestore.collection('users').doc(teamData.managerId).get();
-        if (!managerDoc.exists()) {
+        const managerData = managerDoc.data();
+
+        if (!managerData) {
             return { success: false, error: "Gerente do time não encontrado." };
         }
-        const managerData = managerDoc.data() as UserProfile;
 
         return {
             success: true,
-            team: { ...teamData, id: teamDoc.id },
+            team: { ...(teamData as Team), id: teamDoc.id },
             manager: {
                 email: managerData.email,
                 name: managerData.email.split('@')[0], // Simple name extraction
@@ -205,7 +207,7 @@ export async function getTeamAndManager(input: z.infer<typeof getTeamAndManagerS
 
     } catch (error) {
         const message = error instanceof Error ? error.message : "Ocorreu um erro ao buscar os dados do time.";
-        console.error(`[getTeamAndManager] Error:`, error);
+        console.error(`[getTeamAndManager] Error:`, message);
         return { success: false, error: message };
     }
 }
