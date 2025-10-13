@@ -169,7 +169,7 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
 
     } catch (error) {
         const message = error instanceof Error ? error.message : "Ocorreu um erro ao buscar os membros da equipe.";
-        console.error(`[getTeamMembers] Error:`, message);
+        console.error(`[getTeamMembers] Error:`, error);
         return { success: false, error: message };
     }
 }
