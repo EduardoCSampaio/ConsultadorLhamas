@@ -67,6 +67,31 @@ const getStatusText = (status: UserStatus) => {
     }
 };
 
+function SuperAdminTeamView() {
+    return (
+        <>
+            <PageHeader
+                title="Gerenciamento de Equipes"
+                description="Visualize e gerencie todas as equipes da plataforma."
+            />
+            <Card>
+                <CardHeader>
+                    <CardTitle>Visão Geral de Equipes</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex flex-col items-center justify-center gap-4 text-center h-60 border-2 border-dashed rounded-lg">
+                        <Users className="h-12 w-12 text-muted-foreground" />
+                        <h3 className="text-2xl font-bold tracking-tight">Funcionalidade em Breve</h3>
+                        <div className="text-sm text-muted-foreground">
+                            A capacidade de visualizar e gerenciar todas as equipes como Super Admin está em desenvolvimento.
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+        </>
+    )
+}
+
 export default function MyTeamPage() {
     const { user: manager, isUserLoading: isManagerAuthLoading } = useUser();
     const firestore = useFirestore();
@@ -93,7 +118,7 @@ export default function MyTeamPage() {
     const teamId = managerProfile?.teamId;
 
     const fetchTeamData = useCallback(async (id: string) => {
-        if (!firestore) return;
+        if (!firestore || !manager) return;
         
         setIsLoading(true);
         try {
@@ -110,26 +135,35 @@ export default function MyTeamPage() {
             const membersQuery = query(collection(firestore, 'users'), where('teamId', '==', id));
             const querySnapshot = await getDocs(membersQuery);
             const members = querySnapshot.docs.map(doc => doc.data() as UserProfile);
-            setTeamMembers(members.filter(member => member.uid !== manager?.uid));
+            setTeamMembers(members.filter(member => member.uid !== manager.uid));
         } catch (error) {
             console.error("Error fetching team data:", error);
-            if (error instanceof Error && error.message.includes('permission-denied')) {
+            const message = error instanceof Error ? error.message : 'Ocorreu um erro inesperado.'
+             if (message.includes('permission-denied')) {
                  toast({ variant: 'destructive', title: 'Erro de Permissão', description: 'Você não tem permissão para ver os membros da equipe.' });
             } else {
-                 toast({ variant: 'destructive', title: 'Erro ao buscar dados da equipe', description: 'Ocorreu um erro inesperado.' });
+                 toast({ variant: 'destructive', title: 'Erro ao buscar dados da equipe', description: message });
             }
         } finally {
             setIsLoading(false);
         }
-    }, [firestore, manager?.uid, toast]);
+    }, [firestore, manager, toast]);
 
     useEffect(() => {
+        if (isManagerProfileLoading) return;
+
+        // If the user is an admin, they don't have a team, so we stop loading.
+        if (managerProfile?.role === 'super_admin') {
+            setIsLoading(false);
+            return;
+        }
+
         if (teamId) {
             fetchTeamData(teamId);
-        } else if (!isManagerProfileLoading) {
+        } else {
             setIsLoading(false);
         }
-    }, [teamId, isManagerProfileLoading, fetchTeamData]);
+    }, [teamId, managerProfile, isManagerProfileLoading, fetchTeamData]);
 
     const handleStatusChange = async (uid: string, status: UserStatus) => {
         setUpdatingId(uid);
@@ -261,6 +295,11 @@ export default function MyTeamPage() {
 
         return null;
     };
+
+
+    if (managerProfile?.role === 'super_admin' && !finalLoadingState) {
+        return <SuperAdminTeamView />;
+    }
 
 
     return (
