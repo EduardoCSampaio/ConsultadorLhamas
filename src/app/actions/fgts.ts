@@ -1,8 +1,9 @@
+
 'use server';
 
 import { z } from 'zod';
-import { initializeFirebaseAdmin } from '@/firebase/server-init';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { firestore } from '@/firebase/server-init';
+import { FieldValue } from 'firebase-admin/firestore';
 import type { ApiCredentials } from './users';
 import { getFactaAuthToken, consultarSaldoFgtsFacta } from './facta';
 import { logActivity } from './users';
@@ -92,8 +93,6 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   const { documentNumber, userId, userEmail, provider, batchId } = validation.data;
   let authToken = validation.data.token;
   
-  initializeFirebaseAdmin();
-  const firestore = getFirestore();
 
   if (!authToken) {
       let userCredentials: ApiCredentials;
@@ -207,8 +206,6 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
 }
 
 async function waitForV8Response(cpf: string, timeout = 7000): Promise<{ balance: number, v8Provider?: 'qi' | 'cartos' | 'bms' } | null> {
-    initializeFirebaseAdmin();
-    const firestore = getFirestore();
     const docRef = firestore.collection('webhookResponses').doc(cpf);
 
     return new Promise((resolve) => {
@@ -246,8 +243,6 @@ export async function consultarSaldoManual(input: z.infer<typeof manualActionSch
 
     const { cpf, userId, providers, v8Provider } = validation.data;
 
-    initializeFirebaseAdmin();
-    const firestore = getFirestore();
     const userDoc = await firestore.collection('users').doc(userId).get();
     if (!userDoc.exists) {
         return { balances: [], error: 'Usuário não encontrado.' };

@@ -2,8 +2,8 @@
 'use server';
 
 import { z } from 'zod';
-import { initializeFirebaseAdmin } from '@/firebase/server-init';
-import { getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { firestore } from '@/firebase/server-init';
+import { Timestamp } from 'firebase-admin/firestore';
 import { ActivityLog, logActivity } from './users';
 import * as XLSX from 'xlsx';
 
@@ -46,8 +46,6 @@ export async function exportHistoryToExcel(input: z.infer<typeof exportHistorySc
     });
 
     try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
         let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> = firestore.collection('activityLogs');
 
         const { email, provider, dateFrom, dateTo } = filters;

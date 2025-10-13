@@ -1,8 +1,9 @@
+
 'use server';
 
 import { z } from 'zod';
-import { initializeFirebaseAdmin } from '@/firebase/server-init';
-import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { firestore } from '@/firebase/server-init';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { createNotification, createNotificationsForAdmins } from './notifications';
 
 const ticketStatusEnum = z.enum(["aberto", "em_atendimento", "em_desenvolvimento", "testando", "liberado", "resolvido"]);
@@ -100,8 +101,6 @@ function toISODate(timestamp: Timestamp | string | Date | undefined): string {
 }
 
 async function getNextTicketNumber(): Promise<string> {
-    initializeFirebaseAdmin();
-    const firestore = getFirestore();
     const counterRef = firestore.collection('internal').doc('ticketCounter');
     
     let newNumber = 1;
@@ -126,8 +125,6 @@ export async function createTicket(input: z.infer<typeof createTicketSchema>): P
     }
     
     try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
         const ticketRef = firestore.collection('tickets').doc();
         const messageRef = ticketRef.collection('messages').doc();
         const now = FieldValue.serverTimestamp();
@@ -188,8 +185,6 @@ export async function getTicketsForUser(input: z.infer<typeof getTicketsSchema>)
     }
 
     try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
         const userRef = firestore.collection('users').doc(input.userId);
         const userDoc = await userRef.get();
         
@@ -246,8 +241,6 @@ export async function getTicketById(input: z.infer<typeof getTicketByIdSchema>):
         return { success: false, error: "ID de chamado inválido." };
     }
     try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
         const ticketDoc = await firestore.collection('tickets').doc(input.ticketId).get();
 
         if (!ticketDoc.exists) {
@@ -286,8 +279,6 @@ export async function addMessageToTicket(input: z.infer<typeof addMessageSchema>
     const { ticketId, userId, userEmail, isAdmin, content } = validation.data;
 
     try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
         const ticketRef = firestore.collection('tickets').doc(ticketId);
         const messageRef = ticketRef.collection('messages').doc();
 
@@ -357,8 +348,6 @@ export async function markTicketAsRead(input: z.infer<typeof markAsReadSchema>):
     const { ticketId, userId } = input;
 
     try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
         const ticketRef = firestore.collection('tickets').doc(ticketId);
         const userRef = firestore.collection('users').doc(userId);
 
@@ -403,8 +392,6 @@ export async function updateTicketStatus(input: z.infer<typeof updateStatusSchem
     const { ticketId, status } = validation.data;
 
     try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
         const ticketRef = firestore.collection('tickets').doc(ticketId);
 
         await ticketRef.update({

@@ -1,9 +1,9 @@
+
 'use server';
 
 import { z } from 'zod';
 import { getFactaAuthToken } from './facta';
-import { getFirestore } from 'firebase-admin/firestore';
-import { initializeFirebaseAdmin } from '@/firebase/server-init';
+import { firestore } from '@/firebase/server-init';
 import type { ApiCredentials } from './users';
 import { logActivity } from './users';
 import * as XLSX from 'xlsx';
@@ -86,8 +86,6 @@ async function getFactaUserCredentials(userId: string): Promise<{ credentials: A
         return { credentials: null, error: 'ID do usuário não fornecido.' };
     }
     try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
         const userDoc = await firestore.collection('users').doc(userId).get();
         if (!userDoc.exists) {
             return { credentials: null, error: 'Usuário não encontrado.' };

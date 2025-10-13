@@ -1,10 +1,11 @@
+
 'use server';
 
 import { z } from 'zod';
 import { consultarSaldoFgts as consultarSaldoV8, getAuthToken as getV8AuthToken } from './fgts';
 import { consultarSaldoFgtsFacta, getFactaAuthToken } from './facta';
 import * as XLSX from 'xlsx';
-import { initializeFirebaseAdmin } from '@/firebase/server-init';
+import { firestore } from '@/firebase/server-init';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { type ApiCredentials, logActivity } from './users';
 import { createNotification } from './notifications';
@@ -106,8 +107,6 @@ export async function deleteBatch(input: z.infer<typeof deleteBatchSchema>): Pro
         return { status: 'error', message: 'ID do lote inválido.' };
     }
     try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
         await firestore.collection('batches').doc(validation.data.batchId).delete();
         return { status: 'success', message: 'Lote excluído com sucesso.' };
     } catch (error) {
@@ -120,9 +119,6 @@ export async function deleteBatch(input: z.infer<typeof deleteBatchSchema>): Pro
 
 export async function getBatches(input?: { userId: string }): Promise<{ status: 'success' | 'error'; batches?: BatchJob[]; message?: string, error?: string }> {
     try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
-        
         let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> = firestore.collection('batches');
 
         // Apply filter if a specific user's batches are requested
@@ -169,8 +165,6 @@ export async function getBatches(input?: { userId: string }): Promise<{ status: 
 
 async function processFactaBatchInBackground(batchId: string) {
     console.log(`[Batch ${batchId}] Starting/Continuing FACTA background processing...`);
-    initializeFirebaseAdmin();
-    const firestore = getFirestore();
     const batchRef = firestore.collection('batches').doc(batchId);
     const CHUNK_SIZE = 25; 
 
@@ -289,9 +283,6 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
 
   const { cpfs, provider, userId, userEmail, fileName, v8Provider } = validation.data;
   
-  initializeFirebaseAdmin();
-  const firestore = getFirestore();
-  
   const displayProvider = provider === 'v8' ? 'V8DIGITAL' : 'facta';
   
   const batchId = `batch-${displayProvider}-${v8Provider || ''}-${Date.now()}-${userId.substring(0, 5)}`;
@@ -364,9 +355,6 @@ export async function processarLoteClt(input: z.infer<typeof processCltActionSch
 
   const { cpfs, provider, userId, userEmail, fileName } = validation.data;
   
-  initializeFirebaseAdmin();
-  const firestore = getFirestore();
-  
   const displayProvider = provider === 'v8' ? 'V8' : provider.toUpperCase();
   
   const batchId = `batch-clt-${displayProvider}-${Date.now()}-${userId.substring(0, 5)}`;
@@ -427,11 +415,9 @@ export async function processarLoteClt(input: z.infer<typeof processCltActionSch
 async function processV8BatchInBackground(batchId: string) {
     console.log(`[Batch ${batchId}] Starting V8 background processing...`);
     let batchData: BatchJob;
-    const firestore = getFirestore();
     const batchRef = firestore.collection('batches').doc(batchId);
 
     try {
-        initializeFirebaseAdmin();
         const batchDoc = await batchRef.get();
         if (!batchDoc.exists) throw new Error(`Lote ${batchId} não encontrado.`);
 
@@ -489,14 +475,12 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
     }
 
     const { batchId } = validation.data;
-    initializeFirebaseAdmin();
-    const firestore = getFirestore();
 
     try {
         const originalBatchRef = firestore.collection('batches').doc(batchId);
         const originalBatchDoc = await originalBatchRef.get();
 
-        if (!originalBatchDoc.exists) {
+        if (!originalBatchDoc.exists()) {
             return { status: 'error', message: 'Lote original não encontrado.' };
         }
 
@@ -587,9 +571,6 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
     });
 
 
-    initializeFirebaseAdmin();
-    const firestore = getFirestore();
-    
     const results: any[] = [];
 
     for (const cpf of cpfs) {

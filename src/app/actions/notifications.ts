@@ -1,8 +1,9 @@
+
 'use server';
 
 import { z } from 'zod';
-import { initializeFirebaseAdmin } from '@/firebase/server-init';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { firestore } from '@/firebase/server-init';
+import { FieldValue } from 'firebase-admin/firestore';
 
 const createNotificationSchema = z.object({
   userId: z.string(),
@@ -19,7 +20,6 @@ export async function createNotification(input: z.infer<typeof createNotificatio
     }
     
     try {
-        const firestore = getFirestore();
         const notificationRef = firestore.collection('users').doc(input.userId).collection('notifications').doc();
         
         await notificationRef.set({
@@ -35,7 +35,6 @@ export async function createNotification(input: z.infer<typeof createNotificatio
 
 export async function createNotificationsForAdmins(input: Omit<z.infer<typeof createNotificationSchema>, 'userId'>) {
     try {
-        const firestore = getFirestore();
         const adminsSnapshot = await firestore.collection('users').where('role', '==', 'admin').get();
         
         if (adminsSnapshot.empty) {

@@ -1,7 +1,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { initializeFirebaseAdmin } from '@/firebase/server-init';
+import { firestore } from '@/firebase/server-init';
+import { FieldValue } from 'firebase-admin/firestore';
 import { createNotification } from '@/app/actions/notifications';
 
 /**
@@ -10,9 +10,6 @@ import { createNotification } from '@/app/actions/notifications';
  * bypassing client-side security rules and not interfering with user auth sessions.
  */
 export async function POST(request: NextRequest) {
-  initializeFirebaseAdmin();
-  const db = getFirestore();
-
   try {
     const payload = await request.json();
     console.log("--- Balance Webhook Received (Admin SDK) ---");
@@ -29,7 +26,7 @@ export async function POST(request: NextRequest) {
       }, { status: 200 });
     }
     
-    const docRef = db.collection('webhookResponses').doc(docId.toString());
+    const docRef = firestore.collection('webhookResponses').doc(docId.toString());
 
     // Before writing, let's see if we can find a batchId from a pre-existing doc.
     let batchId: string | undefined = payload.batchId;
@@ -78,9 +75,9 @@ export async function POST(request: NextRequest) {
     console.log(`Payload stored in Firestore with ID: ${docId}. Status: ${status}. Provider: V8DIGITAL (${v8Partner})`);
     
     if (batchId) {
-        const batchRef = db.collection('batches').doc(batchId);
+        const batchRef = firestore.collection('batches').doc(batchId);
         try {
-            await db.runTransaction(async (transaction) => {
+            await firestore.runTransaction(async (transaction) => {
                 const batchDoc = await transaction.get(batchRef);
                 if (!batchDoc.exists) {
                     console.warn(`[Webhook Transaction] Batch document ${batchId} not found.`);
