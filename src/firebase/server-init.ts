@@ -1,54 +1,44 @@
 
 import { initializeApp, getApps, App, cert, ServiceAccount } from 'firebase-admin/app';
-
-// This will hold the initialized app instance.
-let adminApp: App | null = null;
+import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
 
 /**
  * Parses the service account credentials from a single environment variable.
- * Firebase Studio and Vercel provide the credentials in a JSON string.
  */
 const getServiceAccount = (): ServiceAccount => {
     const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_CREDENTIALS;
-
     if (!serviceAccountJson) {
-        throw new Error('Firebase Admin SDK service account credentials are not fully set in environment variables.');
+        throw new Error('FIREBASE_SERVICE_ACCOUNT_CREDENTIALS environment variable is not set.');
     }
-    
     try {
-        // Parse the JSON string from the environment variable.
-        const serviceAccount = JSON.parse(serviceAccountJson);
-        return serviceAccount;
+        return JSON.parse(serviceAccountJson) as ServiceAccount;
     } catch (e) {
         console.error("Failed to parse FIREBASE_SERVICE_ACCOUNT_CREDENTIALS:", e);
-        throw new Error("Could not parse Firebase service account credentials. Make sure it's a valid JSON string.");
+        throw new Error("Could not parse Firebase service account credentials.");
     }
 }
 
 /**
- * Initializes the Firebase Admin SDK for server-side usage.
- * This is now designed to be robust and idempotent, safe to call multiple times.
- * It ensures initialization only happens once.
+ * Initializes the Firebase Admin SDK app instance if it doesn't already exist.
+ * This is idempotent and safe to call multiple times.
  */
-export function initializeFirebaseAdmin(): App {
-  // If the app is already initialized, return it immediately.
-  if (adminApp) {
-    return adminApp;
-  }
-  
-  // If other apps were somehow initialized, use the first one.
+const initializeAdminApp = (): App => {
   if (getApps().length > 0) {
-    adminApp = getApps()[0];
-    if (adminApp) return adminApp;
+    return getApps()[0];
   }
-
-  // Get the credentials from environment variables.
   const serviceAccount = getServiceAccount();
-
-  // Initialize the app and store it in our local variable.
-  adminApp = initializeApp({
+  return initializeApp({
     credential: cert(serviceAccount),
   });
-
-  return adminApp;
 }
+
+// Initialize the app once and export the services.
+// This pattern is safer in serverless environments like Next.js.
+const adminApp = initializeAdminApp();
+const firestore = getFirestore(adminApp);
+const auth = getAuth(adminApp);
+
+export { firestore, auth };
+
+    

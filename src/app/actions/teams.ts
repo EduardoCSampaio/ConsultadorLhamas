@@ -1,8 +1,9 @@
+
 'use server';
 
 import { z } from 'zod';
-import { initializeFirebaseAdmin } from '@/firebase/server-init';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { firestore } from '@/firebase/server-init';
+import { FieldValue } from 'firebase-admin/firestore';
 import { logActivity } from './users';
 import type { UserPermissions, UserProfile } from './users';
 
@@ -64,8 +65,6 @@ export async function createTeam(input: z.infer<typeof createTeamSchema>): Promi
     const { name, managerId } = validation.data;
 
     try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
         const teamRef = firestore.collection('teams').doc();
         const managerRef = firestore.collection('users').doc(managerId);
 
@@ -135,9 +134,6 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
     const { teamId, managerId } = validation.data;
 
     try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
-
         // Security check: ensure the requesting user is actually the manager of this team.
         const teamDoc = await firestore.collection('teams').doc(teamId).get();
         if (!teamDoc.exists || teamDoc.data()?.managerId !== managerId) {
@@ -172,8 +168,6 @@ export async function updateTeamSectors(input: z.infer<typeof updateTeamSectorsS
     const { teamId, sectors } = validation.data;
     
     try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
         const teamRef = firestore.collection('teams').doc(teamId);
 
         await teamRef.update({ sectors });

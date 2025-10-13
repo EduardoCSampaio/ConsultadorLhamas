@@ -2,9 +2,9 @@
 'use server';
 
 import { z } from 'zod';
-import { initializeFirebaseAdmin } from '@/firebase/server-init';
-import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
-import { getAuth, UserRecord } from 'firebase-admin/auth';
+import { firestore, auth } from '@/firebase/server-init'; // Changed import
+import { Timestamp, FieldValue } from 'firebase-admin/firestore';
+import { UserRecord } from 'firebase-admin/auth';
 import * as XLSX from 'xlsx';
 import { createNotificationsForAdmins } from './notifications';
 import { createTeam } from './teams';
@@ -120,8 +120,6 @@ type LogActivityInput = {
 
 export async function logActivity(input: LogActivityInput) {
     try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
         const userDoc = await firestore.collection('users').doc(input.userId).get();
         if (!userDoc.exists) {
             console.error(`[logActivity] User with ID ${input.userId} not found.`);
@@ -153,8 +151,6 @@ export async function logActivity(input: LogActivityInput) {
 // Action to fetch all activity logs
 export async function getActivityLogs(): Promise<{logs: ActivityLog[] | null, error?: string}> {
     try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
         const logsSnapshot = await firestore.collection('activityLogs').orderBy('createdAt', 'desc').get();
         if (logsSnapshot.empty) {
             return { logs: [] };
@@ -198,8 +194,6 @@ export async function getUserActivityLogs(input: z.infer<typeof getUserActivityS
     }
     const { userId, limit } = validation.data;
     try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
         // Query without ordering first to avoid composite index
         const logsSnapshot = await firestore.collection('activityLogs')
             .where('userId', '==', userId)
@@ -245,16 +239,13 @@ export async function getUserActivityLogs(input: z.infer<typeof getUserActivityS
 
 
 const combineUserData = async (userRecord: UserRecord): Promise<UserProfile | null> => {
-    const app = initializeFirebaseAdmin();
-    const firestore = getFirestore(app);
-
     // Only process users that have an email
     if (!userRecord.email) {
         return null;
     }
 
     const userDocRef = firestore.collection('users').doc(userRecord.uid);
-    const userDoc = await userDoc.get();
+    const userDoc = await userDocRef.get();
     let profileData = userDoc.data();
 
     // If a user exists in Auth but not in Firestore, create a profile for them
@@ -309,9 +300,6 @@ const combineUserData = async (userRecord: UserRecord): Promise<UserProfile | nu
 
 export async function getUsers(): Promise<{users: UserProfile[] | null, error?: string}> {
     try {
-        const app = initializeFirebaseAdmin();
-        const auth = getAuth(app);
-        
         const listUsersResult = await auth.listUsers();
         const authUsers = listUsersResult.users;
 
@@ -338,8 +326,6 @@ export async function setAdminClaim(input: z.infer<typeof setAdminClaimSchema>):
   }
   
   try {
-    initializeFirebaseAdmin();
-    const auth = getAuth();
     await auth.setCustomUserClaims(validation.data.uid, { super_admin: true });
     return { success: true };
   } catch (error) {
@@ -361,8 +347,6 @@ export async function updateUserStatus(input: z.infer<typeof updateUserStatusSch
   const { uid, status } = validation.data;
   
   try {
-    initializeFirebaseAdmin();
-    const firestore = getFirestore();
     const userRef = firestore.collection('users').doc(uid);
     await userRef.update({ status });
     return { success: true };
@@ -382,8 +366,6 @@ export async function updateUserRole(input: z.infer<typeof updateUserRoleSchema>
     const { uid, newRole, adminId, userEmail } = validation.data;
 
     try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
         const userRef = firestore.collection('users').doc(uid);
 
         if (newRole === 'manager') {
@@ -439,10 +421,6 @@ export async function deleteUser(input: z.infer<typeof deleteUserSchema>): Promi
     const { uid } = validation.data;
 
     try {
-        initializeFirebaseAdmin();
-        const auth = getAuth();
-        const firestore = getFirestore();
-
         // Delete from Firebase Authentication
         await auth.deleteUser(uid);
 
@@ -470,8 +448,6 @@ export async function updateUserPermissions(input: z.infer<typeof updateUserPerm
     const { uid, permissions } = validation.data;
 
     try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
         const userRef = firestore.collection('users').doc(uid);
         
         await userRef.update({ permissions });
@@ -494,8 +470,6 @@ export async function updateApiCredentials(input: z.infer<typeof updateApiCreden
     const { uid, credentials } = validation.data;
 
     try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
         const userRef = firestore.collection('users').doc(uid);
         
         const credentialsToUpdate = Object.fromEntries(
@@ -525,8 +499,6 @@ export async function updateUserPhotoURL(input: z.infer<typeof updateUserPhotoUR
     const { uid, photoURL } = validation.data;
 
     try {
-        initializeFirebaseAdmin();
-        const firestore = getFirestore();
         const userRef = firestore.collection('users').doc(uid);
         await userRef.update({ photoURL });
         return { success: true };
