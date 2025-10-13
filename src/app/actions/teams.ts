@@ -151,8 +151,10 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
 
     try {
         const teamDoc = await firestore.collection('teams').doc(teamId).get();
+        const teamData = teamDoc.data();
 
-        if (!teamDoc.exists() || teamDoc.data()?.managerId !== managerId) {
+        // Correct check using exists() as a function
+        if (!teamDoc.exists() || teamData?.managerId !== managerId) {
             return { success: false, error: "Equipe não encontrada ou você não tem permissão para vê-la." };
         }
         
@@ -183,18 +185,13 @@ export async function getTeamAndManager(input: z.infer<typeof getTeamAndManagerS
 
     try {
         const teamDoc = await firestore.collection('teams').doc(teamId).get();
-        if (!teamDoc.exists()) {
-            return { success: false, error: "Time não encontrado." };
-        }
         const teamData = teamDoc.data();
+
         if (!teamData) {
-            return { success: false, error: "Dados do time não encontrados." };
+            return { success: false, error: "Time não encontrado." };
         }
 
         const managerDoc = await firestore.collection('users').doc(teamData.managerId).get();
-        if (!managerDoc.exists()) {
-            return { success: false, error: "Gerente do time não encontrado." };
-        }
         const managerData = managerDoc.data();
         if (!managerData) {
              return { success: false, error: "Dados do gerente do time não encontrados." };
