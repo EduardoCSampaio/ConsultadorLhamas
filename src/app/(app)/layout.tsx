@@ -119,7 +119,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const hasPermission = React.useCallback((permission: 'isManager' | 'isLoggedIn' | 'isSuperAdmin' | keyof UserProfile['permissions']) => {
     if (!userProfile) return false;
     
-    // Admin has all permissions
+    // Super admin has all permissions
     if (userProfile.role === 'super_admin') return true;
 
     if (permission === 'isLoggedIn') return true;
@@ -338,5 +338,3 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     </SidebarProvider>
   );
 }
-
-    

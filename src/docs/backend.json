@@ -61,11 +61,11 @@
         "role": {
           "type": "string",
           "enum": [
-            "admin",
+            "super_admin",
             "manager",
             "user"
           ],
-          "description": "The user's role in the system. 'admin' is the highest level, 'manager' can manage a team."
+          "description": "The user's role in the system. 'super_admin' is the highest level, 'manager' can manage a team."
         },
         "teamId": {
             "type": "string",
@@ -455,7 +455,7 @@
       "anonymous"
     ],
     "customClaims": {
-      "admin": {
+       "super_admin": {
         "type": "boolean"
       }
     }
