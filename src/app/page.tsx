@@ -97,11 +97,7 @@ export default function LoginPage() {
         
         // Set admin custom claim via server action if it's the admin user
         if (isSuperAdmin) {
-          const claimResult = await setAdminClaim({ uid: newUser.uid });
-          if (!claimResult.success) {
-            // This is not a fatal error for the user flow, but should be logged.
-            console.error("Failed to set admin claim:", claimResult.error);
-          }
+          await setAdminClaim({ uid: newUser.uid });
            // Force token refresh to pick up the new claim immediately and redirect
            await getIdTokenResult(newUser, true);
            router.push('/dashboard');
@@ -115,6 +111,11 @@ export default function LoginPage() {
         // Handle sign in
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const loggedInUser = userCredential.user;
+        
+        // If the admin logs in, ensure their claim is set on the backend.
+        if (loggedInUser.email === 'admin@lhamascred.com.br') {
+            await setAdminClaim({ uid: loggedInUser.uid });
+        }
         
         // This is important: force a token refresh after sign-in
         // to ensure the latest custom claims are loaded into the token.
@@ -265,5 +266,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
-    
