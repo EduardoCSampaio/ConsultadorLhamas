@@ -255,5 +255,3 @@ export async function updateTeamSectors(input: z.infer<typeof updateTeamSectorsS
         return { success: false, message };
     }
 }
-
-    
