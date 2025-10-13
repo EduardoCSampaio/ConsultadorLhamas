@@ -183,17 +183,21 @@ export async function getTeamAndManager(input: z.infer<typeof getTeamAndManagerS
 
     try {
         const teamDoc = await firestore.collection('teams').doc(teamId).get();
-        const teamData = teamDoc.data();
-        
-        if (!teamData) {
+        if (!teamDoc.exists()) {
             return { success: false, error: "Time não encontrado." };
+        }
+        const teamData = teamDoc.data();
+        if (!teamData) {
+            return { success: false, error: "Dados do time não encontrados." };
         }
 
         const managerDoc = await firestore.collection('users').doc(teamData.managerId).get();
-        const managerData = managerDoc.data();
-
-        if (!managerData) {
+        if (!managerDoc.exists()) {
             return { success: false, error: "Gerente do time não encontrado." };
+        }
+        const managerData = managerDoc.data();
+        if (!managerData) {
+             return { success: false, error: "Dados do gerente do time não encontrados." };
         }
         
         // Convert Timestamp to ISO string for serialization
@@ -202,7 +206,7 @@ export async function getTeamAndManager(input: z.infer<typeof getTeamAndManagerS
         if (createdAt instanceof Timestamp) {
             serializableCreatedAt = createdAt.toDate().toISOString();
         } else if (typeof createdAt === 'string') {
-            serializableCreatedAt = createdAt; // Assuming it's already an ISO string
+            serializableCreatedAt = createdAt;
         }
 
         const serializableTeam: Team = {
