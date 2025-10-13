@@ -152,13 +152,8 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
     try {
         const teamDoc = await firestore.collection('teams').doc(teamId).get();
 
-        if (!teamDoc.exists()) {
-            return { success: false, error: "Equipe não encontrada." };
-        }
-        
-        const teamData = teamDoc.data();
-        if (teamData?.managerId !== managerId) {
-            return { success: false, error: "Você não tem permissão para ver os membros desta equipe." };
+        if (!teamDoc.exists() || teamDoc.data()?.managerId !== managerId) {
+            return { success: false, error: "Equipe não encontrada ou você não tem permissão para vê-la." };
         }
         
         const membersSnapshot = await firestore.collection('users').where('teamId', '==', teamId).get();
