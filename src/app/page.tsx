@@ -14,10 +14,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, CheckCircle } from "lucide-react";
-import { doc, setDoc, FieldValue } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { useFirestore } from "@/firebase";
 import { setAdminClaim, logActivity } from "@/app/actions/users";
-import { serverTimestamp } from "firebase/firestore";
+
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -37,15 +37,9 @@ export default function LoginPage() {
   const isPending = searchParams.get('status') === 'pending';
 
   useEffect(() => {
-    // If user is logged in, redirect to dashboard.
-    // The layout will handle redirecting back if the user is not 'active'.
     if (!isUserLoading && user) {
-      // Force refresh of the token to get new custom claims after login.
-      getIdTokenResult(user, true).then(() => {
-        // The custom claim might not be immediately available on first sign-up,
-        // but on subsequent logins it should be.
-        // We push to dashboard regardless, and let the dashboard logic handle role access.
-        router.push('/dashboard');
+      getIdTokenResult(user, true).then((idTokenResult) => {
+          router.push('/dashboard');
       });
     }
   }, [user, isUserLoading, router]);
@@ -64,66 +58,61 @@ export default function LoginPage() {
 
     try {
       if (isSignUp) {
-        // Create user
+        // --- SIGN UP ---
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const newUser = userCredential.user;
         const isSuperAdmin = newUser.email === 'admin@lhamascred.com.br';
 
-        // Create user profile in Firestore
         const userProfile = {
           uid: newUser.uid,
           email: newUser.email,
           role: isSuperAdmin ? 'super_admin' : 'user',
           status: isSuperAdmin ? 'active' : 'pending',
           createdAt: serverTimestamp(),
-          permissions: (isSuperAdmin) ? {
-              canViewFGTS: true,
-              canViewCLT: true,
-              canViewINSS: true,
-          } : {
-              canViewFGTS: false,
-              canViewCLT: false,
-              canViewINSS: false,
+          permissions: { 
+              canViewFGTS: isSuperAdmin,
+              canViewCLT: isSuperAdmin,
+              canViewINSS: isSuperAdmin,
           }
         };
 
-        // Ensure the user document is created BEFORE other actions
         await setDoc(doc(firestore, "users", newUser.uid), userProfile);
         
-        // Now that the user doc is created, log the activity
         await logActivity({
             userId: newUser.uid,
             action: 'User Registration',
             details: `New user ${newUser.email} signed up.`
         });
         
-        // Set admin custom claim via server action if it's the admin user
         if (isSuperAdmin) {
           await setAdminClaim({ uid: newUser.uid });
-           // Force token refresh to pick up the new claim immediately and redirect
-           await getIdTokenResult(newUser, true);
-           router.push('/dashboard');
+          await getIdTokenResult(newUser, true);
+          router.push('/dashboard');
         } else {
-            // For regular users, show pending message and sign them out.
             setShowPendingMessage(true);
             await signOut(auth);
         }
 
       } else {
-        // Handle sign in
+        // --- SIGN IN ---
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const loggedInUser = userCredential.user;
         
-        // If the admin logs in, ensure their claim is set on the backend.
         if (loggedInUser.email === 'admin@lhamascred.com.br') {
+            // Ensure the super_admin claim is set on the backend.
             await setAdminClaim({ uid: loggedInUser.uid });
+
+            // **THE CRITICAL FIX**: Force-update the user's role in Firestore to 'super_admin' on every login.
+            // This corrects any accidental data corruption and ensures privileges are recognized.
+            const userDocRef = doc(firestore, "users", loggedInUser.uid);
+            await updateDoc(userDocRef, {
+                role: 'super_admin',
+                status: 'active'
+            });
         }
         
-        // This is important: force a token refresh after sign-in
-        // to ensure the latest custom claims are loaded into the token.
         await getIdTokenResult(loggedInUser, true);
-
-        // Redirect is handled by the useEffect hook
+        router.push('/dashboard');
       }
     } catch (err) {
       const authError = err as AuthError;
@@ -156,7 +145,6 @@ export default function LoginPage() {
     }
   };
 
-  // Do not render the form while checking auth state or if user is logged in
   if (isUserLoading || user) {
     return <div className="flex min-h-screen items-center justify-center bg-background"><Logo /></div>;
   }
