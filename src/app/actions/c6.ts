@@ -29,12 +29,12 @@ async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiC
                 !credentials.c6_username && "Username",
                 !credentials.c6_password && "Password",
             ].filter(Boolean).join(', ');
-            return { credentials: null, error: `Credenciais do C6 Bank incompletas. Faltando: ${missing}. Por favor, configure-as na página de Configurações.` };
+            return { credentials: null, error: `Credenciais do C6 incompletas. Faltando: ${missing}. Por favor, configure-as na página de Configurações.` };
         }
 
         return { credentials, error: null };
     } catch (error) {
-        const message = error instanceof Error ? error.message : "Erro ao carregar credenciais da API C6 Bank.";
+        const message = error instanceof Error ? error.message : "Erro ao carregar credenciais da API C6.";
         console.error(`[getC6UserCredentials] Error fetching credentials for user ${userId}:`, error);
         return { credentials: null, error: message };
     }
@@ -43,7 +43,7 @@ async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiC
 
 export async function getC6AuthToken(username?: string, password?: string): Promise<{ token: string | undefined; error: string | null }> {
   if (!username || !password) {
-      return { token: undefined, error: "Credenciais do C6 Bank (usuário/senha) não fornecidas." };
+      return { token: undefined, error: "Credenciais do C6 (usuário/senha) não fornecidas." };
   }
   
   const tokenUrl = 'https://marketplace-proposal-service-api-p.c6bank.info/auth/token';
@@ -64,12 +64,12 @@ export async function getC6AuthToken(username?: string, password?: string): Prom
     if (!response.ok || !data.access_token) {
       const errorMessage = data.message || data.error || JSON.stringify(data);
       console.error(`[C6 AUTH] Falha na autenticação: ${errorMessage}`);
-      return { token: undefined, error: `Falha na autenticação com o C6 Bank: ${errorMessage}` };
+      return { token: undefined, error: `Falha na autenticação com o C6: ${errorMessage}` };
     }
 
     return { token: data.access_token, error: null };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Erro de comunicação ao gerar token do C6 Bank.";
+    const message = error instanceof Error ? error.message : "Erro de comunicação ao gerar token do C6.";
     console.error('[C6 AUTH] Erro de comunicação:', error);
     return { token: undefined, error: message };
   }

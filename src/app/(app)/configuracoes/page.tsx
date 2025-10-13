@@ -400,7 +400,7 @@ export default function ConfiguracoesPage() {
                              <button className="flex flex-col items-center justify-center gap-4 text-center p-6 border-2 border-dashed rounded-lg hover:border-primary hover:bg-primary/5 transition-colors">
                                 <SlidersHorizontal className="h-10 w-10 text-primary" />
                                 <h3 className="text-xl font-bold tracking-tight">
-                                    API C6 Bank
+                                    API C6
                                 </h3>
                                 <div className="text-sm text-muted-foreground">
                                     Credenciais para consulta de Crédito Privado CLT.
@@ -409,7 +409,7 @@ export default function ConfiguracoesPage() {
                         </DialogTrigger>
                         <DialogContent className="sm:max-w-md">
                             <DialogHeader>
-                                <DialogTitle>Credenciais da API C6 Bank</DialogTitle>
+                                <DialogTitle>Credenciais da API C6</DialogTitle>
                                 <DialogDescription>
                                     Para consulta de Crédito Privado CLT (C6).
                                 </DialogDescription>

@@ -1,15 +1,14 @@
-
 'use client';
 
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CircleDashed } from "lucide-react";
 
-export default function C6ComingSoonPage() {
+export default function C6Page() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="Crédito Privado CLT - C6 Bank"
+        title="Crédito Privado CLT - C6"
         description="Esta funcionalidade estará disponível em breve."
       />
       <Card>
@@ -24,7 +23,7 @@ export default function C6ComingSoonPage() {
             </h3>
             <div className="text-sm text-muted-foreground">
               Estamos trabalhando para integrar a simulação de crédito privado
-              CLT com o provedor C6 Bank.
+              CLT com o provedor C6.
             </div>
           </div>
         </CardContent>

@@ -116,11 +116,11 @@
         },
         "c6_username": {
             "type": "string",
-            "description": "Username for the C6 Bank API integration."
+            "description": "Username for the C6 API integration."
         },
         "c6_password": {
             "type": "string",
-            "description": "Password for the C6 Bank API integration."
+            "description": "Password for the C6 API integration."
         },
         "permissions": {
           "type": "object",
