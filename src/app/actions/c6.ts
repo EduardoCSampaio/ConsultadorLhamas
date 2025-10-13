@@ -7,6 +7,17 @@ import { getFirestore } from 'firebase-admin/firestore';
 import type { ApiCredentials } from './users';
 import { logActivity } from './users';
 
+const cltConsultaSchema = z.object({
+  cpf: z.string().min(11, { message: "CPF deve ter 11 dígitos." }).max(11, { message: "CPF deve ter 11 dígitos." }),
+  userId: z.string(),
+});
+
+type C6QueryResult = {
+    success: boolean;
+    message: string;
+    data?: any; // Placeholder for actual offer data structure
+}
+
 async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiCredentials | null; error: string | null }> {
     if (!userId) {
         return { credentials: null, error: 'ID do usuário não fornecido.' };
@@ -73,4 +84,34 @@ export async function getC6AuthToken(username?: string, password?: string): Prom
     console.error('[C6 AUTH] Erro de comunicação:', error);
     return { token: undefined, error: message };
   }
+}
+
+
+export async function consultarOfertasC6(input: z.infer<typeof cltConsultaSchema>): Promise<C6QueryResult> {
+    const validation = cltConsultaSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: 'Dados de entrada inválidos.' };
+    }
+
+    const { cpf, userId } = validation.data;
+
+    const { credentials, error: credError } = await getC6UserCredentials(userId);
+    if (credError || !credentials) {
+        return { success: false, message: credError || "Credenciais não encontradas." };
+    }
+
+    const { token, error: tokenError } = await getC6AuthToken(credentials.c6_username, credentials.c6_password);
+    if (tokenError || !token) {
+        return { success: false, message: tokenError || "Não foi possível obter o token do C6." };
+    }
+    
+    await logActivity({ userId, documentNumber: cpf, action: 'Consulta CLT C6', provider: 'c6' });
+
+    // TODO: Implement actual API call to fetch offers from C6.
+    // For now, we return a placeholder message.
+    return { 
+        success: true, 
+        message: 'A autenticação com o C6 foi bem-sucedida. A funcionalidade de consulta de ofertas será implementada em breve.',
+        data: [] 
+    };
 }
