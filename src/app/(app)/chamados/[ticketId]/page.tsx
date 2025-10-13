@@ -76,7 +76,7 @@ export default function ChamadoDetalhePage() {
     const { data: messages, isLoading: messagesLoading } = useCollection<TicketMessage>(messagesQuery);
     
     const pageIsLoading = ticketLoading || messagesLoading;
-    const isAdmin = userProfile?.role === 'admin';
+    const isAdmin = userProfile?.role === 'super_admin' || userProfile?.role === 'admin';
 
     useEffect(() => {
        async function processTicketAndMessages() {
@@ -129,7 +129,7 @@ export default function ChamadoDetalhePage() {
             ticketId,
             userId: user.uid,
             userEmail: user.email!,
-            isAdmin: userProfile.role === 'admin',
+            isAdmin: isAdmin,
             content: newMessage,
         });
 
@@ -292,4 +292,3 @@ export default function ChamadoDetalhePage() {
         </div>
     );
 }
-    

@@ -139,7 +139,7 @@ export default function ChamadosPage() {
         setIsSubmitting(false);
     };
     
-    const isAdmin = userProfile?.role === 'admin';
+    const isAdmin = userProfile?.role === 'super_admin' || userProfile?.role === 'admin';
 
     const getUnreadCount = (ticket: Ticket) => {
         if (isAdmin) {
@@ -360,5 +360,3 @@ export default function ChamadosPage() {
         </div>
     );
 }
-
-    

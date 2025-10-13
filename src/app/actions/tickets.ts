@@ -3,7 +3,7 @@
 import { z } from 'zod';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
 import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
-import { createNotification } from './notifications';
+import { createNotification, createNotificationsForAdmins } from './notifications';
 
 const ticketStatusEnum = z.enum(["aberto", "em_atendimento", "em_desenvolvimento", "testando", "liberado", "resolvido"]);
 
@@ -158,6 +158,12 @@ export async function createTicket(input: z.infer<typeof createTicketSchema>): P
         batch.set(messageRef, newMessageData);
         await batch.commit();
 
+        await createNotificationsForAdmins({
+            title: `Novo Chamado: ${ticketNumber}`,
+            message: `De: ${input.userEmail} - "${input.title}"`,
+            link: `/chamados/${ticketRef.id}`
+        });
+
         return {
             success: true,
             message: 'Chamado criado com sucesso.',
@@ -192,7 +198,7 @@ export async function getTicketsForUser(input: z.infer<typeof getTicketsSchema>)
         }
         
         const userData = userDoc.data();
-        const isAdmin = userData?.role === 'admin';
+        const isAdmin = userData?.role === 'super_admin' || userData?.role === 'admin';
 
         let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> = firestore.collection('tickets');
 
@@ -303,7 +309,7 @@ export async function addMessageToTicket(input: z.infer<typeof addMessageSchema>
         if (!ticketDoc.exists) {
             throw new Error("Chamado não encontrado.");
         }
-        const ticketData = ticketDoc.data() as Ticket;
+        const ticketData = ticketDoc.data() as Omit<Ticket, 'id'>;
 
         if (isAdmin) {
             ticketUpdates.unreadByUser = FieldValue.increment(1);
@@ -316,10 +322,11 @@ export async function addMessageToTicket(input: z.infer<typeof addMessageSchema>
 
         } else {
             ticketUpdates.unreadByAdmin = FieldValue.increment(1);
-            // This is complex, as we need to notify all admins.
-            // A better approach would be a cloud function listening to message creations
-            // and fanning out notifications. For now, we can skip admin notifications
-            // or fetch all admins and create notifications for them.
+            await createNotificationsForAdmins({
+                title: `Nova Mensagem no Chamado #${ticketData.ticketNumber}`,
+                message: `De: ${userEmail} - "${content.substring(0, 50)}..."`,
+                link: `/chamados/${ticketId}`
+            });
         }
 
         
@@ -360,7 +367,8 @@ export async function markTicketAsRead(input: z.infer<typeof markAsReadSchema>):
         if (!ticketDoc.exists) return { success: false, message: "Chamado não encontrado." };
         if (!userDoc.exists) return { success: false, message: "Usuário não encontrado." };
 
-        const isAdmin = userDoc.data()?.role === 'admin';
+        const userData = userDoc.data();
+        const isAdmin = userData?.role === 'super_admin' || userData?.role === 'admin';
         const ticketData = ticketDoc.data();
         
         let updateData = {};
