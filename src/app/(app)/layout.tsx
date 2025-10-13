@@ -36,6 +36,7 @@ import {
   LifeBuoy,
   ClipboardCheck,
   Shield,
+  ScanSearch,
 } from "lucide-react";
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -68,6 +69,10 @@ const managerMenuItems = [
 const bottomMenuItems = [
     { href: "/chamados", icon: LifeBuoy, label: "Suporte", permission: 'isLoggedIn' as const },
     { href: "/configuracoes", icon: Cog, label: "Configurações", permission: 'isLoggedIn' as const },
+];
+
+const utilMenuItems = [
+    { href: "/utils/extract-cpf", icon: ScanSearch, label: "Extrair CPF", permission: 'isSuperAdmin' as const },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -153,6 +158,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const allBottomMenuItems = [
       ...adminBottomMenuItems.filter(item => hasPermission(item.permission)),
       ...managerMenuItems.filter(item => hasPermission(item.permission)),
+      ...utilMenuItems.filter(item => hasPermission(item.permission)),
       ...bottomMenuItems.filter(item => hasPermission(item.permission)),
   ];
   
