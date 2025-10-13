@@ -1,4 +1,3 @@
-
 'use server';
 
 import { z } from 'zod';
@@ -152,8 +151,13 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
     try {
         const teamDoc = await firestore.collection('teams').doc(teamId).get();
 
-        if (!teamDoc.exists() || teamDoc.data()?.managerId !== managerId) {
-            return { success: false, error: "Equipe não encontrada ou você não tem permissão para vê-la." };
+        if (!teamDoc.exists()) {
+            return { success: false, error: "A equipe especificada não foi encontrada." };
+        }
+
+        const teamData = teamDoc.data();
+        if (teamData?.managerId !== managerId) {
+            return { success: false, error: "Você não tem permissão para visualizar os membros desta equipe." };
         }
         
         const membersSnapshot = await firestore.collection('users').where('teamId', '==', teamId).get();
@@ -183,16 +187,23 @@ export async function getTeamAndManager(input: z.infer<typeof getTeamAndManagerS
 
     try {
         const teamDoc = await firestore.collection('teams').doc(teamId).get();
-        const teamData = teamDoc.data();
-
-        if (!teamData) {
+        
+        if (!teamDoc.exists()) {
             return { success: false, error: "Time não encontrado." };
         }
+        const teamData = teamDoc.data();
+        if (!teamData) {
+            return { success: false, error: "Dados do time não puderam ser lidos." };
+        }
+
 
         const managerDoc = await firestore.collection('users').doc(teamData.managerId).get();
-        const managerData = managerDoc.data();
-        if (!managerData) {
+        if (!managerDoc.exists()) {
              return { success: false, error: "Dados do gerente do time não encontrados." };
+        }
+        const managerData = managerDoc.data();
+         if (!managerData) {
+            return { success: false, error: "Dados do gerente não puderam ser lidos." };
         }
         
         const createdAt = teamData.createdAt;
