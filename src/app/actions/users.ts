@@ -22,6 +22,8 @@ export type ApiCredentials = {
   v8_client_id?: string;
   facta_username?: string;
   facta_password?: string;
+  c6_username?: string;
+  c6_password?: string;
 };
 
 const updateApiCredentialsSchema = z.object({
@@ -33,6 +35,8 @@ const updateApiCredentialsSchema = z.object({
     v8_client_id: z.string().optional(),
     facta_username: z.string().optional(),
     facta_password: z.string().optional(),
+    c6_username: z.string().optional(),
+    c6_password: z.string().optional(),
   }).partial(),
 });
 
@@ -272,9 +276,13 @@ export async function getUsers(): Promise<{users: UserProfile[] | null, error?: 
                     uid: userRecord.uid,
                     email: userRecord.email,
                     role: isSuperAdmin ? 'super_admin' : 'user',
-                    status: 'pending',
+                    status: isSuperAdmin ? 'active' : 'pending',
                     createdAt: FieldValue.serverTimestamp(),
-                    permissions: { canViewFGTS: false, canViewCLT: false, canViewINSS: false }
+                    permissions: { 
+                        canViewFGTS: isSuperAdmin, 
+                        canViewCLT: isSuperAdmin, 
+                        canViewINSS: isSuperAdmin 
+                    }
                 };
                 await firestore.collection('users').doc(userRecord.uid).set(newProfile);
                 profileData = newProfile;
@@ -303,6 +311,8 @@ export async function getUsers(): Promise<{users: UserProfile[] | null, error?: 
                 v8_client_id: profileData.v8_client_id,
                 facta_username: profileData.facta_username,
                 facta_password: profileData.facta_password,
+                c6_username: profileData.c6_username,
+                c6_password: profileData.c6_password,
                 permissions: profileData.permissions || {},
             } as UserProfile;
         }));
@@ -608,5 +618,3 @@ export async function exportUsersToExcel(input: z.infer<typeof exportUsersSchema
         return { status: 'error', message };
     }
 }
-
-    

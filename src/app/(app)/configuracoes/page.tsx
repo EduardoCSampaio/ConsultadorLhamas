@@ -50,8 +50,14 @@ const factaFormSchema = z.object({
   facta_password: z.string().optional(),
 });
 
+const c6FormSchema = z.object({
+  c6_username: z.string().optional(),
+  c6_password: z.string().optional(),
+});
+
 type V8FormValues = z.infer<typeof v8FormSchema>;
 type FactaFormValues = z.infer<typeof factaFormSchema>;
+type C6FormValues = z.infer<typeof c6FormSchema>;
 
 export default function ConfiguracoesPage() {
   const { toast } = useToast();
@@ -60,8 +66,11 @@ export default function ConfiguracoesPage() {
 
   const [isV8Submitting, setIsV8Submitting] = useState(false);
   const [isFactaSubmitting, setIsFactaSubmitting] = useState(false);
+  const [isC6Submitting, setIsC6Submitting] = useState(false);
+
   const [isV8ModalOpen, setIsV8ModalOpen] = useState(false);
   const [isFactaModalOpen, setIsFactaModalOpen] = useState(false);
+  const [isC6ModalOpen, setIsC6ModalOpen] = useState(false);
 
   // Fetch current user's profile to get existing credentials
   const userProfileRef = useMemoFirebase(() => {
@@ -89,6 +98,14 @@ export default function ConfiguracoesPage() {
     },
   });
 
+  const c6Form = useForm<C6FormValues>({
+    resolver: zodResolver(c6FormSchema),
+    defaultValues: {
+      c6_username: '',
+      c6_password: '',
+    },
+  });
+
   // When user profile is loaded, reset the forms with their saved values
   useEffect(() => {
     if (userProfile) {
@@ -102,10 +119,14 @@ export default function ConfiguracoesPage() {
         facta_username: userProfile.facta_username || '',
         facta_password: userProfile.facta_password || '',
       });
+      c6Form.reset({
+        c6_username: userProfile.c6_username || '',
+        c6_password: userProfile.c6_password || '',
+      });
     }
-  }, [userProfile, v8Form, factaForm]);
+  }, [userProfile, v8Form, factaForm, c6Form]);
 
-  const handleSave = async (credentials: Partial<ApiCredentials>, provider: 'v8' | 'facta') => {
+  const handleSave = async (credentials: Partial<ApiCredentials>, provider: 'v8' | 'facta' | 'c6') => {
     if (!user) {
       toast({
         variant: "destructive",
@@ -117,6 +138,7 @@ export default function ConfiguracoesPage() {
     
     if (provider === 'v8') setIsV8Submitting(true);
     if (provider === 'facta') setIsFactaSubmitting(true);
+    if (provider === 'c6') setIsC6Submitting(true);
 
     const result = await updateApiCredentials({ uid: user.uid, credentials });
 
@@ -127,6 +149,7 @@ export default function ConfiguracoesPage() {
       });
       if (provider === 'v8') setIsV8ModalOpen(false);
       if (provider === 'facta') setIsFactaModalOpen(false);
+      if (provider === 'c6') setIsC6ModalOpen(false);
     } else {
       toast({
         variant: "destructive",
@@ -137,6 +160,7 @@ export default function ConfiguracoesPage() {
 
     if (provider === 'v8') setIsV8Submitting(false);
     if (provider === 'facta') setIsFactaSubmitting(false);
+    if (provider === 'c6') setIsC6Submitting(false);
   };
   
   const getInitials = (email = '') => {
@@ -369,6 +393,67 @@ export default function ConfiguracoesPage() {
                             </Form>
                         </DialogContent>
                      </Dialog>
+
+                      {/* C6 Dialog Trigger */}
+                     <Dialog open={isC6ModalOpen} onOpenChange={setIsC6ModalOpen}>
+                        <DialogTrigger asChild>
+                             <button className="flex flex-col items-center justify-center gap-4 text-center p-6 border-2 border-dashed rounded-lg hover:border-primary hover:bg-primary/5 transition-colors">
+                                <SlidersHorizontal className="h-10 w-10 text-primary" />
+                                <h3 className="text-xl font-bold tracking-tight">
+                                    API C6 Bank
+                                </h3>
+                                <div className="text-sm text-muted-foreground">
+                                    Credenciais para consulta de Crédito Privado CLT.
+                                </div>
+                            </button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-md">
+                            <DialogHeader>
+                                <DialogTitle>Credenciais da API C6 Bank</DialogTitle>
+                                <DialogDescription>
+                                    Para consulta de Crédito Privado CLT (C6).
+                                </DialogDescription>
+                            </DialogHeader>
+                            <Form {...c6Form}>
+                                <form onSubmit={c6Form.handleSubmit((values) => handleSave(values, 'c6'))} className="space-y-4 pt-4">
+                                   <FormField
+                                      control={c6Form.control}
+                                      name="c6_username"
+                                      render={({ field }) => (
+                                      <FormItem>
+                                          <FormLabel>C6 Username</FormLabel>
+                                          <FormControl>
+                                          <Input placeholder="seu_usuario_c6" {...field} disabled={isC6Submitting}/>
+                                          </FormControl>
+                                          <FormMessage />
+                                      </FormItem>
+                                      )}
+                                   />
+                                   <FormField
+                                      control={c6Form.control}
+                                      name="c6_password"
+                                      render={({ field }) => (
+                                      <FormItem>
+                                          <FormLabel>C6 Password</FormLabel>
+                                          <FormControl>
+                                          <Input type="password" placeholder="********" {...field} disabled={isC6Submitting} />
+                                          </FormControl>
+                                          <FormMessage />
+                                      </FormItem>
+                                      )}
+                                   />
+                                   <DialogFooter className="pt-4">
+                                        <Button type="button" variant="outline" onClick={() => setIsC6ModalOpen(false)}>Cancelar</Button>
+                                        <Button type="submit" disabled={isC6Submitting}>
+                                            {isC6Submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                                            Salvar
+                                        </Button>
+                                   </DialogFooter>
+                                </form>
+                            </Form>
+                        </DialogContent>
+                     </Dialog>
+
                   </CardContent>
                 </Card>
             </TabsContent>
@@ -377,5 +462,3 @@ export default function ConfiguracoesPage() {
     </div>
   );
 }
-
-    

@@ -114,6 +114,14 @@
             "type": "string",
             "description": "Password for the Facta API integration (should be stored securely)."
         },
+        "c6_username": {
+            "type": "string",
+            "description": "Username for the C6 Bank API integration."
+        },
+        "c6_password": {
+            "type": "string",
+            "description": "Password for the C6 Bank API integration."
+        },
         "permissions": {
           "type": "object",
           "description": "Granular access control for different app features. For 'user' roles, these are determined by their team's sector.",
