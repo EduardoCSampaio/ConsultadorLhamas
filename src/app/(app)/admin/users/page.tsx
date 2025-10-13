@@ -149,7 +149,7 @@ export default function AdminUsersPage() {
         if (newRole && newRole !== selectedUser.role) {
             const roleResult = await updateUserRole({ 
                 uid: selectedUser.uid, 
-                newRole: newRole,
+                newRole: newRole as 'user' | 'manager',
                 adminId: adminUser.uid,
                 userEmail: selectedUser.email
             });
@@ -241,7 +241,7 @@ export default function AdminUsersPage() {
     
     const getRoleText = (role: UserRole) => {
         switch (role) {
-            case 'admin': return 'Admin';
+            case 'super_admin': return 'Super Admin';
             case 'manager': return 'Gerente';
             case 'user': return 'Usuário';
             default: return role;
@@ -251,7 +251,7 @@ export default function AdminUsersPage() {
     const renderActionButtons = (user: UserProfile) => {
         const isUpdating = updatingId === user.uid;
 
-        if (user.role === 'admin') {
+        if (user.role === 'super_admin') {
              return null; 
         }
 
@@ -341,7 +341,7 @@ export default function AdminUsersPage() {
                                                 <TableCell className="text-right">
                                                      <div className="flex gap-2 justify-end items-center">
                                                         {renderActionButtons(user)}
-                                                        {user.role !== 'admin' && (
+                                                        {user.role !== 'super_admin' && (
                                                             <>
                                                                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenEditModal(user)}>
                                                                     <Pencil className="h-4 w-4" />
@@ -418,7 +418,7 @@ export default function AdminUsersPage() {
                                     <Select
                                         value={newRole || ''}
                                         onValueChange={(value) => setNewRole(value as UserRole)}
-                                        disabled={selectedUser.role === 'admin'}
+                                        disabled={selectedUser.role === 'super_admin'}
                                     >
                                         <SelectTrigger className="col-span-3">
                                             <SelectValue placeholder="Selecione uma função" />
@@ -484,3 +484,5 @@ export default function AdminUsersPage() {
         </>
     );
 }
+
+    

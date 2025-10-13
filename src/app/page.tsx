@@ -67,16 +67,16 @@ export default function LoginPage() {
         // Create user
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const newUser = userCredential.user;
-        const isAdmin = newUser.email === 'admin@lhamascred.com.br';
+        const isSuperAdmin = newUser.email === 'admin@lhamascred.com.br';
 
         // Create user profile in Firestore
         const userProfile = {
           uid: newUser.uid,
           email: newUser.email,
-          role: isAdmin ? 'admin' : 'user',
-          status: isAdmin ? 'active' : 'pending',
+          role: isSuperAdmin ? 'super_admin' : 'user',
+          status: isSuperAdmin ? 'active' : 'pending',
           createdAt: serverTimestamp(),
-          permissions: (isAdmin) ? {
+          permissions: (isSuperAdmin) ? {
               canViewFGTS: true,
               canViewCLT: true,
               canViewINSS: true,
@@ -96,7 +96,7 @@ export default function LoginPage() {
         });
         
         // Set admin custom claim via server action if it's the admin user
-        if (isAdmin) {
+        if (isSuperAdmin) {
           const claimResult = await setAdminClaim({ uid: newUser.uid });
           if (!claimResult.success) {
             // This is not a fatal error for the user flow, but should be logged.
@@ -265,3 +265,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
+    

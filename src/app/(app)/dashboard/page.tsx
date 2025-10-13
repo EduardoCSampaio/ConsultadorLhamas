@@ -462,7 +462,7 @@ export default function DashboardPage() {
 
   React.useEffect(() => {
     async function fetchAdminData() {
-        if (userProfile && userProfile.role === 'admin' && !isProfileLoading) {
+        if (userProfile && userProfile.role === 'super_admin' && !isProfileLoading) {
             setIsAdminDataLoading(true);
             try {
                 const [{ users, error: usersError }, { logs, error: logsError }] = await Promise.all([
@@ -493,7 +493,7 @@ export default function DashboardPage() {
     return <AdminDashboardLoader />;
   }
   
-  if (userProfile?.role === 'admin') {
+  if (userProfile?.role === 'super_admin') {
     if (isAdminDataLoading) {
         return <AdminDashboardLoader />;
     }
@@ -511,3 +511,5 @@ export default function DashboardPage() {
   // Fallback or loading state if userProfile is not available for some reason.
   return <AdminDashboardLoader />;
 }
+
+    

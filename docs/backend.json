@@ -455,9 +455,6 @@
       "anonymous"
     ],
     "customClaims": {
-      "admin": {
-        "type": "boolean"
-      },
        "super_admin": {
         "type": "boolean"
       }

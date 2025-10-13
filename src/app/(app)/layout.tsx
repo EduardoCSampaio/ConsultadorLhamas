@@ -52,13 +52,13 @@ import { NotificationBell } from '@/components/notification-bell';
 
 const allBaseMenuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard", permission: 'isLoggedIn' as const },
-  { href: "/esteira", icon: Workflow, label: "Esteira", permission: 'isAdmin' as const },
-  { href: "/admin/history", icon: BookMarked, label: "Histórico", permission: 'isAdmin' as const },
+  { href: "/esteira", icon: Workflow, label: "Esteira", permission: 'isSuperAdmin' as const },
+  { href: "/admin/history", icon: BookMarked, label: "Histórico", permission: 'isSuperAdmin' as const },
 ];
 
 const adminBottomMenuItems = [
-    { href: "/admin/users", icon: Users, label: "Gerenciar Usuários", permission: 'isAdmin' as const },
-    { href: "/admin/auxilio-propostas", icon: ClipboardCheck, label: "Auxílio Propostas", permission: 'isAdmin' as const },
+    { href: "/admin/users", icon: Users, label: "Gerenciar Usuários", permission: 'isSuperAdmin' as const },
+    { href: "/admin/auxilio-propostas", icon: ClipboardCheck, label: "Auxílio Propostas", permission: 'isSuperAdmin' as const },
 ];
 
 const managerMenuItems = [
@@ -116,15 +116,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return email.substring(0, 2).toUpperCase();
   }
 
-  const hasPermission = React.useCallback((permission: 'isManager' | 'isLoggedIn' | 'isAdmin' | keyof UserProfile['permissions']) => {
+  const hasPermission = React.useCallback((permission: 'isManager' | 'isLoggedIn' | 'isSuperAdmin' | keyof UserProfile['permissions']) => {
     if (!userProfile) return false;
     
     // Admin has all permissions
-    if (userProfile.role === 'admin') return true;
+    if (userProfile.role === 'super_admin') return true;
 
     if (permission === 'isLoggedIn') return true;
     if (permission === 'isManager') return userProfile.role === 'manager';
-    if (permission === 'isAdmin') return userProfile.role === 'admin';
+    if (permission === 'isSuperAdmin') return userProfile.role === 'super_admin';
 
     // For granular permissions, check the user's profile
     return !!userProfile?.permissions?.[permission as keyof UserProfile['permissions']];
@@ -142,7 +142,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const getRoleText = (role: UserProfile['role'] | undefined) => {
     if (!role) return 'Usuário';
     switch (role) {
-        case 'admin': return 'Admin';
+        case 'super_admin': return 'Super Admin';
         case 'manager': return 'Gerente';
         case 'user': return 'Usuário';
         default: return 'Usuário';
@@ -338,3 +338,5 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     </SidebarProvider>
   );
 }
+
+    
