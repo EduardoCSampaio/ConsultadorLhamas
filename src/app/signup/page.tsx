@@ -13,12 +13,12 @@ import { createUserWithEmailAndPassword, AuthError, signOut } from "firebase/aut
 import { useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, CheckCircle } from "lucide-react";
-import { doc, setDoc, getDoc, FieldValue } from "firebase/firestore";
+import { AlertCircle, CheckCircle, Loader2 } from "lucide-react";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useFirestore } from "@/firebase";
 import { logActivity } from "@/app/actions/users";
-import { serverTimestamp } from "firebase/firestore";
-import type { Team } from '@/app/actions/teams';
+import { getTeamAndManager } from "@/app/actions/teams";
+
 
 export default function SignUpPage() {
   const [email, setEmail] = useState('');
@@ -28,6 +28,7 @@ export default function SignUpPage() {
   const [showPendingMessage, setShowPendingMessage] = useState(false);
   const [isInvitationValid, setIsInvitationValid] = useState<boolean | null>(null);
   const [teamName, setTeamName] = useState<string>('');
+  const [managerName, setManagerName] = useState<string>('');
 
 
   const auth = useAuth();
@@ -51,26 +52,21 @@ export default function SignUpPage() {
             return;
         }
         if (!firestore) {
-            // Firestore might not be ready yet, wait.
             return;
         }
-        
-        try {
-            const teamRef = doc(firestore, "teams", teamId);
-            const teamSnap = await getDoc(teamRef);
-            if (teamSnap.exists()) {
-                setIsInvitationValid(true);
-                setTeamName(teamSnap.data()?.name || 'equipe');
-            } else {
-                setIsInvitationValid(false);
-                setError("O link de convite é inválido ou a equipe não existe mais.");
-            }
-        } catch (e) {
-             setIsInvitationValid(false);
-             setError("Ocorreu um erro ao validar o convite.");
+
+        const { success, team, manager, error } = await getTeamAndManager({ teamId });
+
+        if (success && team && manager) {
+            setIsInvitationValid(true);
+            setTeamName(team.name);
+            setManagerName(manager.name || manager.email);
+        } else {
+            setIsInvitationValid(false);
+            setError(error || "O link de convite é inválido ou a equipe não existe mais.");
         }
     }
-    if (firestore) { // Only run when firestore is available
+    if (firestore) {
         validateInvitation();
     }
   }, [teamId, firestore, router]);
@@ -142,7 +138,7 @@ export default function SignUpPage() {
   };
 
   if (isUserLoading || user || isInvitationValid === null) {
-    return <div className="flex min-h-screen items-center justify-center bg-background"><Logo /></div>;
+    return <div className="flex min-h-screen items-center justify-center bg-background"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
 
   return (
@@ -177,7 +173,7 @@ export default function SignUpPage() {
                   Criar Conta para Equipe
                 </CardTitle>
                 <CardDescription>
-                  Você foi convidado para a equipe <strong>{teamName}</strong>. Preencha seus dados para se registrar.
+                  Você foi convidado para a equipe de <strong>{managerName || teamName}</strong>. Preencha seus dados para se registrar.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">

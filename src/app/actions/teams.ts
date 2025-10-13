@@ -26,6 +26,11 @@ const createTeamSchema = z.object({
   managerId: z.string().min(1, "ID do gerente é obrigatório."),
 });
 
+const getTeamAndManagerSchema = z.object({
+    teamId: z.string().min(1),
+});
+
+
 const getTeamMembersSchema = z.object({
     teamId: z.string().min(1),
     managerId: z.string().min(1),
@@ -55,6 +60,17 @@ type GetTeamMembersResult = {
     members?: UserProfile[];
     error?: string;
 }
+
+type GetTeamAndManagerResult = {
+    success: boolean;
+    team?: Team;
+    manager?: {
+        email: string;
+        name?: string;
+    };
+    error?: string;
+};
+
 
 export async function createTeam(input: z.infer<typeof createTeamSchema>): Promise<CreateTeamResult> {
     const validation = createTeamSchema.safeParse(input);
@@ -157,6 +173,43 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
         return { success: false, error: message };
     }
 }
+
+export async function getTeamAndManager(input: z.infer<typeof getTeamAndManagerSchema>): Promise<GetTeamAndManagerResult> {
+    const validation = getTeamAndManagerSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, error: "ID do time inválido." };
+    }
+    const { teamId } = validation.data;
+
+    try {
+        const teamDoc = await firestore.collection('teams').doc(teamId).get();
+        if (!teamDoc.exists()) {
+            return { success: false, error: "Time não encontrado." };
+        }
+        const teamData = teamDoc.data() as Team;
+
+        const managerDoc = await firestore.collection('users').doc(teamData.managerId).get();
+        if (!managerDoc.exists()) {
+            return { success: false, error: "Gerente do time não encontrado." };
+        }
+        const managerData = managerDoc.data() as UserProfile;
+
+        return {
+            success: true,
+            team: { ...teamData, id: teamDoc.id },
+            manager: {
+                email: managerData.email,
+                name: managerData.email.split('@')[0], // Simple name extraction
+            },
+        };
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Ocorreu um erro ao buscar os dados do time.";
+        console.error(`[getTeamAndManager] Error:`, message);
+        return { success: false, error: message };
+    }
+}
+
 
 
 export async function updateTeamSectors(input: z.infer<typeof updateTeamSectorsSchema>): Promise<{success: boolean, message: string}> {

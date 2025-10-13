@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -8,7 +9,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUser, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
-import { collection, query, where, doc, getDocs, getDoc } from 'firebase/firestore';
 import type { UserProfile, UserPermissions } from '@/app/actions/users';
 import { updateUserStatus } from '@/app/actions/users';
 import { updateTeamSectors, getTeamMembers } from '@/app/actions/teams';
@@ -39,6 +39,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { doc } from 'firebase/firestore';
 
 
 type UserStatus = UserProfile['status'];
@@ -116,23 +117,24 @@ export default function MyTeamPage() {
     const { data: managerProfile, isLoading: isManagerProfileLoading } = useDoc<UserProfile>(managerProfileRef);
     const teamId = managerProfile?.teamId;
 
+    const teamRef = useMemoFirebase(() => {
+        if (!firestore || !teamId) return null;
+        return doc(firestore, 'teams', teamId);
+    }, [firestore, teamId]);
+
+    const { data: teamData } = useDoc<Team>(teamRef);
+
+     useEffect(() => {
+        if (teamData) {
+            setTeam(teamData);
+        }
+    }, [teamData]);
+
     const fetchTeamData = useCallback(async (id: string) => {
         if (!firestore || !manager) return;
         
         setIsLoading(true);
         try {
-            // Fetch team document
-            const teamDoc = await getDoc(doc(firestore, 'teams', id));
-            if (teamDoc.exists()) {
-                const teamData = teamDoc.data() as Team;
-                setTeam({ ...teamData, id: teamDoc.id });
-            } else {
-                 toast({ variant: 'destructive', title: 'Erro ao buscar time', description: 'Time não encontrado.' });
-                 setTeam(null);
-                 setIsLoading(false);
-                 return;
-            }
-
             // Fetch team members using server action
             const { members, error } = await getTeamMembers({ teamId: id, managerId: manager.uid });
             if (error) {
@@ -310,7 +312,7 @@ export default function MyTeamPage() {
         <>
             <div className="flex flex-col gap-6">
                 <PageHeader
-                    title="Minha Equipe"
+                    title={team?.name ? `Equipe: ${team.name}` : "Minha Equipe"}
                     description="Gerencie os membros e setores da sua equipe e compartilhe o link de convite."
                 />
 

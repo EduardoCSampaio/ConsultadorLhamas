@@ -2,7 +2,7 @@
 'use server';
 
 import { z } from 'zod';
-import { firestore, auth } from '@/firebase/server-init'; // Changed import
+import { firestore, auth } from '@/firebase/server-init';
 import { Timestamp, FieldValue } from 'firebase-admin/firestore';
 import { UserRecord } from 'firebase-admin/auth';
 import * as XLSX from 'xlsx';
@@ -95,6 +95,7 @@ export type UserProfile = {
     status: 'pending' | 'active' | 'rejected' | 'inactive';
     createdAt: string;
     teamId?: string;
+    teamName?: string;
     sector?: string;
     permissions?: UserPermissions;
 } & ApiCredentials;
@@ -238,8 +239,7 @@ export async function getUserActivityLogs(input: z.infer<typeof getUserActivityS
 }
 
 
-const combineUserData = async (userRecord: UserRecord): Promise<UserProfile | null> => {
-    // Only process users that have an email
+const combineUserData = async (userRecord: UserRecord, teamsMap: Map<string, string>): Promise<UserProfile | null> => {
     if (!userRecord.email) {
         return null;
     }
@@ -248,7 +248,6 @@ const combineUserData = async (userRecord: UserRecord): Promise<UserProfile | nu
     const userDoc = await userDocRef.get();
     let profileData = userDoc.data();
 
-    // If a user exists in Auth but not in Firestore, create a profile for them
     if (!profileData) {
         console.log(`User ${userRecord.email} found in Auth but not in Firestore. Creating profile...`);
         const isSuperAdmin = userRecord.email === 'admin@lhamascred.com.br';
@@ -284,6 +283,7 @@ const combineUserData = async (userRecord: UserRecord): Promise<UserProfile | nu
         status: profileData.status || 'pending',
         createdAt: serializableCreatedAt,
         teamId: profileData.teamId,
+        teamName: profileData.teamId ? teamsMap.get(profileData.teamId) : undefined,
         sector: profileData.sector,
         v8_username: profileData.v8_username,
         v8_password: profileData.v8_password,
@@ -300,10 +300,18 @@ const combineUserData = async (userRecord: UserRecord): Promise<UserProfile | nu
 
 export async function getUsers(): Promise<{users: UserProfile[] | null, error?: string}> {
     try {
-        const listUsersResult = await auth.listUsers();
-        const authUsers = listUsersResult.users;
+        const [listUsersResult, teamsSnapshot] = await Promise.all([
+            auth.listUsers(),
+            firestore.collection('teams').get()
+        ]);
+        
+        const teamsMap = new Map<string, string>();
+        teamsSnapshot.forEach(doc => {
+            teamsMap.set(doc.id, doc.data().name);
+        });
 
-        const userPromises = authUsers.map(userRecord => combineUserData(userRecord));
+        const authUsers = listUsersResult.users;
+        const userPromises = authUsers.map(userRecord => combineUserData(userRecord, teamsMap));
         
         const usersWithNulls = await Promise.all(userPromises);
         const validUsers = usersWithNulls.filter((user): user is UserProfile => user !== null);
@@ -557,7 +565,7 @@ export async function exportUsersToExcel(input: z.infer<typeof exportUsersSchema
             'Email': user.email,
             'Status': getStatusText(user.status),
             'Função': getRoleText(user.role),
-            'Time ID': user.teamId || 'N/A',
+            'Time': user.teamName || 'N/A',
             'Setor': user.sector || 'N/A',
             'Data de Cadastro': new Date(user.createdAt).toLocaleDateString('pt-BR'),
         }));
@@ -566,7 +574,7 @@ export async function exportUsersToExcel(input: z.infer<typeof exportUsersSchema
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Usuários');
         
-        const header = ['Email', 'Status', 'Função', 'Time ID', 'Setor', 'Data de Cadastro'];
+        const header = ['Email', 'Status', 'Função', 'Time', 'Setor', 'Data de Cadastro'];
         const colWidths = header.map(h => ({ wch: Math.max(h.length, 20) }));
         worksheet['!cols'] = colWidths;
 
@@ -591,5 +599,3 @@ export async function exportUsersToExcel(input: z.infer<typeof exportUsersSchema
         return { status: 'error', message };
     }
 }
-
-    

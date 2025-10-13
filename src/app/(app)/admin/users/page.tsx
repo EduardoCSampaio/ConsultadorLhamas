@@ -337,7 +337,7 @@ export default function AdminUsersPage() {
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell className="capitalize">{getRoleText(user.role)}</TableCell>
-                                                <TableCell className="font-mono text-xs">{user.teamId || 'N/A'}</TableCell>
+                                                <TableCell>{user.teamName || 'N/A'}</TableCell>
                                                 <TableCell className="text-right">
                                                      <div className="flex gap-2 justify-end items-center">
                                                         {renderActionButtons(user)}
