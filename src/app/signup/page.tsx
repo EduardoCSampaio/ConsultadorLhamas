@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, FormEvent, useEffect } from "react";
@@ -69,7 +70,9 @@ export default function SignUpPage() {
              setError("Ocorreu um erro ao validar o convite.");
         }
     }
-    validateInvitation();
+    if (firestore) { // Only run when firestore is available
+        validateInvitation();
+    }
   }, [teamId, firestore, router]);
 
   const handleAuth = async (e: FormEvent) => {
