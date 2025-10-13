@@ -41,7 +41,7 @@ export default function LoginPage() {
     // The layout will handle redirecting back if the user is not 'active'.
     if (!isUserLoading && user) {
       // Force refresh of the token to get new custom claims after login.
-      getIdTokenResult(user, true).then((idTokenResult) => {
+      getIdTokenResult(user, true).then(() => {
         // The custom claim might not be immediately available on first sign-up,
         // but on subsequent logins it should be.
         // We push to dashboard regardless, and let the dashboard logic handle role access.
@@ -87,8 +87,10 @@ export default function LoginPage() {
           }
         };
 
+        // Ensure the user document is created BEFORE other actions
         await setDoc(doc(firestore, "users", newUser.uid), userProfile);
         
+        // Now that the user doc is created, log the activity
         await logActivity({
             userId: newUser.uid,
             action: 'User Registration',
