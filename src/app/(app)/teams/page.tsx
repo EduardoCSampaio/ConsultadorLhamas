@@ -131,29 +131,25 @@ export default function MyTeamPage() {
     }, [teamData]);
 
     const fetchTeamData = useCallback(async (id: string) => {
-        if (!firestore || !manager) return;
+        if (!manager) return;
         
         setIsLoading(true);
-        try {
-            // Fetch team members using server action
-            const { members, error } = await getTeamMembers({ teamId: id, managerId: manager.uid });
-            if (error) {
-                throw new Error(error);
-            }
-            setTeamMembers(members || []);
-
-        } catch (error) {
+        const { members, error } = await getTeamMembers({ teamId: id, managerId: manager.uid });
+        
+        if (error) {
             console.error("Error fetching team data:", error);
-            const message = error instanceof Error ? error.message : 'Ocorreu um erro inesperado.'
-             if (message.includes('permission-denied') || message.includes('Missing or insufficient permissions')) {
-                 toast({ variant: 'destructive', title: 'Erro de Permissão', description: 'Você não tem permissão para ver os membros da equipe.' });
-            } else {
-                 toast({ variant: 'destructive', title: 'Erro ao buscar dados da equipe', description: message });
-            }
-        } finally {
-            setIsLoading(false);
+            toast({ 
+                variant: 'destructive', 
+                title: 'Erro ao buscar dados da equipe', 
+                description: error 
+            });
+            setTeamMembers([]);
+        } else {
+            setTeamMembers(members || []);
         }
-    }, [firestore, manager, toast]);
+        
+        setIsLoading(false);
+    }, [manager, toast]);
 
     useEffect(() => {
         if (isManagerProfileLoading || isManagerAuthLoading) return;
@@ -239,7 +235,7 @@ export default function MyTeamPage() {
         if (result.success) {
             toast({ title: 'Setores atualizados com sucesso!' });
             setIsSectorModalOpen(false);
-            if (teamId) await fetchTeamData(teamId);
+            // No need to fetch data here as the team listener will update automatically
         } else {
             toast({ variant: 'destructive', title: 'Erro ao salvar setores', description: result.message });
         }
@@ -262,7 +258,7 @@ export default function MyTeamPage() {
         const result = await updateTeamSectors({ teamId, sectors: newSectors });
         if (result.success) {
             toast({ title: 'Setor excluído com sucesso!' });
-            if (teamId) await fetchTeamData(teamId);
+            // No need to fetch data here as the team listener will update automatically
         } else {
              toast({ variant: 'destructive', title: 'Erro ao excluir setor', description: result.message });
         }
@@ -560,3 +556,5 @@ export default function MyTeamPage() {
         </>
     );
 }
+
+    
