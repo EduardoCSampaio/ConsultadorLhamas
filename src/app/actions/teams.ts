@@ -152,7 +152,7 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
     try {
         // Security check: ensure the requesting user is actually the manager of this team.
         const teamDoc = await firestore.collection('teams').doc(teamId).get();
-        if (!teamDoc.exists || teamDoc.data()?.managerId !== managerId) {
+        if (!teamDoc.exists() || teamDoc.data()?.managerId !== managerId) {
             return { success: false, error: "Você não tem permissão para ver os membros desta equipe." };
         }
         

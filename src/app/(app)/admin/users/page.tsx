@@ -11,7 +11,7 @@ import { updateUserStatus, getUsers, exportUsersToExcel, updateUserPermissions, 
 import { useToast } from "@/hooks/use-toast";
 import { Check, X, Pencil, UserX, UserCheck, Download, Loader2, Trash2 } from "lucide-react";
 import type { UserProfile, UserPermissions } from "@/app/actions/users";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -71,7 +71,7 @@ export default function AdminUsersPage() {
     const [newPermissions, setNewPermissions] = useState<UserPermissions>({});
 
 
-    const fetchUsers = async () => {
+    const fetchUsers = useCallback(async () => {
         setIsLoading(true);
         const { users: fetchedUsers, error } = await getUsers();
         if (error) {
@@ -86,11 +86,11 @@ export default function AdminUsersPage() {
             setUsers(fetchedUsers?.filter(u => u.email) || []);
         }
         setIsLoading(false);
-    };
+    }, [toast]);
 
     useEffect(() => {
         fetchUsers();
-    }, []);
+    }, [fetchUsers]);
 
     const handleStatusChange = async (uid: string, status: UserStatus) => {
         setUpdatingId(uid);
