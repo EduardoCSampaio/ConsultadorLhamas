@@ -306,9 +306,9 @@ const combineUserData = async (userRecord: UserRecord, firestore: FirebaseFirest
 
 export async function getUsers(): Promise<{users: UserProfile[] | null, error?: string}> {
     try {
-        initializeFirebaseAdmin();
-        const auth = getAuth();
-        const firestore = getFirestore();
+        const app = initializeFirebaseAdmin();
+        const auth = getAuth(app);
+        const firestore = getFirestore(app);
         
         const listUsersResult = await auth.listUsers();
         const authUsers = listUsersResult.users;
