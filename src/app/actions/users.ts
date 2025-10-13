@@ -314,9 +314,12 @@ export async function getUsers(): Promise<{users: UserProfile[] | null, error?: 
         const authUsers = listUsersResult.users;
 
         const userPromises = authUsers.map(userRecord => combineUserData(userRecord, firestore));
-        const users = await Promise.all(userPromises);
+        
+        // This was the source of the error. 'a' was being used implicitly before being declared by the filter.
+        // By filtering for nulls first, we ensure we have a clean array of UserProfile objects before sorting.
+        const usersWithNulls = await Promise.all(userPromises);
+        const validUsers = usersWithNulls.filter((user): user is UserProfile => user !== null);
 
-        const validUsers = users.filter((user): user is UserProfile => user !== null);
         validUsers.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
         return { users: validUsers };
