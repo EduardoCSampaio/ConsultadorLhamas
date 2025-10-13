@@ -156,7 +156,8 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
             return { success: false, error: "Equipe não encontrada." };
         }
         
-        if (teamDoc.data()?.managerId !== managerId) {
+        const teamData = teamDoc.data();
+        if (teamData?.managerId !== managerId) {
             return { success: false, error: "Você não tem permissão para ver os membros desta equipe." };
         }
         
