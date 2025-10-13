@@ -1,5 +1,4 @@
 
-
 import { initializeApp, getApps, App, cert, ServiceAccount } from 'firebase-admin/app';
 
 // This will hold the initialized app instance.
