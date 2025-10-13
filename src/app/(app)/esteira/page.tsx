@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Download, RefreshCw, AlertCircle, Inbox, Trash2, Play, Timer, CheckCircle } from 'lucide-react';
+import { Loader2, Download, RefreshCw, AlertCircle, Inbox, Trash2, Play, Timer, CheckCircle, FileText, Briefcase } from 'lucide-react';
 import { getBatches, deleteBatch, type BatchJob, gerarRelatorioLote, reprocessarLoteComErro } from '@/app/actions/batch';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -220,7 +220,7 @@ export default function EsteiraPage() {
                                 Nenhum Lote na Esteira
                             </h3>
                             <div className="text-sm text-muted-foreground">
-                               Envie um lote na página de <Link href="/fgts" className="text-primary underline">Consulta FGTS</Link> para começar.
+                               Envie um lote nas páginas de consulta em lote para começar.
                             </div>
                         </div>
                     </CardContent>
@@ -232,7 +232,10 @@ export default function EsteiraPage() {
                             <CardContent className="p-4 space-y-3">
                                 <div className="flex justify-between items-start">
                                     <div>
-                                        <h3 className="font-semibold">{batch.fileName} ({batch.provider.toUpperCase()})</h3>
+                                        <div className='flex items-center gap-2 mb-1'>
+                                            {batch.type === 'fgts' ? <FileText className='h-5 w-5 text-muted-foreground'/> : <Briefcase className='h-5 w-5 text-muted-foreground'/>}
+                                            <h3 className="font-semibold">{batch.fileName} ({batch.provider.toUpperCase()})</h3>
+                                        </div>
                                         <div className="text-sm text-muted-foreground">
                                             Enviado em: {new Date(batch.createdAt).toLocaleString('pt-BR')}
                                         </div>
@@ -313,5 +316,3 @@ export default function EsteiraPage() {
         </div>
     );
 }
-
-    

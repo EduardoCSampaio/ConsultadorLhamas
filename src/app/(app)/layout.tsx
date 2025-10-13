@@ -270,6 +270,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     <CollapsibleContent asChild>
                     <SidebarMenuSub>
                         <SidebarMenuItem>
+                          <SidebarMenuSubButton asChild isActive={pathname === '/clt/lote'}>
+                            <Link href="/clt/lote">
+                              <FileText className="mr-2"/>
+                              <span>Em Lote</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
                         <SidebarMenuSubButton asChild isActive={pathname === '/clt/v8'}>
                             <Link href="/clt/v8">
                             <span>V8</span>

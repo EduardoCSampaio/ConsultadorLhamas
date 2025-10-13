@@ -114,6 +114,14 @@
             "type": "string",
             "description": "Password for the Facta API integration (should be stored securely)."
         },
+        "c6_username": {
+            "type": "string",
+            "description": "Username for the C6 API integration."
+        },
+        "c6_password": {
+            "type": "string",
+            "description": "Password for the C6 API integration."
+        },
         "permissions": {
           "type": "object",
           "description": "Granular access control for different app features. For 'user' roles, these are determined by their team's sector.",
@@ -203,14 +211,15 @@
     },
     "BatchJob": {
         "title": "Batch Job",
-        "description": "Represents a batch processing job for FGTS queries.",
+        "description": "Represents a batch processing job for FGTS or CLT queries.",
         "type": "object",
         "properties": {
             "id": { "type": "string" },
             "userId": { "type": "string" },
             "fileName": { "type": "string" },
-            "provider": { "type": "string", "enum": ["v8", "facta"] },
-            "status": { "type": "string", "enum": ["processing", "completed", "error"] },
+            "type": { "type": "string", "enum": ["fgts", "clt"] },
+            "provider": { "type": "string", "enum": ["v8", "facta", "c6"] },
+            "status": { "type": "string", "enum": ["processing", "completed", "error", "pending"] },
             "totalCpfs": { "type": "number" },
             "processedCpfs": { "type": "number" },
             "message": { "type": "string" },
@@ -218,7 +227,7 @@
             "completedAt": { "type": "string", "format": "date-time", "description": "Timestamp indicating when the job finished (completed or errored)." },
             "cpfs": { "type": "array", "items": { "type": "string" } }
         },
-        "required": ["id", "userId", "provider", "status", "totalCpfs", "processedCpfs", "createdAt"]
+        "required": ["id", "userId", "type", "provider", "status", "totalCpfs", "processedCpfs", "createdAt"]
     },
      "FGTSBalance": {
         "title": "FGTS Balance",
@@ -507,5 +516,3 @@
     }
   }
 }
-
-    

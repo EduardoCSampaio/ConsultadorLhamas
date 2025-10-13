@@ -9,7 +9,7 @@ import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { type ApiCredentials, logActivity } from './users';
 import { createNotification } from './notifications';
 
-type Provider = "v8" | "facta";
+type Provider = "v8" | "facta" | "c6";
 type V8Provider = 'qi' | 'cartos' | 'bms';
 
 const processActionSchema = z.object({
@@ -20,6 +20,15 @@ const processActionSchema = z.object({
   fileName: z.string(),
   v8Provider: z.enum(['qi', 'cartos', 'bms']).optional(),
 });
+
+const processCltActionSchema = z.object({
+  cpfs: z.array(z.string()),
+  provider: z.enum(["v8", "facta", "c6"]),
+  userId: z.string(),
+  userEmail: z.string(),
+  fileName: z.string(),
+});
+
 
 const reportActionSchema = z.object({
   cpfs: z.array(z.string()),
@@ -45,7 +54,8 @@ const reprocessBatchSchema = z.object({
 export type BatchJob = {
     id: string;
     fileName: string;
-    provider: string; // 'V8DIGITAL' or 'facta'
+    type: 'fgts' | 'clt';
+    provider: string; // 'V8DIGITAL' or 'facta' or 'c6'
     v8Provider?: V8Provider; // 'qi', 'cartos', 'bms' if provider is 'V8DIGITAL'
     status: 'processing' | 'completed' | 'error' | 'pending';
     totalCpfs: number;
@@ -131,6 +141,7 @@ export async function getBatches(input?: { userId: string }): Promise<{ status: 
             return {
                 id: doc.id,
                 fileName: data.fileName,
+                type: data.type,
                 provider: data.provider,
                 v8Provider: data.v8Provider,
                 status: data.status,
@@ -288,6 +299,7 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
   
   const baseBatchData: Omit<BatchJob, 'id' | 'createdAt' | 'v8Provider'> & { createdAt: FieldValue } = {
       fileName: fileName,
+      type: 'fgts',
       provider: displayProvider,
       status: 'pending',
       totalCpfs: cpfs.length,
@@ -338,6 +350,79 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
     batch: serializableBatch
   };
 }
+
+
+export async function processarLoteClt(input: z.infer<typeof processCltActionSchema>): Promise<ProcessActionResult> {
+  const validation = processCltActionSchema.safeParse(input);
+
+  if (!validation.success) {
+    return { 
+        status: 'error', 
+        message: 'Dados de entrada inválidos.' 
+    };
+  }
+
+  const { cpfs, provider, userId, userEmail, fileName } = validation.data;
+  
+  initializeFirebaseAdmin();
+  const firestore = getFirestore();
+  
+  const displayProvider = provider === 'v8' ? 'V8' : provider.toUpperCase();
+  
+  const batchId = `batch-clt-${displayProvider}-${Date.now()}-${userId.substring(0, 5)}`;
+  const batchRef = firestore.collection('batches').doc(batchId);
+  
+  const batchData: Omit<BatchJob, 'id' | 'createdAt'> & { createdAt: FieldValue } = {
+      fileName: fileName,
+      type: 'clt',
+      provider: displayProvider,
+      status: 'pending',
+      totalCpfs: cpfs.length,
+      processedCpfs: 0,
+      cpfs: cpfs,
+      createdAt: FieldValue.serverTimestamp(),
+      userId: userId,
+      userEmail: userEmail,
+  };
+  
+  try {
+      await batchRef.set(batchData);
+
+      await logActivity({
+          userId: userId,
+          action: `Consulta CLT em Lote (Excel)`,
+          provider: displayProvider,
+          details: `Arquivo: ${fileName} (${cpfs.length} CPFs)`
+      });
+      
+      // TODO: Call background processing function for CLT here
+      // For now, we will just mark it as error as it's not implemented
+       await batchRef.update({
+        status: 'error',
+        message: 'Processamento de lote CLT ainda não implementado para este provedor.',
+        completedAt: FieldValue.serverTimestamp(),
+      });
+
+
+  } catch(error) {
+    const message = error instanceof Error ? error.message : "Erro ao iniciar o lote CLT no Firestore.";
+    console.error("Batch CLT init error:", message);
+    return { status: 'error', message };
+  }
+  
+  const serializableBatch: BatchJob = {
+    ...batchData,
+    id: batchId,
+    createdAt: new Date().toISOString(),
+  }
+
+  return {
+    status: 'success',
+    message: `Lote para ${displayProvider.toUpperCase()} criado.`,
+    batch: serializableBatch
+  };
+}
+
 
 async function processV8BatchInBackground(batchId: string) {
     console.log(`[Batch ${batchId}] Starting V8 background processing...`);
