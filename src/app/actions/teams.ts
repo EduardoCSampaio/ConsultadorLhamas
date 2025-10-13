@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { initializeFirebaseAdmin } from '@/firebase/server-init';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { logActivity } from './users';
-import type { UserPermissions } from './users';
+import type { UserPermissions, UserProfile } from './users';
 
 
 export type Team = {
@@ -25,6 +25,11 @@ const createTeamSchema = z.object({
   managerId: z.string().min(1, "ID do gerente é obrigatório."),
 });
 
+const getTeamMembersSchema = z.object({
+    teamId: z.string().min(1),
+    managerId: z.string().min(1),
+});
+
 const updateTeamSectorsSchema = z.object({
   teamId: z.string().min(1),
   sectors: z.record(z.object({
@@ -43,6 +48,12 @@ type CreateTeamResult = {
   message: string;
   team?: Team;
 };
+
+type GetTeamMembersResult = {
+    success: boolean;
+    members?: UserProfile[];
+    error?: string;
+}
 
 export async function createTeam(input: z.infer<typeof createTeamSchema>): Promise<CreateTeamResult> {
     const validation = createTeamSchema.safeParse(input);
@@ -116,6 +127,42 @@ export async function createTeam(input: z.infer<typeof createTeamSchema>): Promi
 }
 
 
+export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>): Promise<GetTeamMembersResult> {
+    const validation = getTeamMembersSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, error: "Dados de entrada inválidos." };
+    }
+    const { teamId, managerId } = validation.data;
+
+    try {
+        initializeFirebaseAdmin();
+        const firestore = getFirestore();
+
+        // Security check: ensure the requesting user is actually the manager of this team.
+        const teamDoc = await firestore.collection('teams').doc(teamId).get();
+        if (!teamDoc.exists || teamDoc.data()?.managerId !== managerId) {
+            return { success: false, error: "Você não tem permissão para ver os membros desta equipe." };
+        }
+        
+        const membersSnapshot = await firestore.collection('users').where('teamId', '==', teamId).get();
+        if (membersSnapshot.empty) {
+            return { success: true, members: [] };
+        }
+
+        const members = membersSnapshot.docs
+            .map(doc => doc.data() as UserProfile)
+            .filter(member => member.uid !== managerId); // Exclude the manager from their own list of members
+
+        return { success: true, members };
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Ocorreu um erro ao buscar os membros da equipe.";
+        console.error(`[getTeamMembers] Error:`, message);
+        return { success: false, error: message };
+    }
+}
+
+
 export async function updateTeamSectors(input: z.infer<typeof updateTeamSectorsSchema>): Promise<{success: boolean, message: string}> {
     const validation = updateTeamSectorsSchema.safeParse(input);
     if (!validation.success) {
@@ -130,9 +177,6 @@ export async function updateTeamSectors(input: z.infer<typeof updateTeamSectorsS
         const teamRef = firestore.collection('teams').doc(teamId);
 
         await teamRef.update({ sectors });
-
-        // Optional: Add logging for this action
-        // await logActivity({ ... });
 
         return { success: true, message: "Setores da equipe atualizados com sucesso." };
     } catch(error) {

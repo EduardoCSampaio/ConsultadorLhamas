@@ -11,7 +11,7 @@ import { useUser, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
 import { collection, query, where, doc, getDocs, getDoc } from 'firebase/firestore';
 import type { UserProfile, UserPermissions } from '@/app/actions/users';
 import { updateUserStatus } from '@/app/actions/users';
-import { updateTeamSectors } from '@/app/actions/teams';
+import { updateTeamSectors, getTeamMembers } from '@/app/actions/teams';
 import { Copy, Users, Check, X, UserX, UserCheck, Pencil, Trash2, Plus, Save, Loader2, Settings } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Team } from '@/app/actions/teams';
@@ -102,7 +102,6 @@ export default function MyTeamPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [updatingId, setUpdatingId] = useState<string | null>(null);
     
-    // State for managing sectors
     const [isSavingSectors, setIsSavingSectors] = useState(false);
     const [isSectorModalOpen, setIsSectorModalOpen] = useState(false);
     const [currentSector, setCurrentSector] = useState<{name: string, permissions: UserPermissions, isManager?: boolean} | null>(null);
@@ -125,21 +124,26 @@ export default function MyTeamPage() {
             // Fetch team document
             const teamDoc = await getDoc(doc(firestore, 'teams', id));
             if (teamDoc.exists()) {
-                setTeam(teamDoc.data() as Team);
+                const teamData = teamDoc.data() as Team;
+                setTeam({ ...teamData, id: teamDoc.id });
             } else {
                  toast({ variant: 'destructive', title: 'Erro ao buscar time', description: 'Time não encontrado.' });
                  setTeam(null);
+                 setIsLoading(false);
+                 return;
             }
 
-            // Fetch team members
-            const membersQuery = query(collection(firestore, 'users'), where('teamId', '==', id));
-            const querySnapshot = await getDocs(membersQuery);
-            const members = querySnapshot.docs.map(doc => doc.data() as UserProfile);
-            setTeamMembers(members.filter(member => member.uid !== manager.uid));
+            // Fetch team members using server action
+            const { members, error } = await getTeamMembers({ teamId: id, managerId: manager.uid });
+            if (error) {
+                throw new Error(error);
+            }
+            setTeamMembers(members || []);
+
         } catch (error) {
             console.error("Error fetching team data:", error);
             const message = error instanceof Error ? error.message : 'Ocorreu um erro inesperado.'
-             if (message.includes('permission-denied')) {
+             if (message.includes('permission-denied') || message.includes('Missing or insufficient permissions')) {
                  toast({ variant: 'destructive', title: 'Erro de Permissão', description: 'Você não tem permissão para ver os membros da equipe.' });
             } else {
                  toast({ variant: 'destructive', title: 'Erro ao buscar dados da equipe', description: message });
@@ -150,9 +154,8 @@ export default function MyTeamPage() {
     }, [firestore, manager, toast]);
 
     useEffect(() => {
-        if (isManagerProfileLoading) return;
+        if (isManagerProfileLoading || isManagerAuthLoading) return;
 
-        // If the user is an admin, they don't have a team, so we stop loading.
         if (managerProfile?.role === 'super_admin') {
             setIsLoading(false);
             return;
@@ -160,10 +163,11 @@ export default function MyTeamPage() {
 
         if (teamId) {
             fetchTeamData(teamId);
-        } else {
+        } else if (!isManagerProfileLoading && managerProfile) {
             setIsLoading(false);
         }
-    }, [teamId, managerProfile, isManagerProfileLoading, fetchTeamData]);
+    }, [teamId, managerProfile, isManagerProfileLoading, isManagerAuthLoading, fetchTeamData]);
+
 
     const handleStatusChange = async (uid: string, status: UserStatus) => {
         setUpdatingId(uid);
