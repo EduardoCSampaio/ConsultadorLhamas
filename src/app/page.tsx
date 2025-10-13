@@ -69,10 +69,10 @@ export default function LoginPage() {
           role: isSuperAdmin ? 'super_admin' : 'user',
           status: isSuperAdmin ? 'active' : 'pending',
           createdAt: serverTimestamp(),
-          permissions: { 
-              canViewFGTS: isSuperAdmin,
-              canViewCLT: isSuperAdmin,
-              canViewINSS: isSuperAdmin,
+          permissions: {
+            canViewFGTS: isSuperAdmin,
+            canViewCLT: isSuperAdmin,
+            canViewINSS: isSuperAdmin,
           }
         };
 
@@ -99,10 +99,9 @@ export default function LoginPage() {
         const loggedInUser = userCredential.user;
         
         if (loggedInUser.email === 'admin@lhamascred.com.br') {
-            // Ensure the super_admin claim is set on the backend.
             await setAdminClaim({ uid: loggedInUser.uid });
-
-            // **THE CRITICAL FIX**: Force-update the user's role in Firestore to 'super_admin' on every login.
+            
+            // Force-update the user's role in Firestore to 'super_admin' on every login.
             // This corrects any accidental data corruption and ensures privileges are recognized.
             const userDocRef = doc(firestore, "users", loggedInUser.uid);
             await updateDoc(userDocRef, {
@@ -111,7 +110,7 @@ export default function LoginPage() {
             });
         }
         
-        await getIdTokenResult(loggedInUser, true);
+        await getIdTokenResult(loggedInUser, true); // Force token refresh to get new claims
         router.push('/dashboard');
       }
     } catch (err) {
