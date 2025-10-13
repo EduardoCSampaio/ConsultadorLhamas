@@ -1,74 +1,75 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Regras de Admin: Admins podem ler e escrever em qualquer lugar.
-    match /{document=**} {
-      allow read, write: if request.auth.token.admin == true;
-    }
-    
+  
+    // Regras para perfis de usuário
     match /users/{userId} {
-      // PERMISSÃO DE LEITURA (GET):
-      // 1. Admins podem ler qualquer perfil.
-      // 2. Um usuário pode ler seu próprio perfil.
-      // 3. Um usuário pode ler o perfil de outro se ambos pertencerem ao mesmo time (e o time não for nulo).
+      // Admins podem ler qualquer perfil. Usuários podem ler seu próprio perfil ou perfis de colegas de equipe.
       allow get: if request.auth.token.admin == true || request.auth.uid == userId ||
-                  (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teamId != null &&
+                 (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teamId != null &&
                   get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teamId == resource.data.teamId);
+                  
+      // Admins podem listar todos os usuários. Gerentes podem listar usuários de sua equipe.
+      allow list: if request.auth.token.admin == true || 
+                   (request.auth.uid != null && request.query.where[0][1] == "teamId" && request.query.where[0][2] == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teamId);
 
-      // PERMISSÃO DE ESCRITA (CREATE, UPDATE, DELETE):
-      // 1. Admins podem escrever em qualquer perfil.
-      // 2. Um usuário pode atualizar seu próprio perfil.
-      // 3. Um gerente pode atualizar o perfil de um usuário se for o gerente da equipe desse usuário.
-      allow write: if request.auth.token.admin == true || request.auth.uid == userId ||
-                  (resource.data.teamId != null && 
-                   request.auth.uid == get(/databases/$(database)/documents/teams/$(resource.data.teamId)).data.managerId);
+      // Usuários podem atualizar seu próprio perfil. Admins podem atualizar qualquer perfil.
+      // Gerentes podem atualizar perfis de membros de sua equipe.
+      allow update: if request.auth.token.admin == true || request.auth.uid == userId ||
+                  (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teamId != null &&
+                   get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teamId == resource.data.teamId);
 
-      // Qualquer usuário autenticado pode se criar (no cadastro inicial).
       allow create: if request.auth.uid != null;
-      
-      // Regras para a subcoleção de notificações
+      allow delete: if request.auth.token.admin == true;
+
+      // Subcoleção de notificações
       match /notifications/{notificationId} {
-        // Permite que um usuário leia e escreva seus próprios documentos de notificação
         allow read, write, delete: if request.auth.uid == userId;
       }
-      // Permite que um usuário liste sua própria coleção de notificações
-      allow list: if request.auth.uid == userId;
     }
 
+    // Regras para Webhooks
+    match /webhookResponses/{responseId} {
+      allow read, write, create: if true; // Aberto para receber webhooks
+    }
+
+    // Regras para Times
     match /teams/{teamId} {
-      // Permite que o gerente da equipe leia ou atualize o documento da equipe.
-      allow read, write: if request.auth.uid == resource.data.managerId;
+      // Membros da equipe podem ler os dados da equipe. Apenas o gerente pode escrever.
+      allow read: if request.auth.uid == resource.data.managerId || exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teamId == teamId;
+      allow write: if request.auth.uid == resource.data.managerId;
     }
 
+    // Regras para Logs de Atividade
     match /activityLogs/{logId} {
-      // Apenas administradores podem ler os logs. A escrita é feita via server-side (actions).
-      allow read: if request.auth.token.admin == true;
-      allow write: if false; // Ninguém pode escrever diretamente, só via actions.
+      // Apenas administradores podem ler todos os logs. A criação é feita via server-side.
+      allow read, list: if request.auth.token.admin == true;
+      allow create: if true; // Ação de servidor
     }
     
+    // Regras para Lotes (Batches)
     match /batches/{batchId} {
-      // Usuários só podem ler/escrever em seus próprios lotes.
-      allow read, delete: if request.auth.uid == resource.data.userId;
-      // Escrita é feita via actions.
-      allow write: if false;
-    }
-    
-    match /tickets/{ticketId} {
-      // Admins podem ler qualquer ticket. Usuários podem ler seus próprios tickets.
+      // Usuários podem ler e escrever em seus próprios lotes. Admins podem ler todos.
       allow read, write: if request.auth.token.admin == true || request.auth.uid == resource.data.userId;
-      
+    }
+
+    // Regras para Chamados de Suporte
+    match /tickets/{ticketId} {
+      // Admins podem ler/escrever. Usuários podem ler/escrever seus próprios chamados.
+      allow read, write: if request.auth.token.admin == true || (resource.data.userId != null && request.auth.uid == resource.data.userId);
+
+      // Regras para as mensagens dentro de um chamado
       match /messages/{messageId} {
-        // As mesmas regras do ticket pai se aplicam às mensagens.
-         allow read, write: if request.auth.token.admin == true || request.auth.uid == get(/databases/$(database)/documents/tickets/$(ticketId)).data.userId;
+        // As mesmas permissões do chamado pai se aplicam aqui.
+        allow read, write, create: if request.auth.token.admin == true || (exists(/databases/$(database)/documents/tickets/$(ticketId)) && get(/databases/$(database)/documents/tickets/$(ticketId)).data.userId == request.auth.uid);
       }
     }
-    
-    // Ninguém pode ler a coleção de respostas do webhook diretamente, apenas via server actions.
-    match /webhookResponses/{responseId} {
-        allow read, write: if false;
-    }
 
+    // Coleção interna para contadores (ex: número do chamado)
+    match /internal/{docId} {
+      allow read, write: if request.auth.token.admin == true; // Apenas admins ou funções de servidor
+    }
   }
 }
