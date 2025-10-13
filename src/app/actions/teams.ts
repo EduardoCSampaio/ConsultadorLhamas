@@ -151,10 +151,8 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
 
     try {
         const teamDoc = await firestore.collection('teams').doc(teamId).get();
-        const teamData = teamDoc.data();
 
-        // Correct check using exists() as a function
-        if (!teamDoc.exists() || teamData?.managerId !== managerId) {
+        if (!teamDoc.exists() || teamDoc.data()?.managerId !== managerId) {
             return { success: false, error: "Equipe não encontrada ou você não tem permissão para vê-la." };
         }
         
@@ -251,3 +249,6 @@ export async function updateTeamSectors(input: z.infer<typeof updateTeamSectorsS
         return { success: false, message };
     }
 }
+
+
+    
