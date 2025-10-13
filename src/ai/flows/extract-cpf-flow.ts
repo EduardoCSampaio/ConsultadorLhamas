@@ -1,7 +1,7 @@
 
 'use server';
 /**
- * @fileOverview Um fluxo de IA para extrair um número de CPF de uma imagem.
+ * @fileOverview Um fluxo de IA para extrair um ou mais números de CPF de uma imagem.
  *
  * - extractCpfFromImage - Uma função que executa o fluxo de extração.
  * - ExtractCpfInput - O tipo de entrada para a função.
@@ -21,7 +21,7 @@ const ExtractCpfInputSchema = z.object({
 export type ExtractCpfInput = z.infer<typeof ExtractCpfInputSchema>;
 
 const ExtractCpfOutputSchema = z.object({
-  cpf: z.string().nullable().describe('O número do CPF extraído da imagem, formatado como XXX.XXX.XXX-XX, ou nulo se nenhum for encontrado.'),
+  cpfs: z.array(z.string()).describe('Uma lista de todos os números de CPF extraídos da imagem, cada um formatado como XXX.XXX.XXX-XX.'),
 });
 export type ExtractCpfOutput = z.infer<typeof ExtractCpfOutputSchema>;
 
@@ -35,7 +35,7 @@ const prompt = ai.definePrompt({
   name: 'extractCpfPrompt',
   input: { schema: ExtractCpfInputSchema },
   output: { schema: ExtractCpfOutputSchema },
-  prompt: `Analise a imagem fornecida. Encontre o número do CPF. Retorne o número formatado como XXX.XXX.XXX-XX. Se nenhum CPF for encontrado, retorne nulo para o campo cpf.
+  prompt: `Analise a imagem fornecida. Encontre todos os números de CPF. Retorne uma lista de todos os números de CPF encontrados, cada um formatado como XXX.XXX.XXX-XX. Se nenhum CPF for encontrado, retorne uma lista vazia para o campo cpfs.
 
 Imagem: {{media url=photoDataUri}}`,
 });

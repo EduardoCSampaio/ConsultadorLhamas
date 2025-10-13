@@ -132,8 +132,9 @@ export default function ExtractCpfPage() {
 function ResultCard({ fileName, preview, result, error, isLoading }: ExtractionResult) {
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const handleCopy = (cpfs: string[]) => {
+    if (cpfs.length === 0) return;
+    navigator.clipboard.writeText(cpfs.join('\n'));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -161,21 +162,30 @@ function ResultCard({ fileName, preview, result, error, isLoading }: ExtractionR
           {error && <Alert variant="destructive" className="text-xs">{error}</Alert>}
           {result && (
             <div>
-              {result.cpf ? (
-                <div className="flex items-center justify-between gap-2">
-                  <p className="font-mono text-lg">{result.cpf}</p>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => handleCopy(result.cpf!)}
-                    className="h-8 w-8"
-                  >
-                    {copied ? (
-                      <Check className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
+              {result.cpfs && result.cpfs.length > 0 ? (
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium">{result.cpfs.length} CPF(s) encontrado(s)</p>
+                         <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => handleCopy(result.cpfs!)}
+                            className="h-8 w-8"
+                          >
+                            {copied ? (
+                              <Check className="h-4 w-4 text-green-500" />
+                            ) : (
+                              <Copy className="h-4 w-4" />
+                            )}
+                          </Button>
+                    </div>
+                  <div className="border rounded-md p-3 max-h-40 overflow-y-auto">
+                    <ul className="space-y-1">
+                        {result.cpfs.map((cpf, i) => (
+                            <li key={i} className="font-mono text-sm">{cpf}</li>
+                        ))}
+                    </ul>
+                  </div>
                 </div>
               ) : (
                 <p className="text-muted-foreground">Nenhum CPF encontrado na imagem.</p>
