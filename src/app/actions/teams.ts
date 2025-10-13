@@ -150,9 +150,13 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
     const { teamId, managerId } = validation.data;
 
     try {
-        // Security check: ensure the requesting user is actually the manager of this team.
         const teamDoc = await firestore.collection('teams').doc(teamId).get();
-        if (!teamDoc.exists() || teamDoc.data()?.managerId !== managerId) {
+
+        if (!teamDoc.exists()) {
+            return { success: false, error: "Equipe não encontrada." };
+        }
+        
+        if (teamDoc.data()?.managerId !== managerId) {
             return { success: false, error: "Você não tem permissão para ver os membros desta equipe." };
         }
         
@@ -200,7 +204,6 @@ export async function getTeamAndManager(input: z.infer<typeof getTeamAndManagerS
              return { success: false, error: "Dados do gerente do time não encontrados." };
         }
         
-        // Convert Timestamp to ISO string for serialization
         const createdAt = teamData.createdAt;
         let serializableCreatedAt = new Date().toISOString();
         if (createdAt instanceof Timestamp) {
