@@ -115,7 +115,11 @@ export default function MyTeamPage() {
             setTeamMembers(members.filter(member => member.uid !== manager?.uid));
         } catch (error) {
             console.error("Error fetching team data:", error);
-            toast({ variant: 'destructive', title: 'Erro ao buscar dados da equipe', description: 'Ocorreu um erro inesperado.' });
+            if (error instanceof Error && error.message.includes('permission-denied')) {
+                 toast({ variant: 'destructive', title: 'Erro de Permissão', description: 'Você não tem permissão para ver os membros da equipe.' });
+            } else {
+                 toast({ variant: 'destructive', title: 'Erro ao buscar dados da equipe', description: 'Ocorreu um erro inesperado.' });
+            }
         } finally {
             setIsLoading(false);
         }
@@ -374,7 +378,7 @@ export default function MyTeamPage() {
                                                 <TableCell><Skeleton className="h-5 w-40" /></TableCell>
                                                 <TableCell><Skeleton className="h-6 w-20" /></TableCell>
                                                 <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                                                <TableCell className="text-right"><Skeleton className="h-8 w-24" /></TableCell>
+                                                <TableCell className="text-right"><Skeleton className="h-8 w-48 ml-auto" /></TableCell>
                                             </TableRow>
                                         ))
                                     ) : teamMembers && teamMembers.length > 0 ? (
@@ -504,3 +508,5 @@ export default function MyTeamPage() {
         </>
     );
 }
+
+    
