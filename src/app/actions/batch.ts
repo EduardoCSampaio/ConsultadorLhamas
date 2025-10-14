@@ -172,7 +172,7 @@ async function processFactaBatchInBackground(batchId: string) {
 
     try {
         const batchDoc = await batchRef.get();
-        if (!batchDoc.exists()) throw new Error(`Lote ${batchId} não encontrado.`);
+        if (!batchDoc.exists) throw new Error(`Lote ${batchId} não encontrado.`);
         
         batchData = batchDoc.data() as BatchJob;
         
@@ -184,7 +184,7 @@ async function processFactaBatchInBackground(batchId: string) {
         await batchRef.update({ status: 'processing', message: 'Iniciando processamento...' });
         
         const userDoc = await firestore.collection('users').doc(batchData.userId).get();
-        if (!userDoc.exists()) throw new Error("Usuário do lote não encontrado.");
+        if (!userDoc.exists) throw new Error("Usuário do lote não encontrado.");
         const userCredentials = userDoc.data() as ApiCredentials;
         const { token, error: tokenError } = await getFactaAuthToken(userCredentials.facta_username, userCredentials.facta_password);
         if (tokenError || !token) throw new Error(tokenError || "Falha ao obter token da Facta.");
@@ -419,7 +419,7 @@ async function processV8BatchInBackground(batchId: string) {
 
     try {
         const batchDoc = await batchRef.get();
-        if (!batchDoc.exists()) throw new Error(`Lote ${batchId} não encontrado.`);
+        if (!batchDoc.exists) throw new Error(`Lote ${batchId} não encontrado.`);
 
         batchData = batchDoc.data() as BatchJob;
         await batchRef.update({ status: 'processing', message: 'Enviando solicitações para a V8...' });
@@ -431,7 +431,7 @@ async function processV8BatchInBackground(batchId: string) {
         }
 
         const userDoc = await firestore.collection('users').doc(userId).get();
-        if (!userDoc.exists()) throw new Error(`User with ID ${userId} not found.`);
+        if (!userDoc.exists) throw new Error(`User with ID ${userId} not found.`);
         const userCredentials = userDoc.data() as ApiCredentials;
         
         const { token: authToken, error: authError } = await getV8AuthToken(userCredentials);
@@ -480,7 +480,7 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
         const originalBatchRef = firestore.collection('batches').doc(batchId);
         const originalBatchDoc = await originalBatchRef.get();
 
-        if (!originalBatchDoc.exists()) {
+        if (!originalBatchDoc.exists) {
             return { status: 'error', message: 'Lote original não encontrado.' };
         }
 
@@ -579,7 +579,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
             const docRef = firestore.collection('webhookResponses').doc(docId);
             const docSnap = await docRef.get();
 
-            if (docSnap.exists()) {
+            if (docSnap.exists) {
                 const data = docSnap.data();
                 const responseBody = data?.responseBody;
                 
