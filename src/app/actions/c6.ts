@@ -59,7 +59,7 @@ async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiC
     }
     try {
         const userDoc = await firestore.collection('users').doc(userId).get();
-        if (!userDoc.exists) {
+        if (!userDoc.exists()) {
             return { credentials: null, error: 'Usuário não encontrado.' };
         }
         const userData = userDoc.data()!;
@@ -209,7 +209,7 @@ export async function consultarOfertasCLTC6(input: z.infer<typeof getOffersSchem
 
     await logActivity({ userId, action: 'Consulta Ofertas CLT C6', provider: 'c6', documentNumber: cpf });
 
-    const apiUrl = 'https://marketplace-proposal-service-api-p.c6bank.info/marketplace/worker-payroll-loan-offers';
+    const apiUrl = 'https://marketplace-proposal-service-api-p.c6bank.info/marketplace/workerpayroll-loan-offers';
 
     try {
         const response = await fetch(apiUrl, {
@@ -226,10 +226,15 @@ export async function consultarOfertasCLTC6(input: z.infer<typeof getOffersSchem
             const textResponse = await response.text();
              // Check if the response is likely JSON or just plain text like "Not found"
             if (textResponse.startsWith('{') || textResponse.startsWith('[')) {
-                const data = JSON.parse(textResponse);
-                const errorMessage = data.message || data.error_description || JSON.stringify(data);
-                 console.error('[C6 API Error - Get Offers]', errorMessage);
-                return { success: false, message: `Erro da API do C6: ${errorMessage}` };
+                try {
+                    const data = JSON.parse(textResponse);
+                    const errorMessage = data.message || data.error_description || JSON.stringify(data);
+                    console.error('[C6 API Error - Get Offers]', errorMessage);
+                    return { success: false, message: `Erro da API do C6: ${errorMessage}` };
+                } catch(e) {
+                     console.error('[C6 API Error - Get Offers]', textResponse);
+                    return { success: false, message: `Erro da API do C6: ${textResponse}` };
+                }
             } else {
                  console.error('[C6 API Error - Get Offers]', textResponse);
                 return { success: false, message: `Erro da API do C6: ${textResponse}` };
@@ -254,3 +259,5 @@ export async function consultarOfertasCLTC6(input: z.infer<typeof getOffersSchem
         return { success: false, message };
     }
 }
+
+    
