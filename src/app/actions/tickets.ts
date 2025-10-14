@@ -193,7 +193,7 @@ export async function getTicketsForUser(input: z.infer<typeof getTicketsSchema>)
         }
         
         const userData = userDoc.data();
-        const isAdmin = userData?.role === 'super_admin' || userData?.role === 'admin';
+        const isAdmin = userData?.role === 'super_admin' || userData?.role === 'manager';
 
         let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> = firestore.collection('tickets');
 
@@ -357,7 +357,7 @@ export async function markTicketAsRead(input: z.infer<typeof markAsReadSchema>):
         if (!userDoc.exists()) return { success: false, message: "Usuário não encontrado." };
 
         const userData = userDoc.data();
-        const isAdmin = userData?.role === 'super_admin' || userData?.role === 'admin';
+        const isAdmin = userData?.role === 'super_admin' || userData?.role === 'manager';
         const ticketData = ticketDoc.data();
         
         let updateData = {};
