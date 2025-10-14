@@ -36,7 +36,7 @@ async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiC
     }
     try {
         const userDoc = await firestore.collection('users').doc(userId).get();
-        if (!userDoc.exists || !userDoc.data()) {
+        if (!userDoc.exists) {
             return { credentials: null, error: 'Usuário não encontrado.' };
         }
         const userData = userDoc.data()!;
@@ -47,8 +47,8 @@ async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiC
 
         if (!credentials.c6_username || !credentials.c6_password) {
             const missing = [
-                !credentials.c6_username && "Username",
-                !credentials.c6_password && "Password",
+                !credentials.c6_username && "Client ID",
+                !credentials.c6_password && "Client Secret",
             ].filter(Boolean).join(', ');
             return { credentials: null, error: `Credenciais do C6 incompletas. Faltando: ${missing}. Por favor, configure-as na página de Configurações.` };
         }
@@ -62,15 +62,16 @@ async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiC
 }
 
 
-export async function getC6AuthToken(username?: string, password?: string): Promise<{ token: string | undefined; error: string | null }> {
-  if (!username || !password) {
-      return { token: undefined, error: "Credenciais do C6 (usuário/senha) não fornecidas." };
+export async function getC6AuthToken(clientId?: string, clientSecret?: string): Promise<{ token: string | undefined; error: string | null }> {
+  if (!clientId || !clientSecret) {
+      return { token: undefined, error: "Credenciais do C6 (Client ID/Client Secret) não fornecidas." };
   }
   
   const tokenUrl = 'https://marketplace-proposal-service-api-p.c6bank.info/auth/token';
   const bodyPayload = new URLSearchParams({
-    username: username,
-    password: password,
+    grant_type: 'client_credentials',
+    client_id: clientId,
+    client_secret: clientSecret,
   });
 
   try {
