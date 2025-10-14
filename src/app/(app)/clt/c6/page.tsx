@@ -17,12 +17,13 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, AlertCircle, ExternalLink, Wallet, CircleDashed, CheckCircle, Clock } from "lucide-react";
+import { Loader2, AlertCircle, ExternalLink, Wallet, CircleDashed, CheckCircle, Clock, Link as LinkIcon, Search } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { useUser } from "@/firebase";
 import { consultarLinkAutorizacaoC6, consultarOfertasCLTC6, verificarStatusAutorizacaoC6, type C6LinkResponse, type C6Offer, type C6AuthStatus } from "@/app/actions/c6";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
 
 const handleDateMask = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.replace(/\D/g, '');
@@ -59,19 +60,17 @@ const formatCurrency = (value: string | number | undefined | null) => {
 
 export default function C6Page() {
   const { user } = useUser();
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [linkResult, setLinkResult] = useState<C6LinkResponse | null>(null);
+  const { toast } = useToast();
 
-  const [isOfferLoading, setIsOfferLoading] = useState(false);
-  const [offerError, setOfferError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<'link' | 'status' | 'offers' | false>(false);
+  
+  const [generalError, setGeneralError] = useState<string | null>(null);
+
+  const [linkResult, setLinkResult] = useState<C6LinkResponse | null>(null);
   const [offerResult, setOfferResult] = useState<C6Offer[] | null>(null);
   const [noOffersMessage, setNoOffersMessage] = useState<string | null>(null);
-  
-  const [isStatusLoading, setIsStatusLoading] = useState(false);
   const [statusResult, setStatusResult] = useState<C6AuthStatus | null>(null);
-  const [statusError, setStatusError] = useState<string | null>(null);
-
+  
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -85,88 +84,56 @@ export default function C6Page() {
       }
     },
   });
-
-  async function onLinkSubmit(values: z.infer<typeof formSchema>) {
-    if (!user) {
-      setError("Você precisa estar logado para realizar uma consulta.");
-      return;
-    }
-    
-    setIsLoading(true);
-    setError(null);
+  
+  const clearResults = () => {
     setLinkResult(null);
     setOfferResult(null);
-    setOfferError(null);
     setNoOffersMessage(null);
     setStatusResult(null);
-    setStatusError(null);
+    setGeneralError(null);
+  }
 
-    const response = await consultarLinkAutorizacaoC6({ ...values, userId: user.uid });
+  async function onActionSubmit(action: 'link' | 'status' | 'offers') {
+    if (!user) {
+      setGeneralError("Você precisa estar logado para realizar uma consulta.");
+      return;
+    }
+    const values = form.getValues();
+    const validation = form.trigger(); // Manually trigger validation
+    if (!await validation) return;
 
-    if (response.success && response.data) {
-        setLinkResult(response.data);
-    } else {
-      setError(response.message);
+    setIsLoading(action);
+    clearResults();
+
+    if (action === 'link') {
+        const response = await consultarLinkAutorizacaoC6({ ...values, userId: user.uid });
+        if (response.success && response.data) {
+            setLinkResult(response.data);
+            toast({ title: "Link de autorização gerado!" });
+        } else {
+            setGeneralError(response.message);
+        }
+    } else if (action === 'status') {
+        const response = await verificarStatusAutorizacaoC6({ cpf: values.cpf, userId: user.uid });
+        if(response.success && response.data) {
+            setStatusResult(response.data);
+        } else {
+            setGeneralError(response.message);
+        }
+    } else if (action === 'offers') {
+        const response = await consultarOfertasCLTC6({ cpf: values.cpf, userId: user.uid });
+        if (response.success) {
+            if (response.data && response.data.length > 0) {
+                setOfferResult(response.data);
+            } else {
+                setNoOffersMessage(response.message || "Nenhuma oferta encontrada para este cliente.");
+            }
+        } else {
+            setGeneralError(response.message);
+        }
     }
     
     setIsLoading(false);
-  }
-
-  async function onCheckStatus() {
-     if (!user) {
-      setStatusError("Você precisa estar logado para realizar uma consulta.");
-      return;
-    }
-    const cpf = form.getValues('cpf');
-    if (!cpf) {
-        setStatusError("CPF do cliente não encontrado para verificar o status.");
-        return;
-    }
-    
-    setIsStatusLoading(true);
-    setStatusResult(null);
-    setStatusError(null);
-    
-    const response = await verificarStatusAutorizacaoC6({ cpf, userId: user.uid });
-
-    if(response.success && response.data) {
-        setStatusResult(response.data);
-    } else {
-        setStatusError(response.message);
-    }
-
-    setIsStatusLoading(false);
-  }
-
-  async function onGetOffers() {
-     if (!user) {
-      setOfferError("Você precisa estar logado para realizar uma consulta.");
-      return;
-    }
-    const cpf = form.getValues('cpf');
-    if (!cpf) {
-        setOfferError("CPF do cliente não encontrado para buscar ofertas.");
-        return;
-    }
-
-    setIsOfferLoading(true);
-    setOfferError(null);
-    setOfferResult(null);
-    setNoOffersMessage(null);
-    
-    const response = await consultarOfertasCLTC6({ cpf, userId: user.uid });
-
-    if (response.success) {
-      if (response.data && response.data.length > 0) {
-        setOfferResult(response.data);
-      } else {
-        setNoOffersMessage(response.message || "Nenhuma oferta encontrada para este cliente.");
-      }
-    } else {
-      setOfferError(response.message);
-    }
-
-    setIsOfferLoading(false);
   }
 
 
@@ -174,16 +141,16 @@ export default function C6Page() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Crédito Privado CLT - C6"
-        description="Gere um link de autorização e consulte as ofertas de crédito para o cliente."
+        description="Gere um link de autorização, verifique o status ou consulte as ofertas de crédito para o cliente."
       />
       <Card>
         <CardHeader>
-            <CardTitle>1. Gerar Link de Autorização</CardTitle>
-            <CardDescription>Insira os dados do cliente para gerar o link que ele usará para autorizar a consulta.</CardDescription>
+            <CardTitle>Dados do Cliente</CardTitle>
+            <CardDescription>Insira os dados e escolha a ação desejada.</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onLinkSubmit)} className="space-y-6">
+            <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField
                         control={form.control}
@@ -192,7 +159,7 @@ export default function C6Page() {
                         <FormItem>
                             <FormLabel>Nome Completo</FormLabel>
                             <FormControl>
-                            <Input placeholder="Nome completo do cliente" {...field} disabled={isLoading}/>
+                            <Input placeholder="Nome completo do cliente" {...field} disabled={!!isLoading}/>
                             </FormControl>
                             <FormMessage />
                         </FormItem>
@@ -205,7 +172,7 @@ export default function C6Page() {
                         <FormItem>
                             <FormLabel>CPF do Cliente</FormLabel>
                             <FormControl>
-                            <Input placeholder="000.000.000-00" {...field} disabled={isLoading}/>
+                            <Input placeholder="000.000.000-00" {...field} disabled={!!isLoading}/>
                             </FormControl>
                             <FormMessage />
                         </FormItem>
@@ -225,62 +192,75 @@ export default function C6Page() {
                                 handleDateMask(e);
                                 field.onChange(e.target.value);
                               }}
-                              disabled={isLoading}
+                              disabled={!!isLoading}
                             />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-                     <FormField
-                        control={form.control}
-                        name="telefone.codigo_area"
-                        render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>DDD</FormLabel>
-                            <FormControl>
-                            <Input placeholder="11" {...field} disabled={isLoading} maxLength={2}/>
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                        )}
-                    />
-                     <FormField
-                        control={form.control}
-                        name="telefone.numero"
-                        render={({ field }) => (
-                        <FormItem className="md:col-span-2">
-                            <FormLabel>Número do Celular</FormLabel>
-                            <FormControl>
-                            <Input placeholder="997773344" {...field} disabled={isLoading}/>
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                        )}
-                    />
+                     <div className="flex gap-2">
+                        <FormField
+                            control={form.control}
+                            name="telefone.codigo_area"
+                            render={({ field }) => (
+                            <FormItem className="w-1/4">
+                                <FormLabel>DDD</FormLabel>
+                                <FormControl>
+                                <Input placeholder="11" {...field} disabled={!!isLoading} maxLength={2}/>
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="telefone.numero"
+                            render={({ field }) => (
+                            <FormItem className="flex-1">
+                                <FormLabel>Número do Celular</FormLabel>
+                                <FormControl>
+                                <Input placeholder="997773344" {...field} disabled={!!isLoading}/>
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                     </div>
                 </div>
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
-                {isLoading ? "Gerando..." : "Gerar Link"}
-              </Button>
+                 <Separator/>
+                <div className="flex flex-wrap gap-2">
+                    <Button type="button" onClick={() => onActionSubmit('link')} disabled={!!isLoading}>
+                        {isLoading === 'link' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LinkIcon className="mr-2 h-4 w-4" />}
+                        {isLoading === 'link' ? "Gerando..." : "Gerar Link"}
+                    </Button>
+                     <Button type="button" onClick={() => onActionSubmit('status')} disabled={!!isLoading} variant="outline">
+                        {isLoading === 'status' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Clock className="mr-2 h-4 w-4" />}
+                        {isLoading === 'status' ? "Verificando..." : "Verificar Status"}
+                    </Button>
+                    <Button type="button" onClick={() => onActionSubmit('offers')} disabled={!!isLoading}>
+                        {isLoading === 'offers' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wallet className="mr-2 h-4 w-4" />}
+                        {isLoading === 'offers' ? "Buscando..." : "Buscar Ofertas"}
+                    </Button>
+                </div>
             </form>
           </Form>
         </CardContent>
       </Card>
       
-      {error && (
+      {generalError && (
          <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Erro ao Gerar Link</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
+            <AlertTitle>Erro na Consulta</AlertTitle>
+            <AlertDescription>{generalError}</AlertDescription>
          </Alert>
       )}
       
       {linkResult && (
         <Card>
             <CardHeader>
-                <CardTitle>2. Link Gerado e Próximos Passos</CardTitle>
-                <CardDescription>Envie o link ao cliente. Após ele confirmar a autorização, verifique o status ou busque as ofertas.</CardDescription>
+                <CardTitle>Link de Autorização Gerado</CardTitle>
+                <CardDescription>Envie o link ao cliente. Após a confirmação, verifique o status ou busque as ofertas.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 <div className="flex items-center gap-2">
@@ -294,27 +274,8 @@ export default function C6Page() {
                 <p className="text-sm text-muted-foreground">
                     O link expira em: {new Date(linkResult.data_expiracao).toLocaleDateString('pt-BR')}
                 </p>
-                <Separator/>
-                <div className="flex flex-wrap gap-2">
-                    <Button onClick={onCheckStatus} disabled={isStatusLoading} variant="outline">
-                        {isStatusLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Clock className="mr-2 h-4 w-4" />}
-                        {isStatusLoading ? "Verificando..." : "Verificar Status"}
-                    </Button>
-                    <Button onClick={onGetOffers} disabled={isOfferLoading}>
-                        {isOfferLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wallet className="mr-2 h-4 w-4" />}
-                        {isOfferLoading ? "Buscando..." : "Buscar Ofertas"}
-                    </Button>
-                </div>
             </CardContent>
         </Card>
-      )}
-
-      {statusError && (
-          <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Erro ao Verificar Status</AlertTitle>
-              <AlertDescription>{statusError}</AlertDescription>
-          </Alert>
       )}
 
         {statusResult && (
@@ -323,15 +284,6 @@ export default function C6Page() {
               <AlertTitle>Status da Autorização: {statusResult.status.replace('_', ' ')}</AlertTitle>
               <AlertDescription>{statusResult.observacao}</AlertDescription>
           </Alert>
-      )}
-
-
-      {offerError && (
-         <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Erro ao Buscar Ofertas</AlertTitle>
-            <AlertDescription>{offerError}</AlertDescription>
-         </Alert>
       )}
 
        {noOffersMessage && (

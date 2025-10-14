@@ -235,7 +235,10 @@ export async function consultarOfertasCLTC6(input: z.infer<typeof getOffersSchem
         
         if (!response.ok) {
             const textResponse = await response.text();
-             // Check if the response is likely JSON or just plain text like "Not found"
+            if (response.status === 404) {
+                 return { success: false, message: `Erro da API do C6: Endpoint não encontrado (404). Verifique o URL da API.` };
+            }
+             // Check if the response is likely JSON or just plain text
             if (textResponse.startsWith('{') || textResponse.startsWith('[')) {
                 try {
                     const data = JSON.parse(textResponse);
@@ -292,16 +295,17 @@ export async function verificarStatusAutorizacaoC6(input: z.infer<typeof getOffe
 
     await logActivity({ userId, action: 'Verifica Status Autorização C6', provider: 'c6', documentNumber: cpf });
 
-    const apiUrl = `https://marketplace-proposal-service-api-p.c6bank.info/marketplace/authorization/status/${cpf.replace(/\D/g, '')}`;
+    const apiUrl = `https://marketplace-proposal-service-api-p.c6bank.info/marketplace/authorization/status`;
 
     try {
         const response = await fetch(apiUrl, {
-            method: 'GET',
+            method: 'POST',
             headers: {
                 'Accept': 'application/vnd.c6bank.authorization_status_v1+json',
                 'Content-Type': 'application/json',
                 'Authorization': `${token}`
-            }
+            },
+            body: JSON.stringify({ cpf: cpf.replace(/\D/g, '') })
         });
         
         const data = await response.json();
