@@ -122,7 +122,7 @@ type LogActivityInput = {
 export async function logActivity(input: LogActivityInput) {
     try {
         const userDoc = await firestore.collection('users').doc(input.userId).get();
-        if (!userDoc.exists) {
+        if (!userDoc.exists()) {
             console.error(`[logActivity] User with ID ${input.userId} not found.`);
             return;
         }
@@ -246,9 +246,9 @@ const combineUserData = async (userRecord: UserRecord, teamsMap: Map<string, str
 
     const userDocRef = firestore.collection('users').doc(userRecord.uid);
     const userDoc = await userDocRef.get();
-    let profileData = userDoc.data();
+    let profileData;
 
-    if (!profileData) {
+    if (!userDoc.exists()) {
         console.log(`User ${userRecord.email} found in Auth but not in Firestore. Creating profile...`);
         const isSuperAdmin = userRecord.email === 'admin@lhamascred.com.br';
         const newProfile = {
@@ -264,7 +264,17 @@ const combineUserData = async (userRecord: UserRecord, teamsMap: Map<string, str
             }
         };
         await userDocRef.set(newProfile);
-        profileData = newProfile;
+        // We need to re-fetch to get a consistent object with server timestamp resolved
+        const newUserDoc = await userDocRef.get();
+        profileData = newUserDoc.data();
+
+    } else {
+        profileData = userDoc.data();
+    }
+    
+    if (!profileData) {
+        // This case should ideally not be reached, but as a safeguard:
+        return null;
     }
     
     const createdAt = profileData.createdAt;
