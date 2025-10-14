@@ -328,3 +328,5 @@ export async function verificarStatusAutorizacaoC6(input: z.infer<typeof getOffe
         return { success: false, message };
     }
 }
+
+    
