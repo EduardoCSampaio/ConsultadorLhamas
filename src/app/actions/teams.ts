@@ -152,7 +152,7 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
     try {
         const teamDoc = await firestore.collection('teams').doc(teamId).get();
 
-        if (!teamDoc.exists()) {
+        if (!teamDoc.exists) {
             return { success: false, error: "A equipe especificada não foi encontrada." };
         }
 
@@ -190,7 +190,7 @@ export async function getTeamAndManager(input: z.infer<typeof getTeamAndManagerS
     try {
         const teamDoc = await firestore.collection('teams').doc(teamId).get();
         
-        if (!teamDoc.exists()) {
+        if (!teamDoc.exists) {
             return { success: false, error: "Time não encontrado." };
         }
         const teamData = teamDoc.data();
@@ -200,7 +200,7 @@ export async function getTeamAndManager(input: z.infer<typeof getTeamAndManagerS
 
 
         const managerDoc = await firestore.collection('users').doc(teamData.managerId).get();
-        if (!managerDoc.exists()) {
+        if (!managerDoc.exists) {
              return { success: false, error: "Dados do gerente do time não encontrados." };
         }
         const managerData = managerDoc.data();

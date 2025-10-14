@@ -1,4 +1,3 @@
-
 'use client';
     
 import { useState, useEffect } from 'react';
@@ -64,7 +63,7 @@ export function useDoc<T = any>(
     const unsubscribe = onSnapshot(
       memoizedDocRef,
       (snapshot: DocumentSnapshot<DocumentData>) => {
-        if (snapshot.exists()) {
+        if (snapshot.exists) {
           const docData = snapshot.data();
           // Convert any Timestamp fields to ISO strings for serialization
           Object.keys(docData).forEach(key => {

@@ -106,7 +106,7 @@ async function getNextTicketNumber(): Promise<string> {
     let newNumber = 1;
     await firestore.runTransaction(async (transaction) => {
         const counterDoc = await transaction.get(counterRef);
-        if (!counterDoc.exists()) {
+        if (!counterDoc.exists) {
             transaction.set(counterRef, { currentNumber: newNumber });
         } else {
             newNumber = (counterDoc.data()?.currentNumber || 0) + 1;
@@ -188,7 +188,7 @@ export async function getTicketsForUser(input: z.infer<typeof getTicketsSchema>)
         const userRef = firestore.collection('users').doc(input.userId);
         const userDoc = await userRef.get();
         
-        if (!userDoc.exists()) {
+        if (!userDoc.exists) {
             return { success: false, error: "Usuário não encontrado." };
         }
         
@@ -243,7 +243,7 @@ export async function getTicketById(input: z.infer<typeof getTicketByIdSchema>):
     try {
         const ticketDoc = await firestore.collection('tickets').doc(input.ticketId).get();
 
-        if (!ticketDoc.exists()) {
+        if (!ticketDoc.exists) {
             return { success: false, error: 'Chamado não encontrado.' };
         }
 
@@ -297,7 +297,7 @@ export async function addMessageToTicket(input: z.infer<typeof addMessageSchema>
         };
 
         const ticketDoc = await ticketRef.get();
-        if (!ticketDoc.exists()) {
+        if (!ticketDoc.exists) {
             throw new Error("Chamado não encontrado.");
         }
         const ticketData = ticketDoc.data() as Omit<Ticket, 'id'>;
@@ -353,10 +353,10 @@ export async function markTicketAsRead(input: z.infer<typeof markAsReadSchema>):
 
         const [ticketDoc, userDoc] = await Promise.all([ticketRef.get(), userRef.get()]);
 
-        if (!ticketDoc.exists()) {
+        if (!ticketDoc.exists) {
             return { success: false, message: "Chamado não encontrado." };
         }
-        if (!userDoc.exists()) {
+        if (!userDoc.exists) {
             return { success: false, message: "Usuário não encontrado." };
         }
 

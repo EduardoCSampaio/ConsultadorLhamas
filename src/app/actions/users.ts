@@ -122,7 +122,7 @@ type LogActivityInput = {
 export async function logActivity(input: LogActivityInput) {
     try {
         const userDoc = await firestore.collection('users').doc(input.userId).get();
-        if (!userDoc.exists()) {
+        if (!userDoc.exists) {
             console.error(`[logActivity] User with ID ${input.userId} not found.`);
             return;
         }
@@ -248,7 +248,7 @@ const combineUserData = async (userRecord: UserRecord, teamsMap: Map<string, str
     const userDoc = await userDocRef.get();
     let profileData;
 
-    if (!userDoc.exists()) {
+    if (!userDoc.exists) {
         console.log(`User ${userRecord.email} found in Auth but not in Firestore. Creating profile...`);
         const isSuperAdmin = userRecord.email === 'admin@lhamascred.com.br';
         const newProfile = {
