@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from "react";
@@ -17,26 +16,51 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, AlertCircle, CircleDashed } from "lucide-react";
+import { Loader2, Search, AlertCircle, ExternalLink } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { useUser } from "@/firebase";
-import { consultarOfertasC6 } from "@/app/actions/c6";
+import { consultarOfertasC6, type C6LinkResponse } from "@/app/actions/c6";
+
+const handleDateMask = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value.replace(/\D/g, '');
+    if (value.length > 8) value = value.substring(0, 8);
+    if (value.length > 4) {
+        value = `${value.substring(0, 2)}/${value.substring(2, 4)}/${value.substring(4)}`;
+    } else if (value.length > 2) {
+        value = `${value.substring(0, 2)}/${value.substring(2)}`;
+    }
+    e.target.value = value;
+};
 
 const formSchema = z.object({
   cpf: z.string().min(11, "CPF deve ter 11 dígitos.").max(11, "CPF deve ter 11 dígitos."),
+  nome: z.string().min(3, "Nome é obrigatório."),
+  data_nascimento: z.string().refine((val) => /^\d{2}\/\d{2}\/\d{4}$/.test(val), {
+    message: "Data deve estar no formato DD/MM/AAAA.",
+  }),
+  telefone: z.object({
+      codigo_area: z.string().min(2, "DDD é obrigatório.").max(2, "DDD deve ter 2 dígitos."),
+      numero: z.string().min(8, "Número é obrigatório."),
+  })
 });
+
 
 export default function C6Page() {
   const { user } = useUser();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<any[] | null>(null);
-  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [result, setResult] = useState<C6LinkResponse | null>(null);
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       cpf: "",
+      nome: "",
+      data_nascimento: "",
+      telefone: {
+          codigo_area: "",
+          numero: "",
+      }
     },
   });
 
@@ -49,18 +73,11 @@ export default function C6Page() {
     setIsLoading(true);
     setError(null);
     setResult(null);
-    setInfoMessage(null);
 
-    const response = await consultarOfertasC6({ cpf: values.cpf, userId: user.uid });
+    const response = await consultarOfertasC6({ ...values, userId: user.uid });
 
-    if (response.success) {
-        setInfoMessage(response.message);
-        if(response.data && response.data.length > 0) {
-            setResult(response.data);
-        } else {
-            // No offers found, but the message from the backend will be displayed
-            setResult([]);
-        }
+    if (response.success && response.data) {
+        setResult(response.data);
     } else {
       setError(response.message);
     }
@@ -72,32 +89,94 @@ export default function C6Page() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Crédito Privado CLT - C6"
-        description="Consulte ofertas de crédito privado CLT disponíveis no provedor C6."
+        description="Gere um link de autorização de consulta de dados para o cliente."
       />
       <Card>
         <CardHeader>
-            <CardTitle>Consultar Ofertas</CardTitle>
-            <CardDescription>Insira o CPF do cliente para buscar ofertas de crédito.</CardDescription>
+            <CardTitle>Gerar Link de Autorização</CardTitle>
+            <CardDescription>Insira os dados do cliente para gerar o link de autorização.</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <FormField
-                control={form.control}
-                name="cpf"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>CPF do Cliente</FormLabel>
-                    <FormControl>
-                      <Input placeholder="000.000.000-00" {...field} disabled={isLoading}/>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                        control={form.control}
+                        name="nome"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Nome Completo</FormLabel>
+                            <FormControl>
+                            <Input placeholder="Nome completo do cliente" {...field} disabled={isLoading}/>
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                    <FormField
+                        control={form.control}
+                        name="cpf"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>CPF do Cliente</FormLabel>
+                            <FormControl>
+                            <Input placeholder="000.000.000-00" {...field} disabled={isLoading}/>
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                     <FormField
+                      control={form.control}
+                      name="data_nascimento"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Data de Nascimento</FormLabel>
+                          <FormControl>
+                            <Input 
+                              placeholder="DD/MM/AAAA" 
+                              {...field} 
+                              onChange={(e) => {
+                                handleDateMask(e);
+                                field.onChange(e.target.value);
+                              }}
+                              disabled={isLoading}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                     <FormField
+                        control={form.control}
+                        name="telefone.codigo_area"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>DDD</FormLabel>
+                            <FormControl>
+                            <Input placeholder="11" {...field} disabled={isLoading} maxLength={2}/>
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                     <FormField
+                        control={form.control}
+                        name="telefone.numero"
+                        render={({ field }) => (
+                        <FormItem className="md:col-span-2">
+                            <FormLabel>Número do Celular</FormLabel>
+                            <FormControl>
+                            <Input placeholder="997773344" {...field} disabled={isLoading}/>
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                </div>
               <Button type="submit" disabled={isLoading}>
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
-                {isLoading ? "Consultando..." : "Consultar"}
+                {isLoading ? "Gerando..." : "Gerar Link"}
               </Button>
             </form>
           </Form>
@@ -112,42 +191,27 @@ export default function C6Page() {
          </Alert>
       )}
       
-      {infoMessage && (
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Informação</AlertTitle>
-          <AlertDescription>{infoMessage}</AlertDescription>
-        </Alert>
-      )}
-
-      {result && result.length === 0 && (
-        <Card>
-            <CardContent className="pt-6">
-                <div className="flex flex-col items-center justify-center gap-4 text-center h-60 border-2 border-dashed rounded-lg">
-                    <CircleDashed className="h-12 w-12 text-muted-foreground" />
-                    <h3 className="text-2xl font-bold tracking-tight">
-                        Nenhuma Oferta Encontrada
-                    </h3>
-                    <div className="text-sm text-muted-foreground">
-                       Nenhuma oferta foi retornada para o CPF informado no momento.
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
-      )}
-      
-      {/* Placeholder for future results display */}
-      {result && result.length > 0 && (
+      {result && (
          <Card>
             <CardHeader>
-                <CardTitle>Ofertas Encontradas</CardTitle>
+                <CardTitle>Link Gerado com Sucesso!</CardTitle>
+                <CardDescription>Envie o link abaixo para o cliente autorizar a consulta.</CardDescription>
             </CardHeader>
-            <CardContent>
-                <p>A exibição dos resultados será implementada aqui.</p>
+            <CardContent className="space-y-4">
+                <div className="flex items-center gap-2">
+                     <Input value={result.link} readOnly />
+                     <Button asChild variant="secondary">
+                        <a href={result.link} target="_blank" rel="noopener noreferrer">
+                            Abrir <ExternalLink className="ml-2 h-4 w-4" />
+                        </a>
+                    </Button>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                    O link expira em: {new Date(result.data_expiracao).toLocaleDateString('pt-BR')}
+                </p>
             </CardContent>
         </Card>
       )}
-
     </div>
   );
 }
