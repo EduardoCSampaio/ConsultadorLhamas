@@ -59,7 +59,7 @@ async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiC
     }
     try {
         const userDoc = await firestore.collection('users').doc(userId).get();
-        if (!userDoc.exists) {
+        if (!userDoc.exists()) {
             return { credentials: null, error: 'Usuário não encontrado.' };
         }
         const userData = userDoc.data()!;
@@ -221,17 +221,25 @@ export async function consultarOfertasCLTC6(input: z.infer<typeof getOffersSchem
             },
             body: JSON.stringify({ cpf_cliente: cpf.replace(/\D/g, '') })
         });
-
+        
+        if (!response.ok) {
+            const textResponse = await response.text();
+             // Check if the response is likely JSON or just plain text like "Not found"
+            if (textResponse.startsWith('{') || textResponse.startsWith('[')) {
+                const data = JSON.parse(textResponse);
+                const errorMessage = data.message || data.error_description || JSON.stringify(data);
+                 console.error('[C6 API Error - Get Offers]', errorMessage);
+                return { success: false, message: `Erro da API do C6: ${errorMessage}` };
+            } else {
+                 console.error('[C6 API Error - Get Offers]', textResponse);
+                return { success: false, message: `Erro da API do C6: ${textResponse}` };
+            }
+        }
+        
         const data = await response.json();
 
-        if (!response.ok) {
-            const errorMessage = data.message || data.error_description || JSON.stringify(data);
-            console.error('[C6 API Error - Get Offers]', errorMessage);
-            return { success: false, message: `Erro da API do C6: ${errorMessage}` };
-        }
-
         if (!data.ofertas || data.ofertas.length === 0) {
-            return { success: false, message: "Nenhuma oferta encontrada para este cliente." };
+            return { success: true, message: "Nenhuma oferta encontrada para este cliente.", data: [] };
         }
 
         return { 
