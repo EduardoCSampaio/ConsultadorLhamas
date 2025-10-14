@@ -36,7 +36,7 @@ async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiC
     }
     try {
         const userDoc = await firestore.collection('users').doc(userId).get();
-        if (!userDoc.exists) {
+        if (!userDoc.exists()) {
             return { credentials: null, error: 'Usuário não encontrado.' };
         }
         const userData = userDoc.data()!;
@@ -69,9 +69,6 @@ export async function getC6AuthToken(username?: string, password?: string): Prom
   
   const tokenUrl = 'https://marketplace-proposal-service-api-p.c6bank.info/auth/token';
   const bodyPayload = new URLSearchParams({
-    grant_type: 'password',
-    client_id: 'c6-pos-vendas',
-    client_secret: 'c6-pos-vendas@123',
     username: username,
     password: password
   });
@@ -142,7 +139,7 @@ export async function consultarOfertasC6(input: z.infer<typeof cltConsultaSchema
             headers: {
                 'Accept': 'application/vnd.c6bank_authorization_generate_liveness_v1+json',
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
+                'Authorization': `${token}`
             },
             body: JSON.stringify(requestBody)
         });

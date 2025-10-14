@@ -22,10 +22,6 @@ const consentActionSchema = z.object({
   userId: z.string(),
 });
 
-const taxasActionSchema = z.object({
-    userId: z.string(),
-});
-
 const simulationActionSchema = z.object({
   consult_id: z.string(),
   config_id: z.string(),
@@ -70,12 +66,6 @@ export type SimulationResult = {
   };
 };
 
-type GetTaxasResult = {
-    success: boolean;
-    message: string;
-    configs?: SimulationConfig[];
-};
-
 type CreateSimulacaoResult = {
     success: boolean;
     message: string;
@@ -88,7 +78,7 @@ async function getUserCredentials(userId: string): Promise<{ credentials: ApiCre
     }
     try {
         const userDoc = await firestore.collection('users').doc(userId).get();
-        if (!userDoc.exists || !userDoc.data()) {
+        if (!userDoc.exists() || !userDoc.data()) {
             return { credentials: null, error: 'Usuário não encontrado para buscar credenciais.' };
         }
         const userData = userDoc.data()!;
@@ -246,45 +236,6 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
     } catch (error) {
         console.error("[CLT_CONSENT] Network or parsing error:", error);
         const message = error instanceof Error ? error.message : 'Ocorreu um erro de comunicação.';
-        return { success: false, message };
-    }
-}
-
-
-export async function consultarTaxasCLT(input: z.infer<typeof taxasActionSchema>): Promise<GetTaxasResult> {
-    const validation = taxasActionSchema.safeParse(input);
-    if (!validation.success) {
-        return { success: false, message: 'ID do usuário inválido.' };
-    }
-
-    const { userId } = validation.data;
-
-    const { credentials, error: credError } = await getUserCredentials(userId);
-    if (credError || !credentials) {
-        return { success: false, message: credError || "Credenciais não encontradas para buscar taxas." };
-    }
-
-    const { token, error: tokenError } = await getAuthToken(credentials);
-    if (tokenError) {
-        return { success: false, message: tokenError };
-    }
-
-    const API_URL = 'https://bff.v8sistema.com/private-consignment/simulation/configs';
-    try {
-        const response = await fetch(API_URL, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-            },
-        });
-        const responseData = await response.json();
-        if (!response.ok) {
-            const errorMessage = responseData.message || 'Falha ao buscar configurações de simulação.';
-            return { success: false, message: errorMessage };
-        }
-        return { success: true, message: "Taxas carregadas com sucesso.", configs: responseData.configs };
-    } catch (error) {
-        const message = error instanceof Error ? error.message : 'Erro de rede ao buscar taxas.';
         return { success: false, message };
     }
 }
