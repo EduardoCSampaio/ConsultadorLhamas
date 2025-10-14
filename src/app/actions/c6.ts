@@ -40,6 +40,11 @@ export type C6Offer = {
     status: string;
 }
 
+export type C6AuthStatus = {
+    status: "AGUARDANDO_AUTORIZACAO" | "AUTORIZADO" | "NAO_AUTORIZADO";
+    observacao: string;
+}
+
 type C6LinkResult = {
     success: boolean;
     message: string;
@@ -50,6 +55,12 @@ type C6OfferResult = {
     success: boolean;
     message: string;
     data?: C6Offer[];
+}
+
+type C6StatusResult = {
+    success: boolean;
+    message: string;
+    data?: C6AuthStatus;
 }
 
 
@@ -260,4 +271,56 @@ export async function consultarOfertasCLTC6(input: z.infer<typeof getOffersSchem
     }
 }
 
-    
+
+export async function verificarStatusAutorizacaoC6(input: z.infer<typeof getOffersSchema>): Promise<C6StatusResult> {
+    const validation = getOffersSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: 'CPF inválido.' };
+    }
+
+    const { userId, cpf } = validation.data;
+
+    const { credentials, error: credError } = await getC6UserCredentials(userId);
+    if (credError || !credentials) {
+        return { success: false, message: credError || "Credenciais não encontradas." };
+    }
+
+    const { token, error: tokenError } = await getC6AuthToken(credentials.c6_username, credentials.c6_password);
+    if (tokenError || !token) {
+        return { success: false, message: tokenError || "Não foi possível obter o token do C6." };
+    }
+
+    await logActivity({ userId, action: 'Verifica Status Autorização C6', provider: 'c6', documentNumber: cpf });
+
+    const apiUrl = `https://marketplace-proposal-service-api-p.c6bank.info/marketplace/authorization/status/${cpf.replace(/\D/g, '')}`;
+
+    try {
+        const response = await fetch(apiUrl, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/vnd.c6bank.authorization_status_v1+json',
+                'Content-Type': 'application/json',
+                'Authorization': `${token}`
+            }
+        });
+        
+        const data = await response.json();
+
+        if (!response.ok) {
+            const errorMessage = data.message || data.error || JSON.stringify(data);
+            console.error('[C6 API Error - Check Status]', errorMessage);
+            return { success: false, message: `Erro da API do C6: ${errorMessage}` };
+        }
+
+        return { 
+            success: true, 
+            message: 'Status verificado com sucesso.',
+            data: data 
+        };
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro de comunicação ao verificar o status no C6.";
+        console.error('[C6 API Error - Check Status]', message);
+        return { success: false, message };
+    }
+}

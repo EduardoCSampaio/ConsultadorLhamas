@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from "react";
@@ -16,10 +17,10 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, AlertCircle, ExternalLink, Wallet, CircleDashed } from "lucide-react";
+import { Loader2, Search, AlertCircle, ExternalLink, Wallet, CircleDashed, CheckCircle, Clock } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { useUser } from "@/firebase";
-import { consultarLinkAutorizacaoC6, consultarOfertasCLTC6, type C6LinkResponse, type C6Offer } from "@/app/actions/c6";
+import { consultarLinkAutorizacaoC6, consultarOfertasCLTC6, verificarStatusAutorizacaoC6, type C6LinkResponse, type C6Offer, type C6AuthStatus } from "@/app/actions/c6";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 
@@ -67,6 +68,11 @@ export default function C6Page() {
   const [offerResult, setOfferResult] = useState<C6Offer[] | null>(null);
   const [noOffersMessage, setNoOffersMessage] = useState<string | null>(null);
   
+  const [isStatusLoading, setIsStatusLoading] = useState(false);
+  const [statusResult, setStatusResult] = useState<C6AuthStatus | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -92,6 +98,8 @@ export default function C6Page() {
     setOfferResult(null);
     setOfferError(null);
     setNoOffersMessage(null);
+    setStatusResult(null);
+    setStatusError(null);
 
     const response = await consultarLinkAutorizacaoC6({ ...values, userId: user.uid });
 
@@ -102,6 +110,32 @@ export default function C6Page() {
     }
     
     setIsLoading(false);
+  }
+
+  async function onCheckStatus() {
+     if (!user) {
+      setStatusError("Você precisa estar logado para realizar uma consulta.");
+      return;
+    }
+    const cpf = form.getValues('cpf');
+    if (!cpf) {
+        setStatusError("CPF do cliente não encontrado para verificar o status.");
+        return;
+    }
+    
+    setIsStatusLoading(true);
+    setStatusResult(null);
+    setStatusError(null);
+    
+    const response = await verificarStatusAutorizacaoC6({ cpf, userId: user.uid });
+
+    if(response.success && response.data) {
+        setStatusResult(response.data);
+    } else {
+        setStatusError(response.message);
+    }
+
+    setIsStatusLoading(false);
   }
 
   async function onGetOffers() {
@@ -245,8 +279,8 @@ export default function C6Page() {
       {linkResult && (
         <Card>
             <CardHeader>
-                <CardTitle>2. Link Gerado e Próximo Passo</CardTitle>
-                <CardDescription>Envie o link ao cliente. Após ele confirmar a autorização, clique em "Buscar Ofertas".</CardDescription>
+                <CardTitle>2. Link Gerado e Próximos Passos</CardTitle>
+                <CardDescription>Envie o link ao cliente. Após ele confirmar a autorização, verifique o status ou busque as ofertas.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 <div className="flex items-center gap-2">
@@ -261,13 +295,36 @@ export default function C6Page() {
                     O link expira em: {new Date(linkResult.data_expiracao).toLocaleDateString('pt-BR')}
                 </p>
                 <Separator/>
-                <Button onClick={onGetOffers} disabled={isOfferLoading}>
-                    {isOfferLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wallet className="mr-2 h-4 w-4" />}
-                    {isOfferLoading ? "Buscando..." : "Buscar Ofertas"}
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                    <Button onClick={onCheckStatus} disabled={isStatusLoading} variant="outline">
+                        {isStatusLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Clock className="mr-2 h-4 w-4" />}
+                        {isStatusLoading ? "Verificando..." : "Verificar Status"}
+                    </Button>
+                    <Button onClick={onGetOffers} disabled={isOfferLoading}>
+                        {isOfferLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wallet className="mr-2 h-4 w-4" />}
+                        {isOfferLoading ? "Buscando..." : "Buscar Ofertas"}
+                    </Button>
+                </div>
             </CardContent>
         </Card>
       )}
+
+      {statusError && (
+          <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Erro ao Verificar Status</AlertTitle>
+              <AlertDescription>{statusError}</AlertDescription>
+          </Alert>
+      )}
+
+        {statusResult && (
+          <Alert variant={statusResult.status === 'AUTORIZADO' ? 'default' : 'destructive'} className={statusResult.status === 'AUTORIZADO' ? 'bg-green-50 border-green-200' : ''}>
+              {statusResult.status === 'AUTORIZADO' ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
+              <AlertTitle>Status da Autorização: {statusResult.status.replace('_', ' ')}</AlertTitle>
+              <AlertDescription>{statusResult.observacao}</AlertDescription>
+          </Alert>
+      )}
+
 
       {offerError && (
          <Alert variant="destructive">
