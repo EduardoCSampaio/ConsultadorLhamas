@@ -11,7 +11,7 @@ const phoneSchema = z.object({
   numero: z.string().min(8),
 });
 
-const cltConsultaSchema = z.object({
+const linkSchema = z.object({
   cpf: z.string().min(11).max(14),
   nome: z.string(),
   data_nascimento: z.string(), // DD/MM/AAAA
@@ -19,8 +19,8 @@ const cltConsultaSchema = z.object({
   userId: z.string(),
 });
 
-const getProposalSchema = z.object({
-    idProposta: z.string().min(1),
+const getOffersSchema = z.object({
+    cpf: z.string().min(11).max(14),
     userId: z.string(),
 });
 
@@ -40,7 +40,7 @@ export type C6Offer = {
     status: string;
 }
 
-type C6QueryResult = {
+type C6LinkResult = {
     success: boolean;
     message: string;
     data?: C6LinkResponse;
@@ -124,8 +124,8 @@ function convertDateToYYYYMMDD(dateStr: string): string {
     return `${year}-${month}-${day}`;
 }
 
-export async function consultarOfertasC6(input: z.infer<typeof cltConsultaSchema>): Promise<C6QueryResult> {
-    const validation = cltConsultaSchema.safeParse(input);
+export async function consultarLinkAutorizacaoC6(input: z.infer<typeof linkSchema>): Promise<C6LinkResult> {
+    const validation = linkSchema.safeParse(input);
     if (!validation.success) {
         return { success: false, message: 'Dados de entrada inválidos.' };
     }
@@ -148,7 +148,7 @@ export async function consultarOfertasC6(input: z.infer<typeof cltConsultaSchema
     
     const requestBody = {
         nome: apiData.nome,
-        cpf: apiData.cpf,
+        cpf: apiData.cpf.replace(/\D/g, ''),
         data_nascimento: convertDateToYYYYMMDD(apiData.data_nascimento),
         telefone: {
             numero: apiData.telefone.numero,
@@ -189,13 +189,13 @@ export async function consultarOfertasC6(input: z.infer<typeof cltConsultaSchema
 }
 
 
-export async function consultarPropostaC6(input: z.infer<typeof getProposalSchema>): Promise<C6OfferResult> {
-    const validation = getProposalSchema.safeParse(input);
+export async function consultarOfertasCLTC6(input: z.infer<typeof getOffersSchema>): Promise<C6OfferResult> {
+    const validation = getOffersSchema.safeParse(input);
     if (!validation.success) {
-        return { success: false, message: 'ID da proposta inválido.' };
+        return { success: false, message: 'CPF inválido.' };
     }
 
-    const { userId, idProposta } = validation.data;
+    const { userId, cpf } = validation.data;
 
     const { credentials, error: credError } = await getC6UserCredentials(userId);
     if (credError || !credentials) {
@@ -207,29 +207,31 @@ export async function consultarPropostaC6(input: z.infer<typeof getProposalSchem
         return { success: false, message: tokenError || "Não foi possível obter o token do C6." };
     }
 
-    await logActivity({ userId, action: 'Consulta Proposta CLT C6', provider: 'c6', details: `ID: ${idProposta}` });
+    await logActivity({ userId, action: 'Consulta Ofertas CLT C6', provider: 'c6', documentNumber: cpf });
 
-    const apiUrl = `https://marketplace-proposal-service-api-p.c6bank.info/marketplace/proposal/${idProposta}`;
+    const apiUrl = 'https://marketplace-proposal-service-api-p.c6bank.info/marketplace/worker-payroll-loan-offers';
 
     try {
         const response = await fetch(apiUrl, {
-            method: 'GET',
+            method: 'POST',
             headers: {
-                'Accept': 'application/vnd.c6bank_proposal_v1+json',
+                'Accept': 'application/vnd.c6bank_generate_offer_v1+json',
+                'Content-Type': 'application/json',
                 'Authorization': `${token}`
             },
+            body: JSON.stringify({ cpf_cliente: cpf.replace(/\D/g, '') })
         });
 
         const data = await response.json();
 
         if (!response.ok) {
             const errorMessage = data.message || data.error_description || JSON.stringify(data);
-            console.error('[C6 API Error - Get Proposal]', errorMessage);
+            console.error('[C6 API Error - Get Offers]', errorMessage);
             return { success: false, message: `Erro da API do C6: ${errorMessage}` };
         }
 
         if (!data.ofertas || data.ofertas.length === 0) {
-            return { success: false, message: "Nenhuma oferta encontrada para esta proposta." };
+            return { success: false, message: "Nenhuma oferta encontrada para este cliente." };
         }
 
         return { 
@@ -239,8 +241,8 @@ export async function consultarPropostaC6(input: z.infer<typeof getProposalSchem
         };
 
     } catch (error) {
-        const message = error instanceof Error ? error.message : "Erro de comunicação ao consultar a proposta do C6.";
-        console.error('[C6 API Error - Get Proposal]', message);
+        const message = error instanceof Error ? error.message : "Erro de comunicação ao consultar as ofertas do C6.";
+        console.error('[C6 API Error - Get Offers]', message);
         return { success: false, message };
     }
 }

@@ -16,11 +16,12 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, AlertCircle, ExternalLink, FileText, Wallet } from "lucide-react";
+import { Loader2, Search, AlertCircle, ExternalLink, Wallet, CircleDashed } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { useUser } from "@/firebase";
-import { consultarOfertasC6, consultarPropostaC6, type C6LinkResponse, type C6Offer } from "@/app/actions/c6";
+import { consultarLinkAutorizacaoC6, consultarOfertasCLTC6, type C6LinkResponse, type C6Offer } from "@/app/actions/c6";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 
 const handleDateMask = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.replace(/\D/g, '');
@@ -45,10 +46,6 @@ const formSchema = z.object({
   })
 });
 
-const proposalSchema = z.object({
-  idProposta: z.string().min(1, "O ID da proposta é obrigatório."),
-});
-
 const formatCurrency = (value: string | number | undefined | null) => {
     if (value === undefined || value === null) return 'N/A';
     const numberValue = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : value;
@@ -68,6 +65,7 @@ export default function C6Page() {
   const [isOfferLoading, setIsOfferLoading] = useState(false);
   const [offerError, setOfferError] = useState<string | null>(null);
   const [offerResult, setOfferResult] = useState<C6Offer[] | null>(null);
+  const [noOffersMessage, setNoOffersMessage] = useState<string | null>(null);
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -82,13 +80,6 @@ export default function C6Page() {
     },
   });
 
-  const proposalForm = useForm<z.infer<typeof proposalSchema>>({
-    resolver: zodResolver(proposalSchema),
-    defaultValues: {
-      idProposta: "",
-    },
-  });
-
   async function onLinkSubmit(values: z.infer<typeof formSchema>) {
     if (!user) {
       setError("Você precisa estar logado para realizar uma consulta.");
@@ -98,8 +89,11 @@ export default function C6Page() {
     setIsLoading(true);
     setError(null);
     setLinkResult(null);
+    setOfferResult(null);
+    setOfferError(null);
+    setNoOffersMessage(null);
 
-    const response = await consultarOfertasC6({ ...values, userId: user.uid });
+    const response = await consultarLinkAutorizacaoC6({ ...values, userId: user.uid });
 
     if (response.success && response.data) {
         setLinkResult(response.data);
@@ -110,19 +104,30 @@ export default function C6Page() {
     setIsLoading(false);
   }
 
-  async function onProposalSubmit(values: z.infer<typeof proposalSchema>) {
+  async function onGetOffers() {
      if (!user) {
       setOfferError("Você precisa estar logado para realizar uma consulta.");
       return;
     }
+    const cpf = form.getValues('cpf');
+    if (!cpf) {
+        setOfferError("CPF do cliente não encontrado para buscar ofertas.");
+        return;
+    }
+
     setIsOfferLoading(true);
     setOfferError(null);
     setOfferResult(null);
+    setNoOffersMessage(null);
     
-    const response = await consultarPropostaC6({ idProposta: values.idProposta, userId: user.uid });
+    const response = await consultarOfertasCLTC6({ cpf, userId: user.uid });
 
-    if (response.success && response.data) {
-      setOfferResult(response.data);
+    if (response.success) {
+      if (response.data && response.data.length > 0) {
+        setOfferResult(response.data);
+      } else {
+        setNoOffersMessage(response.message || "Nenhuma oferta encontrada para este cliente.");
+      }
     } else {
       setOfferError(response.message);
     }
@@ -240,8 +245,8 @@ export default function C6Page() {
       {linkResult && (
         <Card>
             <CardHeader>
-                <CardTitle>Link Gerado com Sucesso!</CardTitle>
-                <CardDescription>Envie o link abaixo para o cliente. Após a autorização, insira o ID da proposta abaixo.</CardDescription>
+                <CardTitle>2. Link Gerado e Próximo Passo</CardTitle>
+                <CardDescription>Envie o link ao cliente. Após ele confirmar a autorização, clique em "Buscar Ofertas".</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 <div className="flex items-center gap-2">
@@ -255,41 +260,14 @@ export default function C6Page() {
                 <p className="text-sm text-muted-foreground">
                     O link expira em: {new Date(linkResult.data_expiracao).toLocaleDateString('pt-BR')}
                 </p>
+                <Separator/>
+                <Button onClick={onGetOffers} disabled={isOfferLoading}>
+                    {isOfferLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wallet className="mr-2 h-4 w-4" />}
+                    {isOfferLoading ? "Buscando..." : "Buscar Ofertas"}
+                </Button>
             </CardContent>
         </Card>
       )}
-
-      <Separator />
-
-      <Card>
-        <CardHeader>
-            <CardTitle>2. Consultar Ofertas da Proposta</CardTitle>
-            <CardDescription>Após o cliente autorizar, cole o ID da proposta para ver as ofertas.</CardDescription>
-        </CardHeader>
-        <CardContent>
-           <Form {...proposalForm}>
-            <form onSubmit={proposalForm.handleSubmit(onProposalSubmit)} className="space-y-6">
-               <FormField
-                  control={proposalForm.control}
-                  name="idProposta"
-                  render={({ field }) => (
-                  <FormItem>
-                      <FormLabel>ID da Proposta</FormLabel>
-                      <FormControl>
-                      <Input placeholder="Cole o ID da proposta aqui..." {...field} disabled={isOfferLoading}/>
-                      </FormControl>
-                      <FormMessage />
-                  </FormItem>
-                  )}
-              />
-              <Button type="submit" disabled={isOfferLoading}>
-                {isOfferLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wallet className="mr-2 h-4 w-4" />}
-                {isOfferLoading ? "Buscando Ofertas..." : "Buscar Ofertas"}
-              </Button>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
 
       {offerError && (
          <Alert variant="destructive">
@@ -299,11 +277,27 @@ export default function C6Page() {
          </Alert>
       )}
 
+       {noOffersMessage && (
+        <Card>
+            <CardContent className="pt-6">
+                <div className="flex flex-col items-center justify-center gap-4 text-center h-60 border-2 border-dashed rounded-lg">
+                    <CircleDashed className="h-12 w-12 text-muted-foreground" />
+                    <h3 className="text-2xl font-bold tracking-tight">
+                        Nenhuma Oferta Encontrada
+                    </h3>
+                    <div className="text-sm text-muted-foreground">
+                       {noOffersMessage}
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
+      )}
+
       {offerResult && (
         <Card>
           <CardHeader>
             <CardTitle>Ofertas Encontradas</CardTitle>
-            <CardDescription>As seguintes ofertas estão disponíveis para esta proposta.</CardDescription>
+            <CardDescription>As seguintes ofertas estão disponíveis para este cliente.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {offerResult.map(offer => (
