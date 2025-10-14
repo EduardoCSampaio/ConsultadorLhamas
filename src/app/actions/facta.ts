@@ -171,7 +171,7 @@ async function getFactaUserCredentials(userId: string): Promise<{ credentials: A
     }
     try {
         const userDoc = await firestore.collection('users').doc(userId).get();
-        if (!userDoc.exists) {
+        if (!userDoc.exists()) {
             return { credentials: null, error: 'Usuário não encontrado.' };
         }
         const userData = userDoc.data()!;
