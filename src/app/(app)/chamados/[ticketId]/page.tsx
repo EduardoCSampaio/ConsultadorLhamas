@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef } from "react";
@@ -76,7 +77,7 @@ export default function ChamadoDetalhePage() {
     const { data: messages, isLoading: messagesLoading } = useCollection<TicketMessage>(messagesQuery);
     
     const pageIsLoading = ticketLoading || messagesLoading;
-    const isAdmin = userProfile?.role === 'super_admin' || userProfile?.role === 'admin';
+    const isAdmin = userProfile?.role === 'super_admin' || userProfile?.role === 'manager';
 
     useEffect(() => {
        async function processTicketAndMessages() {
@@ -292,3 +293,5 @@ export default function ChamadoDetalhePage() {
         </div>
     );
 }
+
+    
