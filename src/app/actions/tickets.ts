@@ -353,8 +353,12 @@ export async function markTicketAsRead(input: z.infer<typeof markAsReadSchema>):
 
         const [ticketDoc, userDoc] = await Promise.all([ticketRef.get(), userRef.get()]);
 
-        if (!ticketDoc.exists()) return { success: false, message: "Chamado não encontrado." };
-        if (!userDoc.exists()) return { success: false, message: "Usuário não encontrado." };
+        if (!ticketDoc.exists()) {
+            return { success: false, message: "Chamado não encontrado." };
+        }
+        if (!userDoc.exists()) {
+            return { success: false, message: "Usuário não encontrado." };
+        }
 
         const userData = userDoc.data();
         const isAdmin = userData?.role === 'super_admin' || userData?.role === 'manager';
@@ -407,3 +411,4 @@ export async function updateTicketStatus(input: z.infer<typeof updateStatusSchem
     }
 }
     
+
