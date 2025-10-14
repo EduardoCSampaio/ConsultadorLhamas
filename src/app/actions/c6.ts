@@ -47,8 +47,8 @@ async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiC
 
         if (!credentials.c6_username || !credentials.c6_password) {
             const missing = [
-                !credentials.c6_username && "Client ID",
-                !credentials.c6_password && "Client Secret",
+                !credentials.c6_username && "Username",
+                !credentials.c6_password && "Password",
             ].filter(Boolean).join(', ');
             return { credentials: null, error: `Credenciais do C6 incompletas. Faltando: ${missing}. Por favor, configure-as na página de Configurações.` };
         }
@@ -62,16 +62,18 @@ async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiC
 }
 
 
-export async function getC6AuthToken(clientId?: string, clientSecret?: string): Promise<{ token: string | undefined; error: string | null }> {
-  if (!clientId || !clientSecret) {
-      return { token: undefined, error: "Credenciais do C6 (Client ID/Client Secret) não fornecidas." };
+export async function getC6AuthToken(username?: string, password?: string): Promise<{ token: string | undefined; error: string | null }> {
+  if (!username || !password) {
+      return { token: undefined, error: "Credenciais do C6 (usuário/senha) não fornecidas." };
   }
   
   const tokenUrl = 'https://marketplace-proposal-service-api-p.c6bank.info/auth/token';
   const bodyPayload = new URLSearchParams({
-    grant_type: 'client_credentials',
-    client_id: clientId,
-    client_secret: clientSecret,
+    grant_type: 'password',
+    client_id: 'c6-pos-vendas',
+    client_secret: 'c6-pos-vendas@123',
+    username: username,
+    password: password
   });
 
   try {
@@ -84,8 +86,8 @@ export async function getC6AuthToken(clientId?: string, clientSecret?: string): 
     const data = await response.json();
 
     if (!response.ok || !data.access_token) {
-      const errorMessage = data.message || data.error || JSON.stringify(data);
-      console.error(`[C6 AUTH] Falha na autenticação: ${errorMessage}`);
+      const errorMessage = data.message || data.error_description || JSON.stringify(data);
+      console.error(`[C6 AUTH] Falha na autenticação: ${errorMessage}`, data);
       return { token: undefined, error: `Falha na autenticação com o C6: ${errorMessage}` };
     }
 
