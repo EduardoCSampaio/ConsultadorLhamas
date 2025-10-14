@@ -6,7 +6,7 @@ import { consultarSaldoFgts as consultarSaldoV8, getAuthToken as getV8AuthToken 
 import { consultarSaldoFgtsFacta, getFactaAuthToken } from './facta';
 import * as XLSX from 'xlsx';
 import { firestore } from '@/firebase/server-init';
-import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { type ApiCredentials, logActivity } from './users';
 import { createNotification } from './notifications';
 

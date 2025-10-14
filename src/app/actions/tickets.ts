@@ -188,7 +188,7 @@ export async function getTicketsForUser(input: z.infer<typeof getTicketsSchema>)
         const userRef = firestore.collection('users').doc(input.userId);
         const userDoc = await userRef.get();
         
-        if (!userDoc.exists) {
+        if (!userDoc.exists()) {
             return { success: false, error: "Usuário não encontrado." };
         }
         
@@ -243,7 +243,7 @@ export async function getTicketById(input: z.infer<typeof getTicketByIdSchema>):
     try {
         const ticketDoc = await firestore.collection('tickets').doc(input.ticketId).get();
 
-        if (!ticketDoc.exists) {
+        if (!ticketDoc.exists()) {
             return { success: false, error: 'Chamado não encontrado.' };
         }
 
@@ -297,7 +297,7 @@ export async function addMessageToTicket(input: z.infer<typeof addMessageSchema>
         };
 
         const ticketDoc = await ticketRef.get();
-        if (!ticketDoc.exists) {
+        if (!ticketDoc.exists()) {
             throw new Error("Chamado não encontrado.");
         }
         const ticketData = ticketDoc.data() as Omit<Ticket, 'id'>;
@@ -353,8 +353,8 @@ export async function markTicketAsRead(input: z.infer<typeof markAsReadSchema>):
 
         const [ticketDoc, userDoc] = await Promise.all([ticketRef.get(), userRef.get()]);
 
-        if (!ticketDoc.exists) return { success: false, message: "Chamado não encontrado." };
-        if (!userDoc.exists) return { success: false, message: "Usuário não encontrado." };
+        if (!ticketDoc.exists()) return { success: false, message: "Chamado não encontrado." };
+        if (!userDoc.exists()) return { success: false, message: "Usuário não encontrado." };
 
         const userData = userDoc.data();
         const isAdmin = userData?.role === 'super_admin' || userData?.role === 'admin';
