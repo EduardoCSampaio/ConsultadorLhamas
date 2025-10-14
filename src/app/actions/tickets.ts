@@ -106,7 +106,7 @@ async function getNextTicketNumber(): Promise<string> {
     let newNumber = 1;
     await firestore.runTransaction(async (transaction) => {
         const counterDoc = await transaction.get(counterRef);
-        if (!counterDoc.exists()) {
+        if (!counterDoc.exists) {
             transaction.set(counterRef, { currentNumber: newNumber });
         } else {
             newNumber = (counterDoc.data()?.currentNumber || 0) + 1;
@@ -406,6 +406,4 @@ export async function updateTicketStatus(input: z.infer<typeof updateStatusSchem
         return { success: false, message };
     }
 }
-    
-
     
