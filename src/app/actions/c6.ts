@@ -12,17 +12,33 @@ const phoneSchema = z.object({
 });
 
 const cltConsultaSchema = z.object({
-  cpf: z.string().min(11).max(11),
+  cpf: z.string().min(11).max(14),
   nome: z.string(),
   data_nascimento: z.string(), // DD/MM/AAAA
   telefone: phoneSchema,
   userId: z.string(),
 });
 
+const getProposalSchema = z.object({
+    idProposta: z.string().min(1),
+    userId: z.string(),
+});
+
+
 export type C6LinkResponse = {
     link: string;
     data_expiracao: string;
 };
+
+export type C6Offer = {
+    id_oferta: string;
+    nome_produto: string;
+    valor_financiado: number;
+    valor_parcela: number;
+    qtd_parcelas: number;
+    taxa_mes: number;
+    status: string;
+}
 
 type C6QueryResult = {
     success: boolean;
@@ -30,13 +46,20 @@ type C6QueryResult = {
     data?: C6LinkResponse;
 }
 
+type C6OfferResult = {
+    success: boolean;
+    message: string;
+    data?: C6Offer[];
+}
+
+
 async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiCredentials | null; error: string | null }> {
     if (!userId) {
         return { credentials: null, error: 'ID do usuário não fornecido.' };
     }
     try {
         const userDoc = await firestore.collection('users').doc(userId).get();
-        if (!userDoc.exists) {
+        if (!userDoc.exists()) {
             return { credentials: null, error: 'Usuário não encontrado.' };
         }
         const userData = userDoc.data()!;
@@ -70,7 +93,7 @@ export async function getC6AuthToken(username?: string, password?: string): Prom
   const tokenUrl = 'https://marketplace-proposal-service-api-p.c6bank.info/auth/token';
   const bodyPayload = new URLSearchParams({
     username: username,
-    password: password
+    password: password,
   });
 
   try {
@@ -162,5 +185,62 @@ export async function consultarOfertasC6(input: z.infer<typeof cltConsultaSchema
         const message = error instanceof Error ? error.message : "Erro de comunicação ao gerar link de autorização do C6.";
         console.error('[C6 API Error]', message);
         return { success: false, message: message };
+    }
+}
+
+
+export async function consultarPropostaC6(input: z.infer<typeof getProposalSchema>): Promise<C6OfferResult> {
+    const validation = getProposalSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: 'ID da proposta inválido.' };
+    }
+
+    const { userId, idProposta } = validation.data;
+
+    const { credentials, error: credError } = await getC6UserCredentials(userId);
+    if (credError || !credentials) {
+        return { success: false, message: credError || "Credenciais não encontradas." };
+    }
+
+    const { token, error: tokenError } = await getC6AuthToken(credentials.c6_username, credentials.c6_password);
+    if (tokenError || !token) {
+        return { success: false, message: tokenError || "Não foi possível obter o token do C6." };
+    }
+
+    await logActivity({ userId, action: 'Consulta Proposta CLT C6', provider: 'c6', details: `ID: ${idProposta}` });
+
+    const apiUrl = `https://marketplace-proposal-service-api-p.c6bank.info/marketplace/proposal/${idProposta}`;
+
+    try {
+        const response = await fetch(apiUrl, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/vnd.c6bank_proposal_v1+json',
+                'Authorization': `${token}`
+            },
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            const errorMessage = data.message || data.error_description || JSON.stringify(data);
+            console.error('[C6 API Error - Get Proposal]', errorMessage);
+            return { success: false, message: `Erro da API do C6: ${errorMessage}` };
+        }
+
+        if (!data.ofertas || data.ofertas.length === 0) {
+            return { success: false, message: "Nenhuma oferta encontrada para esta proposta." };
+        }
+
+        return { 
+            success: true, 
+            message: 'Ofertas encontradas com sucesso.',
+            data: data.ofertas 
+        };
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro de comunicação ao consultar a proposta do C6.";
+        console.error('[C6 API Error - Get Proposal]', message);
+        return { success: false, message };
     }
 }

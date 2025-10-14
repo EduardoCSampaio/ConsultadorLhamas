@@ -16,10 +16,11 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, AlertCircle, ExternalLink } from "lucide-react";
+import { Loader2, Search, AlertCircle, ExternalLink, FileText, Wallet } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { useUser } from "@/firebase";
-import { consultarOfertasC6, type C6LinkResponse } from "@/app/actions/c6";
+import { consultarOfertasC6, consultarPropostaC6, type C6LinkResponse, type C6Offer } from "@/app/actions/c6";
+import { Separator } from "@/components/ui/separator";
 
 const handleDateMask = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.replace(/\D/g, '');
@@ -33,7 +34,7 @@ const handleDateMask = (e: React.ChangeEvent<HTMLInputElement>) => {
 };
 
 const formSchema = z.object({
-  cpf: z.string().min(11, "CPF deve ter 11 dígitos.").max(11, "CPF deve ter 11 dígitos."),
+  cpf: z.string().min(11, "CPF deve ter 11 dígitos.").max(14, "CPF inválido."),
   nome: z.string().min(3, "Nome é obrigatório."),
   data_nascimento: z.string().refine((val) => /^\d{2}\/\d{2}\/\d{4}$/.test(val), {
     message: "Data deve estar no formato DD/MM/AAAA.",
@@ -44,12 +45,29 @@ const formSchema = z.object({
   })
 });
 
+const proposalSchema = z.object({
+  idProposta: z.string().min(1, "O ID da proposta é obrigatório."),
+});
+
+const formatCurrency = (value: string | number | undefined | null) => {
+    if (value === undefined || value === null) return 'N/A';
+    const numberValue = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : value;
+    if (isNaN(numberValue)) return 'N/A';
+    return new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+    }).format(numberValue);
+};
 
 export default function C6Page() {
   const { user } = useUser();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<C6LinkResponse | null>(null);
+  const [linkResult, setLinkResult] = useState<C6LinkResponse | null>(null);
+
+  const [isOfferLoading, setIsOfferLoading] = useState(false);
+  const [offerError, setOfferError] = useState<string | null>(null);
+  const [offerResult, setOfferResult] = useState<C6Offer[] | null>(null);
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -64,7 +82,14 @@ export default function C6Page() {
     },
   });
 
-  async function onSubmit(values: z.infer<typeof formSchema>) {
+  const proposalForm = useForm<z.infer<typeof proposalSchema>>({
+    resolver: zodResolver(proposalSchema),
+    defaultValues: {
+      idProposta: "",
+    },
+  });
+
+  async function onLinkSubmit(values: z.infer<typeof formSchema>) {
     if (!user) {
       setError("Você precisa estar logado para realizar uma consulta.");
       return;
@@ -72,12 +97,12 @@ export default function C6Page() {
     
     setIsLoading(true);
     setError(null);
-    setResult(null);
+    setLinkResult(null);
 
     const response = await consultarOfertasC6({ ...values, userId: user.uid });
 
     if (response.success && response.data) {
-        setResult(response.data);
+        setLinkResult(response.data);
     } else {
       setError(response.message);
     }
@@ -85,20 +110,41 @@ export default function C6Page() {
     setIsLoading(false);
   }
 
+  async function onProposalSubmit(values: z.infer<typeof proposalSchema>) {
+     if (!user) {
+      setOfferError("Você precisa estar logado para realizar uma consulta.");
+      return;
+    }
+    setIsOfferLoading(true);
+    setOfferError(null);
+    setOfferResult(null);
+    
+    const response = await consultarPropostaC6({ idProposta: values.idProposta, userId: user.uid });
+
+    if (response.success && response.data) {
+      setOfferResult(response.data);
+    } else {
+      setOfferError(response.message);
+    }
+
+    setIsOfferLoading(false);
+  }
+
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Crédito Privado CLT - C6"
-        description="Gere um link de autorização de consulta de dados para o cliente."
+        description="Gere um link de autorização e consulte as ofertas de crédito para o cliente."
       />
       <Card>
         <CardHeader>
-            <CardTitle>Gerar Link de Autorização</CardTitle>
-            <CardDescription>Insira os dados do cliente para gerar o link de autorização.</CardDescription>
+            <CardTitle>1. Gerar Link de Autorização</CardTitle>
+            <CardDescription>Insira os dados do cliente para gerar o link que ele usará para autorizar a consulta.</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <form onSubmit={form.handleSubmit(onLinkSubmit)} className="space-y-6">
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField
                         control={form.control}
@@ -186,32 +232,110 @@ export default function C6Page() {
       {error && (
          <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Erro na Consulta</AlertTitle>
+            <AlertTitle>Erro ao Gerar Link</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
          </Alert>
       )}
       
-      {result && (
-         <Card>
+      {linkResult && (
+        <Card>
             <CardHeader>
                 <CardTitle>Link Gerado com Sucesso!</CardTitle>
-                <CardDescription>Envie o link abaixo para o cliente autorizar a consulta.</CardDescription>
+                <CardDescription>Envie o link abaixo para o cliente. Após a autorização, insira o ID da proposta abaixo.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 <div className="flex items-center gap-2">
-                     <Input value={result.link} readOnly />
+                     <Input value={linkResult.link} readOnly />
                      <Button asChild variant="secondary">
-                        <a href={result.link} target="_blank" rel="noopener noreferrer">
+                        <a href={linkResult.link} target="_blank" rel="noopener noreferrer">
                             Abrir <ExternalLink className="ml-2 h-4 w-4" />
                         </a>
                     </Button>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                    O link expira em: {new Date(result.data_expiracao).toLocaleDateString('pt-BR')}
+                    O link expira em: {new Date(linkResult.data_expiracao).toLocaleDateString('pt-BR')}
                 </p>
             </CardContent>
         </Card>
       )}
+
+      <Separator />
+
+      <Card>
+        <CardHeader>
+            <CardTitle>2. Consultar Ofertas da Proposta</CardTitle>
+            <CardDescription>Após o cliente autorizar, cole o ID da proposta para ver as ofertas.</CardDescription>
+        </CardHeader>
+        <CardContent>
+           <Form {...proposalForm}>
+            <form onSubmit={proposalForm.handleSubmit(onProposalSubmit)} className="space-y-6">
+               <FormField
+                  control={proposalForm.control}
+                  name="idProposta"
+                  render={({ field }) => (
+                  <FormItem>
+                      <FormLabel>ID da Proposta</FormLabel>
+                      <FormControl>
+                      <Input placeholder="Cole o ID da proposta aqui..." {...field} disabled={isOfferLoading}/>
+                      </FormControl>
+                      <FormMessage />
+                  </FormItem>
+                  )}
+              />
+              <Button type="submit" disabled={isOfferLoading}>
+                {isOfferLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wallet className="mr-2 h-4 w-4" />}
+                {isOfferLoading ? "Buscando Ofertas..." : "Buscar Ofertas"}
+              </Button>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
+
+      {offerError && (
+         <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Erro ao Buscar Ofertas</AlertTitle>
+            <AlertDescription>{offerError}</AlertDescription>
+         </Alert>
+      )}
+
+      {offerResult && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Ofertas Encontradas</CardTitle>
+            <CardDescription>As seguintes ofertas estão disponíveis para esta proposta.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {offerResult.map(offer => (
+              <div key={offer.id_oferta} className="border rounded-lg p-4 space-y-2">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-semibold text-lg">{offer.nome_produto}</h3>
+                  <Badge>{offer.status}</Badge>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm pt-2">
+                  <div className="flex flex-col">
+                    <span className="text-muted-foreground">Valor Financiado</span>
+                    <span className="font-semibold">{formatCurrency(offer.valor_financiado)}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-muted-foreground">Valor da Parcela</span>
+                    <span className="font-semibold">{formatCurrency(offer.valor_parcela)}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-muted-foreground">Nº de Parcelas</span>
+                    <span className="font-semibold">{offer.qtd_parcelas}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-muted-foreground">Taxa (mês)</span>
+                    <span className="font-semibold">{offer.taxa_mes}%</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
     </div>
   );
 }
