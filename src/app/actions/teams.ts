@@ -158,8 +158,6 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
 
         const teamData = teamDoc.data();
         if (teamData?.managerId !== managerId) {
-            // A super admin could bypass this check in the future if needed.
-            // For now, only the manager can see their own team.
             return { success: false, error: "Você não tem permissão para visualizar os membros desta equipe." };
         }
         
