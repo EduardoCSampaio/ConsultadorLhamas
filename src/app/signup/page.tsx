@@ -91,7 +91,7 @@ export default function SignUpPage() {
           role: isSuperAdmin ? 'super_admin' : 'user',
           status: isSuperAdmin ? 'active' : 'pending',
           createdAt: serverTimestamp(),
-          teamId: teamId || null,
+          teamId: teamId, // Correctly assign teamId here
           permissions: {
             canViewFGTS: isSuperAdmin,
             canViewCLT: isSuperAdmin,
@@ -101,11 +101,12 @@ export default function SignUpPage() {
         
         await setDoc(doc(firestore, "users", newUser.uid), userProfile);
         
+        // Pass teamId to logActivity to ensure correct notification routing
         await logActivity({
             userId: newUser.uid,
-            action: isInvitation ? 'User Registration (Invitation)' : 'User Registration',
+            action: teamId ? 'User Registration (Invitation)' : 'User Registration',
             details: `New user ${newUser.email} signed up.`,
-            teamId: teamId || undefined,
+            teamId: teamId ?? undefined,
         });
         
         if (isSuperAdmin) {
