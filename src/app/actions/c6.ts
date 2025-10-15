@@ -70,7 +70,7 @@ async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiC
     }
     try {
         const userDoc = await firestore.collection('users').doc(userId).get();
-        if (!userDoc.exists) {
+        if (!userDoc.exists()) {
             return { credentials: null, error: 'Usuário não encontrado.' };
         }
         const userData = userDoc.data()!;
@@ -220,7 +220,7 @@ export async function consultarOfertasCLTC6(input: z.infer<typeof getOffersSchem
 
     await logActivity({ userId, action: 'Consulta Ofertas CLT C6', provider: 'c6', documentNumber: cpf });
 
-    const apiUrl = 'https://marketplace-proposal-service-api-p.c6bank.info/marketplace/worker-payroll-loan-offers';
+    const apiUrl = 'https://marketplace-proposal-service-api-p.c6bank.info/marketplace/workerpayroll-loan-offers';
 
     try {
         const response = await fetch(apiUrl, {
@@ -233,8 +233,8 @@ export async function consultarOfertasCLTC6(input: z.infer<typeof getOffersSchem
             body: JSON.stringify({ cpf_cliente: cpf.replace(/\D/g, '') })
         });
         
+        const textResponse = await response.text();
         if (!response.ok) {
-            const textResponse = await response.text();
             if (response.status === 404) {
                  return { success: false, message: `Erro da API do C6: Endpoint não encontrado (404). Verifique o URL da API.` };
             }
@@ -255,7 +255,7 @@ export async function consultarOfertasCLTC6(input: z.infer<typeof getOffersSchem
             }
         }
         
-        const data = await response.json();
+        const data = JSON.parse(textResponse);
 
         if (!data.ofertas || data.ofertas.length === 0) {
             return { success: true, message: "Nenhuma oferta encontrada para este cliente.", data: [] };
@@ -308,13 +308,14 @@ export async function verificarStatusAutorizacaoC6(input: z.infer<typeof getOffe
             body: JSON.stringify({ cpf: cpf.replace(/\D/g, '') })
         });
         
-        const data = await response.json();
-
+        const textResponse = await response.text();
         if (!response.ok) {
-            const errorMessage = data.message || data.error || JSON.stringify(data);
+            const errorMessage = textResponse.startsWith('{') ? JSON.parse(textResponse).message : textResponse;
             console.error('[C6 API Error - Check Status]', errorMessage);
             return { success: false, message: `Erro da API do C6: ${errorMessage}` };
         }
+        
+        const data = JSON.parse(textResponse);
 
         return { 
             success: true, 
