@@ -158,7 +158,11 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
 
         const teamData = teamDoc.data();
         if (teamData?.managerId !== managerId) {
-            return { success: false, error: "Você não tem permissão para visualizar os membros desta equipe." };
+            // Check if the current user is a super_admin
+            const managerDoc = await firestore.collection('users').doc(managerId).get();
+            if (managerDoc.data()?.role !== 'super_admin') {
+               return { success: false, error: "Você não tem permissão para visualizar os membros desta equipe." };
+            }
         }
         
         const membersSnapshot = await firestore.collection('users').where('teamId', '==', teamId).get();
@@ -169,7 +173,7 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
         const members = membersSnapshot.docs
             .map(doc => doc.data() as UserProfile)
             // Ensure we don't show the manager in their own member list
-            .filter(member => member.uid !== managerId); 
+            .filter(member => member.uid !== teamData?.managerId); 
 
         return { success: true, members };
 

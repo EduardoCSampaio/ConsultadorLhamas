@@ -6,7 +6,7 @@ import { firestore, auth } from '@/firebase/server-init';
 import { Timestamp, FieldValue } from 'firebase-admin/firestore';
 import { UserRecord } from 'firebase-admin/auth';
 import * as XLSX from 'xlsx';
-import { createNotificationsForAdmins } from './notifications';
+import { createNotification, createNotificationsForAdmins } from './notifications';
 import { createTeam } from './teams';
 
 export type UserPermissions = {
@@ -117,6 +117,7 @@ type LogActivityInput = {
     documentNumber?: string;
     provider?: string;
     details?: string;
+    teamId?: string; // Optional teamId for invitation-based registrations
 };
 
 export async function logActivity(input: LogActivityInput) {
@@ -128,14 +129,29 @@ export async function logActivity(input: LogActivityInput) {
         }
         const userEmail = userDoc.data()?.email || 'N/A';
 
+        const { teamId, ...logData } = input;
+        
         await firestore.collection('activityLogs').add({
-            ...input,
+            ...logData,
             userEmail: userEmail,
             createdAt: FieldValue.serverTimestamp(),
         });
-
-        // If the action is a new user registration, notify all admins.
-        if (input.action.startsWith('User Registration')) {
+        
+        if (input.action.startsWith('User Registration (Invitation)') && teamId) {
+            const teamDoc = await firestore.collection('teams').doc(teamId).get();
+            if (teamDoc.exists) {
+                const managerId = teamDoc.data()?.managerId;
+                if (managerId) {
+                    await createNotification({
+                        userId: managerId,
+                        title: 'Novo Membro Pendente',
+                        message: `O usuário ${userEmail} se cadastrou e aguarda sua aprovação.`,
+                        link: '/teams'
+                    });
+                }
+            }
+        } else if (input.action.startsWith('User Registration')) {
+            // This notifies ALL admins, only for non-team signups
              await createNotificationsForAdmins({
                 title: 'Novo Usuário Cadastrado',
                 message: `O usuário ${userEmail} se cadastrou e aguarda aprovação.`,
@@ -148,6 +164,7 @@ export async function logActivity(input: LogActivityInput) {
         console.error(`Failed to log activity "${input.action}":`, logError);
     }
 }
+
 
 // Action to fetch all activity logs
 export async function getActivityLogs(): Promise<{logs: ActivityLog[] | null, error?: string}> {
