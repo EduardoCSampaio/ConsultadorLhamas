@@ -70,7 +70,7 @@ async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiC
     }
     try {
         const userDoc = await firestore.collection('users').doc(userId).get();
-        if (!userDoc.exists) {
+        if (!userDoc.exists()) {
             return { credentials: null, error: 'Usuário não encontrado.' };
         }
         const userData = userDoc.data()!;
@@ -238,7 +238,6 @@ export async function consultarOfertasCLTC6(input: z.infer<typeof getOffersSchem
             if (response.status === 404) {
                  return { success: false, message: `Erro da API do C6: Endpoint não encontrado (404). Verifique o URL da API.` };
             }
-             // Check if the response is likely JSON or just plain text
             if (textResponse.startsWith('{') || textResponse.startsWith('[')) {
                 try {
                     const data = JSON.parse(textResponse);
