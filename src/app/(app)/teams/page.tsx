@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUser, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
 import type { UserProfile, UserPermissions } from '@/app/actions/users';
-import { updateUserStatus } from '@/app/actions/users';
+import { updateUserStatus, updateUserTeamAndSector } from '@/app/actions/users';
 import { updateTeamSectors, getTeamMembers } from '@/app/actions/teams';
 import { Copy, Users, Check, X, UserX, UserCheck, Pencil, Trash2, Plus, Save, Loader2, Settings } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -40,6 +40,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { doc } from 'firebase/firestore';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 
 type UserStatus = UserProfile['status'];
@@ -103,10 +104,17 @@ export default function MyTeamPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [updatingId, setUpdatingId] = useState<string | null>(null);
     
+    // Sector management state
     const [isSavingSectors, setIsSavingSectors] = useState(false);
     const [isSectorModalOpen, setIsSectorModalOpen] = useState(false);
     const [currentSector, setCurrentSector] = useState<{name: string, permissions: UserPermissions, isManager?: boolean} | null>(null);
     const [editingSectorName, setEditingSectorName] = useState<string | null>(null);
+
+    // Member editing state
+    const [isEditMemberModalOpen, setIsEditMemberModalOpen] = useState(false);
+    const [selectedMember, setSelectedMember] = useState<UserProfile | null>(null);
+    const [newMemberSector, setNewMemberSector] = useState<string | null>(null);
+    const [isSavingMember, setIsSavingMember] = useState(false);
 
 
     const managerProfileRef = useMemoFirebase(() => {
@@ -235,7 +243,6 @@ export default function MyTeamPage() {
         if (result.success) {
             toast({ title: 'Setores atualizados com sucesso!' });
             setIsSectorModalOpen(false);
-            // No need to fetch data here as the team listener will update automatically
         } else {
             toast({ variant: 'destructive', title: 'Erro ao salvar setores', description: result.message });
         }
@@ -245,7 +252,6 @@ export default function MyTeamPage() {
     const handleDeleteSector = async (sectorName: string) => {
         if (!teamId || !team?.sectors) return;
 
-        // Prevent deleting a sector that is in use
         if (teamMembers.some(m => m.sector === sectorName)) {
             toast({ variant: 'destructive', title: 'Setor em uso', description: 'Não é possível excluir um setor que está sendo utilizado por membros da equipe.' });
             return;
@@ -258,11 +264,46 @@ export default function MyTeamPage() {
         const result = await updateTeamSectors({ teamId, sectors: newSectors });
         if (result.success) {
             toast({ title: 'Setor excluído com sucesso!' });
-            // No need to fetch data here as the team listener will update automatically
         } else {
              toast({ variant: 'destructive', title: 'Erro ao excluir setor', description: result.message });
         }
         setIsSavingSectors(false);
+    };
+
+    const handleOpenEditMemberModal = (member: UserProfile) => {
+        setSelectedMember(member);
+        setNewMemberSector(member.sector || null);
+        setIsEditMemberModalOpen(true);
+    };
+
+    const handleSaveMemberChanges = async () => {
+        if (!selectedMember || !newMemberSector || !teamId || !team?.sectors) {
+            toast({ variant: "destructive", title: "Erro", description: "Faltam informações para salvar." });
+            return;
+        }
+        setIsSavingMember(true);
+
+        const newPermissions = team.sectors[newMemberSector]?.permissions;
+        if (!newPermissions) {
+            toast({ variant: "destructive", title: "Erro", description: "Setor selecionado é inválido." });
+            setIsSavingMember(false);
+            return;
+        }
+
+        const result = await updateUserTeamAndSector({
+            memberId: selectedMember.uid,
+            sector: newMemberSector,
+            permissions: newPermissions
+        });
+
+        if (result.success) {
+            toast({ title: "Membro da equipe atualizado com sucesso!" });
+            setIsEditMemberModalOpen(false);
+            fetchTeamData(teamId); // Refresh team data
+        } else {
+            toast({ variant: "destructive", title: "Erro ao atualizar", description: result.message });
+        }
+        setIsSavingMember(false);
     };
 
     const renderActionButtons = (user: UserProfile) => {
@@ -282,9 +323,14 @@ export default function MyTeamPage() {
         }
          if (user.status === 'active') {
             return (
-                <Button variant="destructive" size="sm" onClick={() => handleStatusChange(user.uid, 'inactive')} disabled={isUpdating}>
-                    <UserX className="mr-2 h-4 w-4"/> Inativar
-                </Button>
+                <div className='flex items-center justify-end gap-2'>
+                    <Button variant="outline" size="icon" className='h-8 w-8' onClick={() => handleOpenEditMemberModal(user)}>
+                        <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="destructive" size="sm" onClick={() => handleStatusChange(user.uid, 'inactive')} disabled={isUpdating}>
+                        <UserX className="mr-2 h-4 w-4"/> Inativar
+                    </Button>
+                </div>
             );
         }
         if (user.status === 'rejected' || user.status === 'inactive') {
@@ -549,6 +595,53 @@ export default function MyTeamPage() {
                         <Button onClick={handleSaveSector} disabled={isSavingSectors}>
                             {isSavingSectors ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                             Salvar
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Edit Member Dialog */}
+            <Dialog open={isEditMemberModalOpen} onOpenChange={setIsEditMemberModalOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Editar Membro da Equipe</DialogTitle>
+                        <DialogDescription>Altere o setor deste usuário.</DialogDescription>
+                    </DialogHeader>
+                    {selectedMember && (
+                        <div className="grid gap-4 py-4">
+                            <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="member-email" className="text-right">
+                                    Email
+                                </Label>
+                                <Input id="member-email" value={selectedMember.email} readOnly className="col-span-3" />
+                            </div>
+                            <div className="grid grid-cols-4 items-center gap-4">
+                                <Label htmlFor="member-sector" className="text-right">
+                                    Setor
+                                </Label>
+                                <Select
+                                    value={newMemberSector || ''}
+                                    onValueChange={(value) => setNewMemberSector(value)}
+                                >
+                                    <SelectTrigger className="col-span-3">
+                                        <SelectValue placeholder="Selecione um setor" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {team && Object.keys(team.sectors).map(sectorName => (
+                                            <SelectItem key={sectorName} value={sectorName}>
+                                                {sectorName}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsEditMemberModalOpen(false)}>Cancelar</Button>
+                        <Button onClick={handleSaveMemberChanges} disabled={isSavingMember}>
+                            {isSavingMember ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                            Salvar Alterações
                         </Button>
                     </DialogFooter>
                 </DialogContent>

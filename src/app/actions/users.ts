@@ -86,6 +86,16 @@ const exportUsersSchema = z.object({
     userId: z.string(),
 });
 
+const updateUserTeamAndSectorSchema = z.object({
+    memberId: z.string(),
+    sector: z.string(),
+    permissions: z.object({
+        canViewFGTS: z.boolean(),
+        canViewCLT: z.boolean(),
+        canViewINSS: z.boolean(),
+    })
+});
+
 
 export type UserProfile = {
     uid: string;
@@ -535,6 +545,26 @@ export async function updateUserPhotoURL(input: z.infer<typeof updateUserPhotoUR
     }
 }
 
+export async function updateUserTeamAndSector(input: z.infer<typeof updateUserTeamAndSectorSchema>): Promise<{success: boolean, message: string}> {
+    const validation = updateUserTeamAndSectorSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: "Dados inválidos para atualizar o setor." };
+    }
+    const { memberId, sector, permissions } = validation.data;
+    try {
+        const userRef = firestore.collection('users').doc(memberId);
+        await userRef.update({
+            sector: sector,
+            permissions: permissions,
+        });
+        return { success: true, message: "Setor e permissões do usuário atualizados." };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro desconhecido ao atualizar usuário.";
+        console.error("updateUserTeamAndSector error:", error);
+        return { success: false, message };
+    }
+}
+
 
 type ExportResult = {
     status: 'success' | 'error';
@@ -617,5 +647,3 @@ export async function exportUsersToExcel(input: z.infer<typeof exportUsersSchema
         return { status: 'error', message };
     }
 }
-
-    
