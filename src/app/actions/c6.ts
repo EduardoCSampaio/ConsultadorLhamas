@@ -230,8 +230,9 @@ export async function consultarOfertasCLTC6(input: z.infer<typeof getOffersSchem
                 'Content-Type': 'application/json',
                 'Authorization': `${token}`,
                 'cpf_cliente': cpf.replace(/\D/g, '')
-            },);
-
+            },
+            body: JSON.stringify({ cpf_cliente: cpf})
+        });
         
         const textResponse = await response.text();
         if (!response.ok) {
