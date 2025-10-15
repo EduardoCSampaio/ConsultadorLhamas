@@ -431,10 +431,30 @@ export async function deleteUser(input: z.infer<typeof deleteUserSchema>): Promi
     }
 
     const { uid } = validation.data;
+    const batch = firestore.batch();
 
     try {
+        // 1. Delete user from Auth
         await auth.deleteUser(uid);
-        await firestore.collection('users').doc(uid).delete();
+
+        // 2. Delete main user profile document
+        const userRef = firestore.collection('users').doc(uid);
+        batch.delete(userRef);
+        
+        // 3. Delete all associated data in other collections
+        const collectionsToDelete = ['notifications'];
+        for (const subCollection of collectionsToDelete) {
+             const snapshot = await userRef.collection(subCollection).get();
+             snapshot.docs.forEach(doc => batch.delete(doc.ref));
+        }
+
+        const rootCollections = ['activityLogs', 'batches', 'tickets'];
+        for (const collectionName of rootCollections) {
+            const snapshot = await firestore.collection(collectionName).where('userId', '==', uid).get();
+            snapshot.docs.forEach(doc => batch.delete(doc.ref));
+        }
+
+        await batch.commit();
         
         return { success: true };
     } catch (error) {
@@ -597,3 +617,5 @@ export async function exportUsersToExcel(input: z.infer<typeof exportUsersSchema
         return { status: 'error', message };
     }
 }
+
+    
