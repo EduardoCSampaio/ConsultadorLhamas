@@ -17,17 +17,25 @@ import { AlertCircle, CheckCircle, Loader2 } from "lucide-react";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useFirestore } from "@/firebase";
 import { logActivity } from "@/app/actions/users";
-import { getTeamAndManager } from "@/app/actions/teams";
+import { getTeamAndManager, type Team } from "@/app/actions/teams";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 
 export default function SignUpPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [sector, setSector] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPendingMessage, setShowPendingMessage] = useState(false);
   const [isInvitationValid, setIsInvitationValid] = useState<boolean | null>(null);
-  const [teamName, setTeamName] = useState<string>('');
+  const [team, setTeam] = useState<Team | null>(null);
   const [managerName, setManagerName] = useState<string>('');
 
 
@@ -59,7 +67,7 @@ export default function SignUpPage() {
 
         if (success && team && manager) {
             setIsInvitationValid(true);
-            setTeamName(team.name);
+            setTeam(team);
             setManagerName(manager.name || manager.email);
         } else {
             setIsInvitationValid(false);
@@ -77,8 +85,8 @@ export default function SignUpPage() {
     setError(null);
     setShowPendingMessage(false);
 
-    if (!auth || !firestore || !teamId || !isInvitationValid) {
-      setError("Link de convite inválido ou serviços de autenticação indisponíveis.");
+    if (!auth || !firestore || !teamId || !isInvitationValid || !sector) {
+      setError("Verifique se todos os campos estão preenchidos ou se o link de convite é válido.");
       setIsLoading(false);
       return;
     }
@@ -87,6 +95,12 @@ export default function SignUpPage() {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const newUser = userCredential.user;
 
+        const selectedSectorPermissions = team?.sectors[sector]?.permissions || {
+            canViewFGTS: false,
+            canViewCLT: false,
+            canViewINSS: false,
+        };
+
         const userProfile = {
           uid: newUser.uid,
           email: newUser.email,
@@ -94,12 +108,8 @@ export default function SignUpPage() {
           status: 'pending',
           createdAt: serverTimestamp(),
           teamId: teamId,
-          sector: '',
-          permissions: {
-              canViewFGTS: false,
-              canViewCLT: false,
-              canViewINSS: false,
-          }
+          sector: sector,
+          permissions: selectedSectorPermissions
         };
 
         await setDoc(doc(firestore, "users", newUser.uid), userProfile);
@@ -107,7 +117,7 @@ export default function SignUpPage() {
         await logActivity({
             userId: newUser.uid,
             action: 'User Registration (Invitation)',
-            details: `New user ${newUser.email} signed up for team ${teamId}`
+            details: `New user ${newUser.email} signed up for team ${teamId} in sector ${sector}`
         });
         
         setShowPendingMessage(true);
@@ -173,7 +183,7 @@ export default function SignUpPage() {
                   Criar Conta para Equipe
                 </CardTitle>
                 <CardDescription>
-                  Você foi convidado para a equipe de <strong>{managerName || teamName}</strong>. Preencha seus dados para se registrar.
+                  Você foi convidado para a equipe <strong>{team?.name}</strong>. Preencha seus dados para se registrar.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -208,6 +218,21 @@ export default function SignUpPage() {
                     disabled={isLoading || !isInvitationValid}
                     autoComplete="new-password"
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sector">Setor</Label>
+                  <Select value={sector} onValueChange={setSector} required>
+                    <SelectTrigger id="sector" disabled={isLoading || !isInvitationValid || !team?.sectors}>
+                      <SelectValue placeholder="Selecione seu setor na equipe" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {team?.sectors && Object.keys(team.sectors).map(sectorName => (
+                        <SelectItem key={sectorName} value={sectorName}>
+                          {sectorName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </CardContent>
               <CardFooter className="flex flex-col gap-4">
