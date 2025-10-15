@@ -53,7 +53,7 @@ import { NotificationBell } from '@/components/notification-bell';
 
 const allBaseMenuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard", permission: 'isLoggedIn' as const },
-  { href: "/esteira", icon: Workflow, label: "Esteira", permission: 'isSuperAdmin' as const },
+  { href: "/esteira", icon: Workflow, label: "Esteira", permission: 'isLoggedIn' as const },
   { href: "/admin/history", icon: BookMarked, label: "Histórico", permission: 'isSuperAdmin' as const },
 ];
 
