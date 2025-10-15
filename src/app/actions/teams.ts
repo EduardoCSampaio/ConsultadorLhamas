@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 import { firestore } from '@/firebase/server-init';
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logActivity } from './users';
 import type { UserPermissions, UserProfile } from './users';
 
