@@ -117,7 +117,8 @@ export default function SignUpPage() {
         await logActivity({
             userId: newUser.uid,
             action: 'User Registration (Invitation)',
-            details: `New user ${newUser.email} signed up for team ${teamId} in sector ${sector}`
+            details: `New user ${newUser.email} signed up for team ${teamId} in sector ${sector}`,
+            teamId: teamId,
         });
         
         setShowPendingMessage(true);
