@@ -26,10 +26,11 @@ export default function SignUpPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPendingMessage, setShowPendingMessage] = useState(false);
-  const [isInvitationValid, setIsInvitationValid] = useState<boolean | null>(null);
+  
+  // Invitation-related state
   const [team, setTeam] = useState<Team | null>(null);
-  const [managerName, setManagerName] = useState<string>('');
-
+  const [isInvitation, setIsInvitation] = useState(false);
+  const [isInvitationLoading, setIsInvitationLoading] = useState(true);
 
   const auth = useAuth();
   const firestore = useFirestore();
@@ -47,31 +48,24 @@ export default function SignUpPage() {
 
   useEffect(() => {
     async function validateInvitation() {
-        if (!teamId) {
-            router.push('/');
-            return;
+        if (teamId && firestore) {
+            setIsInvitation(true);
+            const { success, team, error } = await getTeamAndManager({ teamId });
+            if (success && team) {
+                setTeam(team);
+            } else {
+                toast({
+                    variant: 'destructive',
+                    title: 'Link de Convite Inválido',
+                    description: error || "O link de convite pode ter expirado ou a equipe não existe mais."
+                });
+                router.push('/signup');
+            }
         }
-        if (!firestore) {
-            return;
-        }
-
-        setIsLoading(true);
-        const { success, team, manager, error } = await getTeamAndManager({ teamId });
-        setIsLoading(false);
-
-        if (success && team && manager) {
-            setIsInvitationValid(true);
-            setTeam(team);
-            setManagerName(manager.name || manager.email);
-        } else {
-            setIsInvitationValid(false);
-            setError(error || "O link de convite é inválido ou a equipe não existe mais.");
-        }
+        setIsInvitationLoading(false);
     }
-    if (firestore) {
-        validateInvitation();
-    }
-  }, [teamId, firestore, router]);
+    validateInvitation();
+  }, [teamId, firestore, router, toast]);
 
   const handleAuth = async (e: FormEvent) => {
     e.preventDefault();
@@ -79,8 +73,8 @@ export default function SignUpPage() {
     setError(null);
     setShowPendingMessage(false);
 
-    if (!auth || !firestore || !teamId || !isInvitationValid) {
-      setError("Ocorreu um erro. Verifique se o link de convite é válido.");
+    if (!auth || !firestore) {
+      setError("Ocorreu um erro. Tente novamente mais tarde.");
       setIsLoading(false);
       return;
     }
@@ -89,32 +83,41 @@ export default function SignUpPage() {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const newUser = userCredential.user;
 
-        const userProfile = {
+        const isSuperAdmin = newUser.email === 'admin@lhamascred.com.br';
+
+        const userProfile: any = {
           uid: newUser.uid,
           email: newUser.email,
-          role: 'user' as const,
-          status: 'pending' as const,
+          role: isSuperAdmin ? 'super_admin' : 'user',
+          status: isSuperAdmin ? 'active' : 'pending',
           createdAt: serverTimestamp(),
-          teamId: teamId, 
-          sector: '', // User starts without a sector, manager will assign it.
           permissions: {
-            canViewFGTS: false,
-            canViewCLT: false,
-            canViewINSS: false,
+            canViewFGTS: isSuperAdmin,
+            canViewCLT: isSuperAdmin,
+            canViewINSS: isSuperAdmin,
           }
         };
+        
+        // If it's an invitation, link the teamId
+        if(isInvitation && teamId) {
+            userProfile.teamId = teamId;
+        }
 
         await setDoc(doc(firestore, "users", newUser.uid), userProfile);
         
         await logActivity({
             userId: newUser.uid,
-            action: 'User Registration (Invitation)',
-            details: `New user ${newUser.email} signed up for team ${teamId}.`,
-            teamId: teamId,
+            action: isInvitation ? 'User Registration (Invitation)' : 'User Registration',
+            details: `New user ${newUser.email} signed up.`,
+            ...(isInvitation && { teamId: teamId! }),
         });
         
-        setShowPendingMessage(true);
-        await signOut(auth);
+        if (isSuperAdmin) {
+            router.push('/dashboard');
+        } else {
+            setShowPendingMessage(true);
+            await signOut(auth);
+        }
 
     } catch (err) {
       const authError = err as AuthError;
@@ -140,7 +143,7 @@ export default function SignUpPage() {
     }
   };
 
-  if (isUserLoading || user || isInvitationValid === null) {
+  if (isUserLoading || user || isInvitationLoading) {
     return <div className="flex min-h-screen items-center justify-center bg-background"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
 
@@ -159,7 +162,10 @@ export default function SignUpPage() {
                 </div>
                <CardTitle className="font-headline text-2xl font-semibold mt-4">Solicitação Enviada!</CardTitle>
                <CardDescription className="text-base">
-                 Sua solicitação para entrar na equipe foi enviada e está aguardando aprovação.
+                 {isInvitation ? 
+                    `Sua solicitação para entrar na equipe "${team?.name}" foi enviada e aguarda aprovação do gerente.` :
+                    "Sua conta foi criada e está aguardando aprovação de um administrador."
+                 }
                </CardDescription>
              </CardHeader>
              <CardFooter>
@@ -173,15 +179,15 @@ export default function SignUpPage() {
             <form onSubmit={handleAuth}>
               <CardHeader className="text-center">
                 <CardTitle className="font-headline text-2xl font-semibold">
-                  Criar Conta para Equipe
+                  Crie sua Conta
                 </CardTitle>
-                 {isInvitationValid ? (
+                 {isInvitation ? (
                      <CardDescription>
-                        Você foi convidado para a equipe <strong>{team?.name}</strong>. Preencha seus dados para se registrar.
+                        Você foi convidado para a equipe <strong>{team?.name}</strong>. Preencha seus dados.
                     </CardDescription>
                  ) : (
                     <CardDescription>
-                        Carregando informações do convite...
+                       Preencha os dados para se cadastrar e aguardar aprovação.
                     </CardDescription>
                  )}
               </CardHeader>
@@ -202,7 +208,7 @@ export default function SignUpPage() {
                     required 
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    disabled={isLoading || !isInvitationValid}
+                    disabled={isLoading}
                     autoComplete="email"
                   />
                 </div>
@@ -214,13 +220,13 @@ export default function SignUpPage() {
                     required 
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    disabled={isLoading || !isInvitationValid}
+                    disabled={isLoading}
                     autoComplete="new-password"
                   />
                 </div>
               </CardContent>
               <CardFooter className="flex flex-col gap-4">
-                <Button className="w-full" type="submit" disabled={isLoading || !isInvitationValid}>
+                <Button className="w-full" type="submit" disabled={isLoading}>
                   {isLoading ? "Criando conta..." : "Criar conta e solicitar acesso"}
                 </Button>
                  <div className="text-center text-sm text-muted-foreground">

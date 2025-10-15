@@ -117,7 +117,7 @@ type LogActivityInput = {
     documentNumber?: string;
     provider?: string;
     details?: string;
-    teamId?: string; // Optional teamId for invitation-based registrations
+    teamId?: string;
 };
 
 function toISODate(timestamp: Timestamp | string | Date | undefined): string {
@@ -139,36 +139,37 @@ export async function logActivity(input: LogActivityInput) {
             return;
         }
         const userEmail = userDoc.data()?.email || 'N/A';
-
-        const { teamId, ...logData } = input;
+        
+        const logData = { ...input, userEmail };
         
         await firestore.collection('activityLogs').add({
             ...logData,
-            userEmail: userEmail,
             createdAt: FieldValue.serverTimestamp(),
         });
         
-        if (input.action.startsWith('User Registration (Invitation)') && teamId) {
-            const teamDoc = await firestore.collection('teams').doc(teamId).get();
-            if (teamDoc.exists) {
-                const managerId = teamDoc.data()?.managerId;
-                if (managerId) {
-                    await createNotification({
-                        userId: managerId,
-                        title: 'Novo Membro Pendente',
-                        message: `O usuário ${userEmail} se cadastrou e aguarda sua aprovação.`,
-                        link: '/teams'
-                    });
+        if (input.action.startsWith('User Registration')) {
+            if (input.teamId) {
+                const teamDoc = await firestore.collection('teams').doc(input.teamId).get();
+                if (teamDoc.exists) {
+                    const managerId = teamDoc.data()?.managerId;
+                    if (managerId) {
+                        await createNotification({
+                            userId: managerId,
+                            title: 'Novo Membro Pendente',
+                            message: `O usuário ${userEmail} se cadastrou e aguarda sua aprovação.`,
+                            link: '/teams'
+                        });
+                        return; // Notification sent to manager, so we stop here.
+                    }
                 }
             }
-        } else if (input.action.startsWith('User Registration')) {
+            // If no teamId, or if manager not found, notify all super admins
             await createNotificationsForAdmins({
                 title: 'Novo Usuário Cadastrado',
                 message: `O usuário ${userEmail} se cadastrou e aguarda aprovação.`,
                 link: '/admin/users'
             });
         }
-
 
     } catch (logError) {
         console.error(`Failed to log activity "${input.action}":`, logError);
