@@ -121,9 +121,12 @@ export async function getBatches(input?: { userId: string }): Promise<{ status: 
     try {
         let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> = firestore.collection('batches');
 
-        // Apply filter if a specific user's batches are requested
         if (input?.userId) {
-            query = query.where('userId', '==', input.userId);
+            const userDoc = await firestore.collection('users').doc(input.userId).get();
+            const userRole = userDoc.data()?.role;
+            if(userRole !== 'super_admin') {
+                query = query.where('userId', '==', input.userId);
+            }
         }
         
         const batchesSnapshot = await query.get();
@@ -152,7 +155,6 @@ export async function getBatches(input?: { userId: string }): Promise<{ status: 
             };
         });
 
-        // Sort in memory to avoid needing a composite index in Firestore
         batches.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
         return { status: 'success', batches };
@@ -383,8 +385,6 @@ export async function processarLoteClt(input: z.infer<typeof processCltActionSch
           details: `Arquivo: ${fileName} (${cpfs.length} CPFs)`
       });
       
-      // TODO: Call background processing function for CLT here
-      // For now, we will just mark it as error as it's not implemented
        await batchRef.update({
         status: 'error',
         message: 'Processamento de lote CLT ainda não implementado para este provedor.',
@@ -446,7 +446,6 @@ async function processV8BatchInBackground(batchId: string) {
                 provider: v8Provider,
                 batchId: batchId
             });
-            // We don't log individual CPFs for batch jobs anymore to reduce noise
         }
         
         await batchRef.update({ 
@@ -493,7 +492,6 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
             details: `Reprocessando lote: ${originalBatchData.fileName} (ID: ${batchId})`
         });
 
-        // Find which CPFs were NOT processed successfully
         const webhookResponsesSnapshot = await firestore.collection('webhookResponses')
             .where('batchId', '==', batchId)
             .where('status', '==', 'success') 
@@ -519,7 +517,6 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
             return { status: 'success', message: 'Todos os CPFs já haviam sido processados com sucesso. Lote finalizado.' };
         }
 
-        // Create a NEW batch with only the remaining CPFs
         const newBatchAction: z.infer<typeof processActionSchema> = {
             cpfs: cpfsToReprocess,
             provider: originalBatchData.provider === 'V8DIGITAL' ? 'v8' : 'facta',

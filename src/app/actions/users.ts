@@ -120,6 +120,17 @@ type LogActivityInput = {
     teamId?: string; // Optional teamId for invitation-based registrations
 };
 
+function toISODate(timestamp: Timestamp | string | Date | undefined): string {
+    if (!timestamp) return new Date().toISOString();
+    if (timestamp instanceof Timestamp) {
+        return timestamp.toDate().toISOString();
+    }
+    if (typeof timestamp === 'string') {
+        return timestamp;
+    }
+    return timestamp.toISOString();
+}
+
 export async function logActivity(input: LogActivityInput) {
     try {
         const userDoc = await firestore.collection('users').doc(input.userId).get();
@@ -151,8 +162,7 @@ export async function logActivity(input: LogActivityInput) {
                 }
             }
         } else if (input.action.startsWith('User Registration')) {
-            // This notifies ALL admins, only for non-team signups
-             await createNotificationsForAdmins({
+            await createNotificationsForAdmins({
                 title: 'Novo Usuário Cadastrado',
                 message: `O usuário ${userEmail} se cadastrou e aguarda aprovação.`,
                 link: '/admin/users'
@@ -176,15 +186,6 @@ export async function getActivityLogs(): Promise<{logs: ActivityLog[] | null, er
         
         const logs = logsSnapshot.docs.map(doc => {
             const data = doc.data();
-            const createdAt = data.createdAt;
-
-            let serializableCreatedAt = new Date().toISOString(); // Default value
-            if (createdAt instanceof Timestamp) {
-                serializableCreatedAt = createdAt.toDate().toISOString();
-            } else if (typeof createdAt === 'string') {
-                serializableCreatedAt = createdAt;
-            }
-
             return {
                 id: doc.id,
                 userId: data.userId,
@@ -193,7 +194,7 @@ export async function getActivityLogs(): Promise<{logs: ActivityLog[] | null, er
                 documentNumber: data.documentNumber,
                 provider: data.provider,
                 details: data.details,
-                createdAt: serializableCreatedAt,
+                createdAt: toISODate(data.createdAt),
             } as ActivityLog;
         });
 
@@ -212,9 +213,10 @@ export async function getUserActivityLogs(input: z.infer<typeof getUserActivityS
     }
     const { userId, limit } = validation.data;
     try {
-        // Query without ordering first to avoid composite index
         const logsSnapshot = await firestore.collection('activityLogs')
             .where('userId', '==', userId)
+            .orderBy('createdAt', 'desc')
+            .limit(limit)
             .get();
 
         if (logsSnapshot.empty) {
@@ -223,31 +225,19 @@ export async function getUserActivityLogs(input: z.infer<typeof getUserActivityS
         
         let logs = logsSnapshot.docs.map(doc => {
             const data = doc.data();
-            const createdAt = data.createdAt;
-
-            let serializableCreatedAt = new Date().toISOString(); // Default value
-            if (createdAt instanceof Timestamp) {
-                serializableCreatedAt = createdAt.toDate().toISOString();
-            } else if (typeof createdAt === 'string') {
-                serializableCreatedAt = createdAt;
-            }
-
             return {
                 id: doc.id,
                 userId: data.userId,
                 userEmail: data.userEmail,
                 action: data.action,
                 documentNumber: data.documentNumber,
+                provider: data.provider,
                 details: data.details,
-                createdAt: serializableCreatedAt,
+                createdAt: toISODate(data.createdAt),
             } as ActivityLog;
         });
         
-        // Sort in memory and take the limit
-        logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        const limitedLogs = logs.slice(0, limit);
-
-        return { logs: limitedLogs };
+        return { logs: logs };
     } catch (error) {
         const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao buscar os logs do usuário.";
         console.error(`Erro ao buscar logs para o usuário ${userId}:`, message);
@@ -281,7 +271,6 @@ const combineUserData = async (userRecord: UserRecord, teamsMap: Map<string, str
             }
         };
         await userDocRef.set(newProfile);
-        // We need to re-fetch to get a consistent object with server timestamp resolved
         const newUserDoc = await userDocRef.get();
         profileData = newUserDoc.data();
 
@@ -290,16 +279,7 @@ const combineUserData = async (userRecord: UserRecord, teamsMap: Map<string, str
     }
     
     if (!profileData) {
-        // This case should ideally not be reached, but as a safeguard:
         return null;
-    }
-    
-    const createdAt = profileData.createdAt;
-    let serializableCreatedAt = new Date().toISOString();
-    if (createdAt instanceof Timestamp) {
-        serializableCreatedAt = createdAt.toDate().toISOString();
-    } else if (typeof createdAt === 'string') {
-        serializableCreatedAt = createdAt;
     }
 
     return {
@@ -308,7 +288,7 @@ const combineUserData = async (userRecord: UserRecord, teamsMap: Map<string, str
         photoURL: userRecord.photoURL || profileData.photoURL,
         role: profileData.role || 'user',
         status: profileData.status || 'pending',
-        createdAt: serializableCreatedAt,
+        createdAt: toISODate(profileData.createdAt),
         teamId: profileData.teamId,
         teamName: profileData.teamId ? teamsMap.get(profileData.teamId) : undefined,
         sector: profileData.sector,
@@ -404,7 +384,6 @@ export async function updateUserRole(input: z.infer<typeof updateUserRoleSchema>
         const userRef = firestore.collection('users').doc(uid);
 
         if (newRole === 'manager') {
-            // Demoting from manager back to user is not handled here, only promotion.
             const userDoc = await userRef.get();
             const userData = userDoc.data();
 
@@ -421,8 +400,6 @@ export async function updateUserRole(input: z.infer<typeof updateUserRoleSchema>
                 throw new Error(teamResult.message);
             }
             
-            // The `createTeam` action now handles updating the user role, teamId, and permissions.
-
             await logActivity({
                 userId: adminId,
                 action: 'Promoção de Usuário',
@@ -432,7 +409,6 @@ export async function updateUserRole(input: z.infer<typeof updateUserRoleSchema>
             return { success: true, message: "Usuário promovido a Gerente e uma nova equipe foi criada para ele." };
 
         } else if (newRole === 'user') {
-            // Handle demotion if needed in the future
             await userRef.update({ role: 'user' });
             return { success: true, message: "Função do usuário atualizada para Usuário." };
         }
@@ -456,15 +432,9 @@ export async function deleteUser(input: z.infer<typeof deleteUserSchema>): Promi
     const { uid } = validation.data;
 
     try {
-        // Delete from Firebase Authentication
         await auth.deleteUser(uid);
-
-        // Delete from Firestore
         await firestore.collection('users').doc(uid).delete();
         
-        // Optionally, you might want to delete related data like activity logs, but this can be complex.
-        // For now, we just delete the main user records.
-
         return { success: true };
     } catch (error) {
         const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao excluir o usuário.";

@@ -31,6 +31,17 @@ type ExportResult = {
     message?: string;
 };
 
+function toISODate(timestamp: Timestamp | string | Date | undefined): string {
+    if (!timestamp) return new Date().toISOString();
+    if (timestamp instanceof Timestamp) {
+        return timestamp.toDate().toISOString();
+    }
+    if (typeof timestamp === 'string') {
+        return timestamp;
+    }
+    return timestamp.toISOString();
+}
+
 export async function exportHistoryToExcel(input: z.infer<typeof exportHistorySchema>): Promise<ExportResult> {
     const validation = exportHistorySchema.safeParse(input);
     if (!validation.success) {
@@ -50,7 +61,6 @@ export async function exportHistoryToExcel(input: z.infer<typeof exportHistorySc
 
         const { email, provider, dateFrom, dateTo } = filters;
 
-        // Apply equality filters first
         if (email) {
             query = query.where('userEmail', '==', email);
         }
@@ -58,40 +68,27 @@ export async function exportHistoryToExcel(input: z.infer<typeof exportHistorySc
             query = query.where('provider', '==', provider);
         }
         
-        // Always order by date
         query = query.orderBy('createdAt', 'desc');
 
         const logsSnapshot = await query.get();
 
         let logs = logsSnapshot.docs.map(doc => {
             const data = doc.data();
-            const createdAt = data.createdAt;
-            let serializableCreatedAt: string;
-
-            if (createdAt instanceof Timestamp) {
-                serializableCreatedAt = createdAt.toDate().toISOString();
-            } else if (typeof createdAt === 'string') {
-                serializableCreatedAt = createdAt;
-            } else {
-                serializableCreatedAt = new Date().toISOString();
-            }
-
             return {
                 id: doc.id,
                 ...data,
-                createdAt: serializableCreatedAt,
+                createdAt: toISODate(data.createdAt),
             } as ActivityLog;
         });
 
-        // Manual date range filtering in memory
         if (dateFrom) {
             const fromDate = new Date(dateFrom);
-            fromDate.setHours(0, 0, 0, 0); // Start of the day
+            fromDate.setHours(0, 0, 0, 0);
             logs = logs.filter(log => new Date(log.createdAt) >= fromDate);
         }
         if (dateTo) {
             const toDate = new Date(dateTo);
-            toDate.setHours(23, 59, 59, 999); // End of the day
+            toDate.setHours(23, 59, 59, 999);
             logs = logs.filter(log => new Date(log.createdAt) <= toDate);
         }
 
@@ -117,6 +114,7 @@ export async function exportHistoryToExcel(input: z.infer<typeof exportHistorySc
         const colWidths = header.map(h => ({ wch: Math.max(h.length, 20) }));
         worksheet['!cols'] = colWidths;
 
+
         const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
         const base64String = buffer.toString('base64');
         const fileContent = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64String}`;
@@ -133,7 +131,6 @@ export async function exportHistoryToExcel(input: z.infer<typeof exportHistorySc
     } catch (error) {
         const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido durante a exportação do histórico.";
         console.error("Erro ao exportar histórico:", error);
-        // This may indicate a missing index.
         if (message.includes('requires an index')) {
             return { status: 'error', message: 'A consulta requer um índice do Firestore que não existe. Tente filtros menos complexos ou crie o índice no Console do Firebase.' };
         }

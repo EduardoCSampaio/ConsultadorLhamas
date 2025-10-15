@@ -55,7 +55,9 @@ export default function SignUpPage() {
             return;
         }
 
+        setIsLoading(true);
         const { success, team, manager, error } = await getTeamAndManager({ teamId });
+        setIsLoading(false);
 
         if (success && team && manager) {
             setIsInvitationValid(true);
@@ -87,14 +89,13 @@ export default function SignUpPage() {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const newUser = userCredential.user;
 
-        // Default permissions for a new user in a team (they start with none)
         const userProfile = {
           uid: newUser.uid,
           email: newUser.email,
           role: 'user',
           status: 'pending',
           createdAt: serverTimestamp(),
-          teamId: teamId, // CRITICAL FIX: Add teamId to the user document
+          teamId: teamId, 
           sector: '', // User starts without a sector, manager will assign it.
           permissions: {
             canViewFGTS: false,
@@ -109,7 +110,7 @@ export default function SignUpPage() {
             userId: newUser.uid,
             action: 'User Registration (Invitation)',
             details: `New user ${newUser.email} signed up for team ${teamId}.`,
-            teamId: teamId, // Pass teamId to logActivity for correct notification
+            teamId: teamId,
         });
         
         setShowPendingMessage(true);

@@ -139,7 +139,7 @@ export async function createTicket(input: z.infer<typeof createTicketSchema>): P
             updatedAt: now,
             ticketNumber: ticketNumber,
             lastMessage: input.initialMessage,
-            unreadByAdmin: 1, // First message from user is unread for admin
+            unreadByAdmin: 1, 
             unreadByUser: 0,
         };
 

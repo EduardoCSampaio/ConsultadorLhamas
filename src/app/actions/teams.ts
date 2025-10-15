@@ -71,6 +71,17 @@ type GetTeamAndManagerResult = {
     error?: string;
 };
 
+function toISODate(timestamp: Timestamp | string | Date | undefined): string {
+    if (!timestamp) return new Date().toISOString();
+    if (timestamp instanceof Timestamp) {
+        return timestamp.toDate().toISOString();
+    }
+    if (typeof timestamp === 'string') {
+        return timestamp;
+    }
+    return timestamp.toISOString();
+}
+
 
 export async function createTeam(input: z.infer<typeof createTeamSchema>): Promise<CreateTeamResult> {
     const validation = createTeamSchema.safeParse(input);
@@ -84,7 +95,6 @@ export async function createTeam(input: z.infer<typeof createTeamSchema>): Promi
         const teamRef = firestore.collection('teams').doc();
         const managerRef = firestore.collection('users').doc(managerId);
 
-        // Check if manager already has a team
         const existingTeamsQuery = await firestore.collection('teams').where('managerId', '==', managerId).limit(1).get();
         if (!existingTeamsQuery.empty) {
             return { success: false, message: 'Este gerente já possui um time.' };
@@ -95,7 +105,6 @@ export async function createTeam(input: z.infer<typeof createTeamSchema>): Promi
             managerId,
             createdAt: FieldValue.serverTimestamp(),
             sectors: {
-                // Default "Gerente" sector with full permissions for the team manager
                 'Gerente': {
                     isManager: true,
                     permissions: {
@@ -109,12 +118,11 @@ export async function createTeam(input: z.infer<typeof createTeamSchema>): Promi
 
         await firestore.runTransaction(async (transaction) => {
             transaction.set(teamRef, newTeamData);
-            // Update the user's role to 'manager' and assign them to the new team and default sector
             transaction.update(managerRef, { 
                 role: 'manager', 
                 teamId: teamRef.id,
-                sector: 'Gerente', // Assign manager to their own sector
-                permissions: newTeamData.sectors.Gerente.permissions, // Give them full permissions
+                sector: 'Gerente', 
+                permissions: newTeamData.sectors.Gerente.permissions,
              });
         });
 
@@ -151,18 +159,17 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
 
     try {
         const teamDoc = await firestore.collection('teams').doc(teamId).get();
-
         if (!teamDoc.exists) {
             return { success: false, error: "A equipe especificada não foi encontrada." };
         }
 
         const teamData = teamDoc.data();
-        if (teamData?.managerId !== managerId) {
-            // Check if the current user is a super_admin
-            const managerDoc = await firestore.collection('users').doc(managerId).get();
-            if (managerDoc.data()?.role !== 'super_admin') {
-               return { success: false, error: "Você não tem permissão para visualizar os membros desta equipe." };
-            }
+        
+        const managerDoc = await firestore.collection('users').doc(managerId).get();
+        const managerData = managerDoc.data();
+
+        if (teamData?.managerId !== managerId && managerData?.role !== 'super_admin') {
+            return { success: false, error: "Você não tem permissão para visualizar os membros desta equipe." };
         }
         
         const membersSnapshot = await firestore.collection('users').where('teamId', '==', teamId).get();
@@ -170,9 +177,14 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
             return { success: true, members: [] };
         }
 
-        // Correctly filter out only the manager from the list of members.
         const members = membersSnapshot.docs
-            .map(doc => doc.data() as UserProfile)
+            .map(doc => {
+                const data = doc.data();
+                return {
+                    ...data,
+                    createdAt: toISODate(data.createdAt),
+                } as UserProfile;
+            })
             .filter(member => member.uid !== teamData?.managerId); 
 
         return { success: true, members };
@@ -202,7 +214,6 @@ export async function getTeamAndManager(input: z.infer<typeof getTeamAndManagerS
             return { success: false, error: "Dados do time não puderam ser lidos." };
         }
 
-
         const managerDoc = await firestore.collection('users').doc(teamData.managerId).get();
         if (!managerDoc.exists) {
              return { success: false, error: "Dados do gerente do time não encontrados." };
@@ -212,20 +223,12 @@ export async function getTeamAndManager(input: z.infer<typeof getTeamAndManagerS
             return { success: false, error: "Dados do gerente não puderam ser lidos." };
         }
         
-        const createdAt = teamData.createdAt;
-        let serializableCreatedAt = new Date().toISOString();
-        if (createdAt instanceof Timestamp) {
-            serializableCreatedAt = createdAt.toDate().toISOString();
-        } else if (typeof createdAt === 'string') {
-            serializableCreatedAt = createdAt;
-        }
-
         const serializableTeam: Team = {
             id: teamDoc.id,
             name: teamData.name,
             managerId: teamData.managerId,
             sectors: teamData.sectors,
-            createdAt: serializableCreatedAt,
+            createdAt: toISODate(teamData.createdAt),
         };
 
         return {
@@ -233,7 +236,7 @@ export async function getTeamAndManager(input: z.infer<typeof getTeamAndManagerS
             team: serializableTeam,
             manager: {
                 email: managerData.email,
-                name: managerData.email.split('@')[0], // Simple name extraction
+                name: managerData.email.split('@')[0], 
             },
         };
 
