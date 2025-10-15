@@ -91,7 +91,7 @@ export default function SignUpPage() {
           role: isSuperAdmin ? 'super_admin' : 'user',
           status: isSuperAdmin ? 'active' : 'pending',
           createdAt: serverTimestamp(),
-          teamId: teamId || null, // Directly include teamId from the start
+          teamId: teamId || null,
           permissions: {
             canViewFGTS: isSuperAdmin,
             canViewCLT: isSuperAdmin,
