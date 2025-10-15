@@ -170,9 +170,9 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
             return { success: true, members: [] };
         }
 
+        // Correctly filter out only the manager from the list of members.
         const members = membersSnapshot.docs
             .map(doc => doc.data() as UserProfile)
-            // Ensure we don't show the manager in their own member list
             .filter(member => member.uid !== teamData?.managerId); 
 
         return { success: true, members };
@@ -266,4 +266,3 @@ export async function updateTeamSectors(input: z.infer<typeof updateTeamSectorsS
         return { success: false, message };
     }
 }
-
