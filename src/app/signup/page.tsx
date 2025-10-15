@@ -18,19 +18,11 @@ import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useFirestore } from "@/firebase";
 import { logActivity } from "@/app/actions/users";
 import { getTeamAndManager, type Team } from "@/app/actions/teams";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 
 export default function SignUpPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [sector, setSector] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPendingMessage, setShowPendingMessage] = useState(false);
@@ -85,8 +77,8 @@ export default function SignUpPage() {
     setError(null);
     setShowPendingMessage(false);
 
-    if (!auth || !firestore || !teamId || !isInvitationValid || !sector) {
-      setError("Verifique se todos os campos estão preenchidos ou se o link de convite é válido.");
+    if (!auth || !firestore || !teamId || !isInvitationValid) {
+      setError("Ocorreu um erro. Verifique se o link de convite é válido.");
       setIsLoading(false);
       return;
     }
@@ -95,21 +87,20 @@ export default function SignUpPage() {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const newUser = userCredential.user;
 
-        const selectedSectorPermissions = team?.sectors[sector]?.permissions || {
-            canViewFGTS: false,
-            canViewCLT: false,
-            canViewINSS: false,
-        };
-
+        // Default permissions for a new user in a team (they start with none)
         const userProfile = {
           uid: newUser.uid,
           email: newUser.email,
           role: 'user',
           status: 'pending',
           createdAt: serverTimestamp(),
-          teamId: teamId,
-          sector: sector,
-          permissions: selectedSectorPermissions
+          teamId: teamId, // CRITICAL FIX: Add teamId to the user document
+          sector: '', // User starts without a sector, manager will assign it.
+          permissions: {
+            canViewFGTS: false,
+            canViewCLT: false,
+            canViewINSS: false,
+          }
         };
 
         await setDoc(doc(firestore, "users", newUser.uid), userProfile);
@@ -117,8 +108,8 @@ export default function SignUpPage() {
         await logActivity({
             userId: newUser.uid,
             action: 'User Registration (Invitation)',
-            details: `New user ${newUser.email} signed up for team ${teamId} in sector ${sector}`,
-            teamId: teamId,
+            details: `New user ${newUser.email} signed up for team ${teamId}.`,
+            teamId: teamId, // Pass teamId to logActivity for correct notification
         });
         
         setShowPendingMessage(true);
@@ -183,9 +174,15 @@ export default function SignUpPage() {
                 <CardTitle className="font-headline text-2xl font-semibold">
                   Criar Conta para Equipe
                 </CardTitle>
-                <CardDescription>
-                  Você foi convidado para a equipe <strong>{team?.name}</strong>. Preencha seus dados para se registrar.
-                </CardDescription>
+                 {isInvitationValid ? (
+                     <CardDescription>
+                        Você foi convidado para a equipe <strong>{team?.name}</strong>. Preencha seus dados para se registrar.
+                    </CardDescription>
+                 ) : (
+                    <CardDescription>
+                        Carregando informações do convite...
+                    </CardDescription>
+                 )}
               </CardHeader>
               <CardContent className="space-y-4">
                 {error && (
@@ -219,21 +216,6 @@ export default function SignUpPage() {
                     disabled={isLoading || !isInvitationValid}
                     autoComplete="new-password"
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sector">Setor</Label>
-                  <Select value={sector} onValueChange={setSector} required>
-                    <SelectTrigger id="sector" disabled={isLoading || !isInvitationValid || !team?.sectors}>
-                      <SelectValue placeholder="Selecione seu setor na equipe" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {team?.sectors && Object.keys(team.sectors).map(sectorName => (
-                        <SelectItem key={sectorName} value={sectorName}>
-                          {sectorName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </div>
               </CardContent>
               <CardFooter className="flex flex-col gap-4">
