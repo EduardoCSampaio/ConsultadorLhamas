@@ -229,7 +229,6 @@ export async function consultarOfertasCLTC6(input: z.infer<typeof getOffersSchem
                 'Accept': 'application/vnd.c6bank_generate_offer_v1+json',
                 'Content-Type': 'application/json',
                 'Authorization': `${token}`,
-                'cpf_cliente': cpf.replace(/\D/g, '')
             },
             body: JSON.stringify({ cpf_cliente: cpf})
         });

@@ -99,7 +99,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       try {
         const userDoc = await firestore.collection('users').doc(userId).get();
         
-        if (!userDoc.exists()) {
+        if (!userDoc.exists) {
             return { status: 'error', stepIndex: 0, message: 'Usuário não encontrado para buscar as credenciais.' };
         }
         
@@ -210,7 +210,7 @@ async function waitForV8Response(cpf: string, timeout = 7000): Promise<{ balance
 
     return new Promise((resolve) => {
         const unsubscribe = docRef.onSnapshot((doc) => {
-            if (doc.exists()) {
+            if (doc.exists) {
                 const data = doc.data();
                 // Check for success status and a positive balance
                 if (data?.status === 'success' && data.responseBody?.balance > 0) {
@@ -244,7 +244,7 @@ export async function consultarSaldoManual(input: z.infer<typeof manualActionSch
     const { cpf, userId, providers, v8Provider } = validation.data;
 
     const userDoc = await firestore.collection('users').doc(userId).get();
-    if (!userDoc.exists()) {
+    if (!userDoc.exists) {
         return { balances: [], error: 'Usuário não encontrado.' };
     }
     const user = userDoc.data() as ApiCredentials;

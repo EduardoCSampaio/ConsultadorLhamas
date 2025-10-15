@@ -78,7 +78,7 @@ async function getUserCredentials(userId: string): Promise<{ credentials: ApiCre
     }
     try {
         const userDoc = await firestore.collection('users').doc(userId).get();
-        if (!userDoc.exists() || !userDoc.data()) {
+        if (!userDoc.exists) {
             return { credentials: null, error: 'Usuário não encontrado para buscar credenciais.' };
         }
         const userData = userDoc.data()!;
