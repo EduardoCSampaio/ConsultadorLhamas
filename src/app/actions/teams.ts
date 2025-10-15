@@ -21,6 +21,10 @@ export type Team = {
     }
 };
 
+export type TeamWithManager = Team & {
+    managerEmail: string;
+};
+
 const createTeamSchema = z.object({
   name: z.string().min(3, "O nome do time deve ter pelo menos 3 caracteres."),
   managerId: z.string().min(1, "ID do gerente é obrigatório."),
@@ -33,7 +37,7 @@ const getTeamAndManagerSchema = z.object({
 
 const getTeamMembersSchema = z.object({
     teamId: z.string().min(1),
-    managerId: z.string().min(1),
+    currentUserId: z.string().min(1),
 });
 
 const updateTeamSectorsSchema = z.object({
@@ -151,20 +155,20 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
     if (!validation.success) {
         return { success: false, error: "Dados de entrada inválidos." };
     }
-    const { teamId, managerId } = validation.data;
+    const { teamId, currentUserId } = validation.data;
 
     try {
         const teamDoc = await firestore.collection('teams').doc(teamId).get();
         if (!teamDoc.exists) {
             return { success: false, error: "A equipe especificada não foi encontrada." };
         }
+        const teamData = teamDoc.data()!;
 
-        const teamData = teamDoc.data();
-        
-        const managerDoc = await firestore.collection('users').doc(managerId).get();
-        const managerData = managerDoc.data();
+        const currentUserDoc = await firestore.collection('users').doc(currentUserId).get();
+        const currentUserData = currentUserDoc.data();
 
-        if (teamData?.managerId !== managerId && managerData?.role !== 'super_admin') {
+        // Check for permission: either the manager of the team or a super admin can view members
+        if (teamData.managerId !== currentUserId && currentUserData?.role !== 'super_admin') {
             return { success: false, error: "Você não tem permissão para visualizar os membros desta equipe." };
         }
         
@@ -181,7 +185,8 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
                     createdAt: toISODate(data.createdAt),
                 } as UserProfile;
             })
-            .filter(member => member.uid !== teamData?.managerId); 
+            // Exclude the manager from the list of members
+            .filter(member => member.uid !== teamData.managerId); 
 
         return { success: true, members };
 
@@ -239,6 +244,39 @@ export async function getTeamAndManager(input: z.infer<typeof getTeamAndManagerS
     } catch (error) {
         const message = error instanceof Error ? error.message : "Ocorreu um erro ao buscar os dados do time.";
         console.error(`[getTeamAndManager] Error:`, error);
+        return { success: false, error: message };
+    }
+}
+
+export async function getAllTeams(): Promise<{ success: boolean; teams?: TeamWithManager[]; error?: string; }> {
+    try {
+        const teamsSnapshot = await firestore.collection('teams').get();
+        if (teamsSnapshot.empty) {
+            return { success: true, teams: [] };
+        }
+
+        const managerIds = teamsSnapshot.docs.map(doc => doc.data().managerId);
+        
+        // Fetch all managers in one go
+        const managersSnapshot = await firestore.collection('users').where(FieldPath.documentId(), 'in', managerIds).get();
+        const managersMap = new Map(managersSnapshot.docs.map(doc => [doc.id, doc.data().email]));
+
+        const teams: TeamWithManager[] = teamsSnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                name: data.name,
+                managerId: data.managerId,
+                managerEmail: managersMap.get(data.managerId) || 'Não encontrado',
+                sectors: data.sectors,
+                createdAt: toISODate(data.createdAt),
+            };
+        });
+
+        return { success: true, teams };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Ocorreu um erro ao buscar as equipes.";
+        console.error(`[getAllTeams] Error:`, error);
         return { success: false, error: message };
     }
 }
