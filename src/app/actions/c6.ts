@@ -70,7 +70,7 @@ async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiC
     }
     try {
         const userDoc = await firestore.collection('users').doc(userId).get();
-        if (!userDoc.exists) {
+        if (!userDoc.exists()) {
             return { credentials: null, error: 'Usuário não encontrado.' };
         }
         const userData = userDoc.data()!;
@@ -220,7 +220,7 @@ export async function consultarOfertasCLTC6(input: z.infer<typeof getOffersSchem
 
     await logActivity({ userId, action: 'Consulta Ofertas CLT C6', provider: 'c6', documentNumber: cpf });
 
-    const apiUrl = 'https://marketplace-proposal-service-api-p.c6bank.info/marketplace/workerpayroll-loan-offers';
+    const apiUrl = 'https://marketplace-proposal-service-api-p.c6bank.info/marketplace/worker-payroll-loan-offers';
 
     try {
         const response = await fetch(apiUrl, {
@@ -328,4 +328,6 @@ export async function verificarStatusAutorizacaoC6(input: z.infer<typeof getOffe
         return { success: false, message };
     }
 }
+    
+
     
