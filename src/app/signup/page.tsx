@@ -92,8 +92,8 @@ export default function SignUpPage() {
         const userProfile = {
           uid: newUser.uid,
           email: newUser.email,
-          role: 'user',
-          status: 'pending',
+          role: 'user' as const,
+          status: 'pending' as const,
           createdAt: serverTimestamp(),
           teamId: teamId, 
           sector: '', // User starts without a sector, manager will assign it.
