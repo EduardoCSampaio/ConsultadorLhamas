@@ -104,16 +104,7 @@ export async function createTeam(input: z.infer<typeof createTeamSchema>): Promi
             name,
             managerId,
             createdAt: FieldValue.serverTimestamp(),
-            sectors: {
-                'Gerente': {
-                    isManager: true,
-                    permissions: {
-                        canViewFGTS: true,
-                        canViewCLT: true,
-                        canViewINSS: true,
-                    }
-                }
-            }
+            sectors: {} // Start with empty sectors
         };
 
         await firestore.runTransaction(async (transaction) => {
@@ -121,8 +112,13 @@ export async function createTeam(input: z.infer<typeof createTeamSchema>): Promi
             transaction.update(managerRef, { 
                 role: 'manager', 
                 teamId: teamRef.id,
-                sector: 'Gerente', 
-                permissions: newTeamData.sectors.Gerente.permissions,
+                sector: '', // No default sector
+                // Manager has all permissions by default, which can be configured later
+                permissions: {
+                    canViewFGTS: true,
+                    canViewCLT: true,
+                    canViewINSS: true,
+                },
              });
         });
 
