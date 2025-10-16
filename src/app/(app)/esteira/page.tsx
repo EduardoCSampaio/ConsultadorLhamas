@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Download, RefreshCw, AlertCircle, Inbox, Trash2, Play, Timer, CheckCircle, FileText, Briefcase, ExternalLink } from 'lucide-react';
+import { Loader2, Download, RefreshCw, AlertCircle, Inbox, Trash2, Play, Timer, CheckCircle, FileText, Briefcase, ExternalLink, CircleDashed } from 'lucide-react';
 import { getBatches, deleteBatch, type BatchJob, gerarRelatorioLote, reprocessarLoteComErro } from '@/app/actions/batch';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -25,6 +25,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useUser } from "@/firebase";
+import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 
 const formatDuration = (ms: number) => {
     if (ms < 0) ms = 0;
@@ -169,95 +170,94 @@ export default function EsteiraPage() {
         }
     }
 
-
     const BatchCard = ({ batch }: { batch: BatchJob }) => {
         return (
-            <Card>
-                <CardContent className="p-4 space-y-3">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <div className='flex items-center gap-2 mb-1'>
-                                {batch.type === 'fgts' ? <FileText className='h-5 w-5 text-muted-foreground'/> : <Briefcase className='h-5 w-5 text-muted-foreground'/>}
-                                <h3 className="font-semibold">{batch.fileName} ({batch.provider.toUpperCase()})</h3>
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                                Enviado em: {new Date(batch.createdAt).toLocaleString('pt-BR')}
-                            </div>
+             <AlertDialog>
+                <Card>
+                    <CardContent className="p-4 space-y-3">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <div className='flex items-center gap-2 mb-1'>
+                                    {batch.type === 'fgts' ? <FileText className='h-5 w-5 text-muted-foreground'/> : <Briefcase className='h-5 w-5 text-muted-foreground'/>}
+                                    <h3 className="font-semibold">{batch.fileName} ({batch.provider.toUpperCase()})</h3>
+                                </div>
+                                <div className="text-sm text-muted-foreground">
+                                    Enviado em: {new Date(batch.createdAt).toLocaleString('pt-BR')}
+                                </div>
                                 {batch.status === 'processing' && (
-                                <div className="text-sm text-muted-foreground flex items-center gap-1.5">
-                                    <Timer className="h-3.5 w-3.5"/>
-                                    Em andamento por: {formatDuration(Date.now() - new Date(batch.createdAt).getTime())}
-                                </div>
-                            )}
-                            {(batch.status === 'completed' || batch.status === 'error') && batch.completedAt && (
                                     <div className="text-sm text-muted-foreground flex items-center gap-1.5">
-                                    <CheckCircle className="h-3.5 w-3.5"/>
-                                    Concluído em: {formatDuration(new Date(batch.completedAt).getTime() - new Date(batch.createdAt).getTime())} - {new Date(batch.completedAt).toLocaleDateString('pt-BR')} às {new Date(batch.completedAt).toLocaleTimeString('pt-BR')}
-                                </div>
-                            )}
-                        </div>
-                        <div className='flex items-center gap-2'>
-                            <Badge variant={getStatusVariant(batch.status)} className="capitalize">{getStatusText(batch.status)}</Badge>
-                            <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={(e) => e.preventDefault()}>
+                                        <Timer className="h-3.5 w-3.5"/>
+                                        Em andamento por: {formatDuration(Date.now() - new Date(batch.createdAt).getTime())}
+                                    </div>
+                                )}
+                                {(batch.status === 'completed' || batch.status === 'error') && batch.completedAt && (
+                                        <div className="text-sm text-muted-foreground flex items-center gap-1.5">
+                                        <CheckCircle className="h-3.5 w-3.5"/>
+                                        Concluído em: {formatDuration(new Date(batch.completedAt).getTime() - new Date(batch.createdAt).getTime())} - {new Date(batch.completedAt).toLocaleDateString('pt-BR')} às {new Date(batch.completedAt).toLocaleTimeString('pt-BR')}
+                                    </div>
+                                )}
+                            </div>
+                            <div className='flex items-center gap-2'>
+                                <Badge variant={getStatusVariant(batch.status)} className="capitalize">{getStatusText(batch.status)}</Badge>
+                                 <AlertDialogTrigger asChild>
+                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10">
                                         <Trash2 className="h-4 w-4" />
                                     </Button>
                                 </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                    <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        Esta ação não pode ser desfeita. Isso irá excluir permanentemente o lote e seus dados associados.
-                                    </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction
-                                        className="bg-destructive hover:bg-destructive/90"
-                                        onClick={(e) => {
-                                            handleDeleteBatch(batch.id);
-                                        }}
-                                    >
-                                        Excluir
-                                    </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                </AlertDialogContent>
-                            </AlertDialog>
+                            </div>
                         </div>
-                    </div>
-                    
-                    <div>
-                        <div className="flex justify-between text-sm text-muted-foreground mb-1">
-                            <span>Progresso</span>
-                            <span>{batch.processedCpfs} / {batch.totalCpfs}</span>
+                        
+                        <div>
+                            <div className="flex justify-between text-sm text-muted-foreground mb-1">
+                                <span>Progresso</span>
+                                <span>{batch.processedCpfs} / {batch.totalCpfs}</span>
+                            </div>
+                            <Progress value={(batch.processedCpfs / batch.totalCpfs) * 100} />
                         </div>
-                        <Progress value={(batch.processedCpfs / batch.totalCpfs) * 100} />
-                    </div>
 
-                    {batch.status === 'error' && (
-                            <Alert variant="destructive" className="mt-2">
-                            <AlertCircle className="h-4 w-4" />
-                            <AlertTitle>Erro no Lote</AlertTitle>
-                            <AlertDescription>{batch.message || "Ocorreu um erro desconhecido durante o processamento."}</AlertDescription>
-                            </Alert>
-                    )}
-                    <div className="mt-4 flex flex-wrap gap-2">
-                        {batch.status === 'completed' && (
-                            <Button onClick={() => handleDownloadReport(batch)} size="sm">
-                                <Download className="mr-2 h-4 w-4" />
-                                Baixar Relatório
-                            </Button>
-                        )}
                         {batch.status === 'error' && (
-                            <Button onClick={() => handleReprocessBatch(batch.id)} size="sm" variant="outline" disabled={isReprocessing === batch.id}>
-                                {isReprocessing === batch.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-                                Tentar Novamente
-                            </Button>
+                                <Alert variant="destructive" className="mt-2">
+                                <AlertCircle className="h-4 w-4" />
+                                <AlertTitle>Erro no Lote</AlertTitle>
+                                <AlertDescription>{batch.message || "Ocorreu um erro desconhecido durante o processamento."}</AlertDescription>
+                                </Alert>
                         )}
-                    </div>
-                </CardContent>
-            </Card>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                            {batch.status === 'completed' && (
+                                <Button onClick={() => handleDownloadReport(batch)} size="sm">
+                                    <Download className="mr-2 h-4 w-4" />
+                                    Baixar Relatório
+                                </Button>
+                            )}
+                            {batch.status === 'error' && (
+                                <Button onClick={() => handleReprocessBatch(batch.id)} size="sm" variant="outline" disabled={isReprocessing === batch.id}>
+                                    {isReprocessing === batch.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+                                    Tentar Novamente
+                                </Button>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
+                 <AlertDialogContent>
+                    <AlertDialogHeader>
+                    <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Esta ação não pode ser desfeita. Isso irá excluir permanentemente o lote e seus dados associados.
+                    </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction
+                        className="bg-destructive hover:bg-destructive/90"
+                        onClick={() => {
+                            handleDeleteBatch(batch.id);
+                        }}
+                    >
+                        Excluir
+                    </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         );
     }
 
