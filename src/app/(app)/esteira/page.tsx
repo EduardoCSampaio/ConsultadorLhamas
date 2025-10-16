@@ -215,7 +215,10 @@ export default function EsteiraPage() {
                                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
                                     <AlertDialogAction
                                         className="bg-destructive hover:bg-destructive/90"
-                                        onClick={() => handleDeleteBatch(batch.id)}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteBatch(batch.id);
+                                        }}
                                     >
                                         Excluir
                                     </AlertDialogAction>
