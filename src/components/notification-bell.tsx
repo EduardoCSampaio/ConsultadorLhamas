@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Bell, BellDot, Inbox } from 'lucide-react';
+import { Bell, BellDot, Inbox, Check, Trash2, X } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,10 +14,13 @@ import {
   useCollection,
   useMemoFirebase,
 } from '@/firebase';
-import { collection, query, orderBy, limit, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, limit, doc, updateDoc, writeBatch } from 'firebase/firestore';
 import { Skeleton } from './ui/skeleton';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { deleteNotification, markNotificationAsRead } from '@/app/actions/notifications';
+import { useToast } from '@/hooks/use-toast';
+import { Separator } from './ui/separator';
 
 type Notification = {
   id: string;
@@ -29,6 +32,7 @@ type Notification = {
 };
 
 export function NotificationBell({ userId }: { userId: string }) {
+  const { toast } = useToast();
   const firestore = useFirestore();
   const [isOpen, setIsOpen] = useState(false);
 
@@ -37,7 +41,7 @@ export function NotificationBell({ userId }: { userId: string }) {
     return query(
         collection(firestore, `users/${userId}/notifications`), 
         orderBy('createdAt', 'desc'),
-        limit(10)
+        limit(15) // Increased limit to show more history
     );
   }, [firestore, userId]);
   
@@ -45,27 +49,27 @@ export function NotificationBell({ userId }: { userId: string }) {
   
   const unreadCount = notifications?.filter(n => !n.isRead).length || 0;
 
-  const handleOpenChange = async (open: boolean) => {
-    setIsOpen(open);
-    if (open && notifications && unreadCount > 0) {
-      // Mark all visible unread notifications as read
-      const batch: Promise<void>[] = [];
-      notifications.forEach(n => {
-        if (!n.isRead) {
-          const notifRef = doc(firestore, `users/${userId}/notifications`, n.id);
-          batch.push(updateDoc(notifRef, { isRead: true }));
-        }
-      });
-      try {
-        await Promise.all(batch);
-      } catch (error) {
-        console.error("Failed to mark notifications as read:", error);
-      }
+  const handleClearAll = async () => {
+    if (!notifications || notifications.length === 0 || !firestore) return;
+
+    const batch = writeBatch(firestore);
+    notifications.forEach(n => {
+        const notifRef = doc(firestore, `users/${userId}/notifications`, n.id);
+        batch.delete(notifRef);
+    });
+
+    try {
+      await batch.commit();
+      toast({ title: "Notificações limpas", description: "Todas as suas notificações foram excluídas." });
+      setIsOpen(false);
+    } catch (error) {
+       console.error("Failed to clear notifications:", error);
+       toast({ variant: 'destructive', title: "Erro", description: "Não foi possível limpar as notificações." });
     }
   };
 
   return (
-    <Popover open={isOpen} onOpenChange={handleOpenChange}>
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon" className="relative">
           {unreadCount > 0 ? (
@@ -82,15 +86,15 @@ export function NotificationBell({ userId }: { userId: string }) {
           <span className="sr-only">Notificações</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80" align="end">
-        <div className="grid gap-4">
-          <div className="space-y-1">
+      <PopoverContent className="w-80 p-0" align="end">
+        <div className="flex flex-col">
+          <div className="p-4 space-y-1">
             <h4 className="font-medium leading-none">Notificações</h4>
             <p className="text-sm text-muted-foreground">
               As suas atualizações mais recentes.
             </p>
           </div>
-          <div className="grid gap-2">
+          <div className="grid gap-2 max-h-96 overflow-y-auto px-4 pb-4">
             {isLoading ? (
                 Array.from({length: 3}).map((_, i) => (
                     <div key={i} className="flex items-start gap-4 p-2">
@@ -108,10 +112,30 @@ export function NotificationBell({ userId }: { userId: string }) {
                 </div>
             ) : (
                 notifications.map(n => (
-                    <NotificationItem key={n.id} notification={n} onSelect={() => setIsOpen(false)} />
+                    <NotificationItem 
+                        key={n.id} 
+                        userId={userId}
+                        notification={n} 
+                        onSelect={() => setIsOpen(false)} 
+                    />
                 ))
             )}
           </div>
+          {notifications && notifications.length > 0 && (
+             <>
+                <Separator />
+                <div className="p-2">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full text-muted-foreground"
+                        onClick={handleClearAll}
+                    >
+                        Limpar Todas
+                    </Button>
+                </div>
+             </>
+          )}
         </div>
       </PopoverContent>
     </Popover>
@@ -119,9 +143,31 @@ export function NotificationBell({ userId }: { userId: string }) {
 }
 
 
-function NotificationItem({ notification, onSelect }: { notification: Notification, onSelect: () => void }) {
+function NotificationItem({ notification, userId, onSelect }: { notification: Notification, userId: string, onSelect: () => void }) {
+    const { toast } = useToast();
+
+    const handleMarkAsRead = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const result = await markNotificationAsRead({ userId, notificationId: notification.id });
+        if (!result.success) {
+            toast({ variant: 'destructive', title: 'Erro', description: result.message });
+        }
+    };
+
+    const handleDelete = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const result = await deleteNotification({ userId, notificationId: notification.id });
+        if (result.success) {
+            toast({ title: 'Notificação excluída' });
+        } else {
+             toast({ variant: 'destructive', title: 'Erro', description: result.message });
+        }
+    };
+
     const content = (
-        <div className="grid grid-cols-[25px_1fr] items-start pb-4 last:mb-0 last:pb-0">
+        <div className="group relative grid grid-cols-[25px_1fr] items-start pb-4 last:mb-0 last:pb-0">
             <span className="flex h-2 w-2 translate-y-1 rounded-full bg-primary data-[read=true]:bg-muted-foreground" data-read={notification.isRead} />
             <div className="grid gap-1">
                 <p className="text-sm font-medium leading-none">{notification.title}</p>
@@ -129,6 +175,16 @@ function NotificationItem({ notification, onSelect }: { notification: Notificati
                 <p className="text-xs text-muted-foreground mt-1">
                     {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true, locale: ptBR })}
                 </p>
+            </div>
+            <div className="absolute top-0 right-0 flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                {!notification.isRead && (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleMarkAsRead} title="Marcar como lida">
+                        <Check className="h-4 w-4" />
+                    </Button>
+                )}
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleDelete} title="Excluir notificação">
+                    <X className="h-4 w-4" />
+                </Button>
             </div>
         </div>
     );

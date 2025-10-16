@@ -12,6 +12,12 @@ const createNotificationSchema = z.object({
   link: z.string().optional(),
 });
 
+const notificationIdSchema = z.object({
+  userId: z.string(),
+  notificationId: z.string(),
+});
+
+
 export async function createNotification(input: z.infer<typeof createNotificationSchema>) {
     const validation = createNotificationSchema.safeParse(input);
     if (!validation.success) {
@@ -35,19 +41,28 @@ export async function createNotification(input: z.infer<typeof createNotificatio
 
 export async function createNotificationsForAdmins(input: Omit<z.infer<typeof createNotificationSchema>, 'userId'>) {
     try {
-        const adminsSnapshot = await firestore.collection('users').where('role', '==', 'admin').get();
+        const adminsSnapshot = await firestore.collection('users').where('role', '==', 'super_admin').get();
+        const managersSnapshot = await firestore.collection('users').where('role', '==', 'manager').get();
+
+        const allAdminIds = [
+            ...adminsSnapshot.docs.map(doc => doc.id),
+            ...managersSnapshot.docs.map(doc => doc.id),
+        ];
+
+        const uniqueAdminIds = [...new Set(allAdminIds)];
         
-        if (adminsSnapshot.empty) {
-            console.log("No admins found to notify.");
+        if (uniqueAdminIds.length === 0) {
+            console.log("No admins or managers found to notify.");
             return;
         }
 
         const batch = firestore.batch();
         
-        adminsSnapshot.forEach(adminDoc => {
-            const notificationRef = adminDoc.ref.collection('notifications').doc();
+        uniqueAdminIds.forEach(adminId => {
+            const notificationRef = firestore.collection('users').doc(adminId).collection('notifications').doc();
             batch.set(notificationRef, {
                 ...input,
+                userId: adminId, // Make sure userId is set for the notification document itself
                 isRead: false,
                 createdAt: FieldValue.serverTimestamp(),
             });
@@ -56,6 +71,46 @@ export async function createNotificationsForAdmins(input: Omit<z.infer<typeof cr
         await batch.commit();
 
     } catch (error) {
-        console.error("Failed to create notifications for admins:", error);
+        console.error("Failed to create notifications for admins/managers:", error);
+    }
+}
+
+
+export async function markNotificationAsRead(input: z.infer<typeof notificationIdSchema>): Promise<{ success: boolean; message?: string }> {
+    const validation = notificationIdSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: "Dados inválidos." };
+    }
+    
+    const { userId, notificationId } = input;
+
+    try {
+        const notifRef = firestore.collection('users').doc(userId).collection('notifications').doc(notificationId);
+        await notifRef.update({ isRead: true });
+        return { success: true };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro ao marcar notificação como lida.";
+        console.error("markNotificationAsRead error:", error);
+        return { success: false, message };
+    }
+}
+
+
+export async function deleteNotification(input: z.infer<typeof notificationIdSchema>): Promise<{ success: boolean; message?: string }> {
+    const validation = notificationIdSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: "Dados inválidos." };
+    }
+    
+    const { userId, notificationId } = input;
+
+    try {
+        const notifRef = firestore.collection('users').doc(userId).collection('notifications').doc(notificationId);
+        await notifRef.delete();
+        return { success: true };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro ao excluir notificação.";
+        console.error("deleteNotification error:", error);
+        return { success: false, message };
     }
 }
