@@ -81,6 +81,7 @@ export default function TeamDetailsPage() {
     const [teamMembers, setTeamMembers] = useState<UserProfile[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [updatingId, setUpdatingId] = useState<string | null>(null);
+    const [accessDenied, setAccessDenied] = useState(false);
     
     // Sector management state
     const [isSavingSectors, setIsSavingSectors] = useState(false);
@@ -102,33 +103,23 @@ export default function TeamDetailsPage() {
     
     const { data: currentUserProfile, isLoading: isCurrentUserProfileLoading } = useDoc<UserProfile>(currentUserProfileRef);
 
-    const isAllowedToView = useMemo(() => {
-        if (!currentUserProfile) return false;
-        if (currentUserProfile.role === 'super_admin') return true;
-        if (currentUserProfile.role === 'manager' && currentUserProfile.teamId === teamId) return true;
-        return false;
-    }, [currentUserProfile, teamId]);
-
-
     const teamRef = useMemoFirebase(() => {
-        // Only create the ref if the user is allowed to view
-        if (!firestore || !teamId || !isAllowedToView) return null;
+        // We will only create this ref once permissions are confirmed, to avoid premature fetches
+        if (!firestore || !teamId) return null;
         return doc(firestore, 'teams', teamId);
-    }, [firestore, teamId, isAllowedToView]);
+    }, [firestore, teamId]);
 
     const { data: teamData, isLoading: isTeamLoading, error: teamError } = useDoc<Team>(teamRef);
 
      useEffect(() => {
-        if (teamData) {
-            setTeam(teamData);
-        }
+        if (teamData) setTeam(teamData);
         if (teamError) {
-             toast({ variant: 'destructive', title: 'Erro ao carregar equipe', description: teamError.message });
-             router.push('/dashboard');
+             console.error("Error loading team data:", teamError);
+             toast({ variant: 'destructive', title: 'Erro ao carregar equipe', description: "Ocorreu um erro ao buscar os dados da equipe." });
         }
-    }, [teamData, teamError, toast, router]);
+    }, [teamData, teamError, toast]);
 
-    const fetchTeamData = useCallback(async (id: string) => {
+    const fetchTeamMembers = useCallback(async (id: string) => {
         if (!currentUser) return;
         
         setIsLoading(true);
@@ -150,25 +141,33 @@ export default function TeamDetailsPage() {
     }, [currentUser, toast]);
 
     useEffect(() => {
-        if (isCurrentUserAuthLoading || isCurrentUserProfileLoading) return; // Wait for profile to load
+        // Wait until auth and profile are fully loaded
+        if (isCurrentUserAuthLoading || isCurrentUserProfileLoading) {
+            return;
+        }
 
+        // If loading is done, check for profile
         if (!currentUserProfile) {
-             router.push('/'); // Should not happen if logged in, but as a safeguard
-             return;
+            if (!isCurrentUserAuthLoading) { // Avoid redirect loops on hot-reload
+                 router.push('/');
+            }
+            return;
         }
         
-        // Now check permissions
-        if (isAllowedToView) {
+        // Now check permissions with the loaded profile
+        const hasPermission = currentUserProfile.role === 'super_admin' || (currentUserProfile.role === 'manager' && currentUserProfile.teamId === teamId);
+
+        if (hasPermission) {
+            setAccessDenied(false);
             if (teamId) {
-                fetchTeamData(teamId);
-            } else {
-                setIsLoading(false);
+                fetchTeamMembers(teamId);
             }
         } else {
+            setAccessDenied(true);
+            setIsLoading(false);
             toast({ variant: 'destructive', title: 'Acesso Negado', description: 'Você não tem permissão para ver esta equipe.' });
-            router.push('/dashboard');
         }
-    }, [teamId, currentUserProfile, isCurrentUserAuthLoading, isCurrentUserProfileLoading, fetchTeamData, router, toast, isAllowedToView]);
+    }, [teamId, currentUserProfile, isCurrentUserAuthLoading, isCurrentUserProfileLoading, fetchTeamMembers, router, toast]);
 
 
     const handleStatusChange = async (uid: string, status: UserStatus) => {
@@ -178,7 +177,7 @@ export default function TeamDetailsPage() {
             toast({
                 title: "Status do usuário atualizado!",
             });
-            if (teamId) await fetchTeamData(teamId);
+            if (teamId) await fetchTeamMembers(teamId);
         } else {
             toast({
                 variant: "destructive",
@@ -295,7 +294,7 @@ export default function TeamDetailsPage() {
         if (result.success) {
             toast({ title: "Membro da equipe atualizado com sucesso!" });
             setIsEditMemberModalOpen(false);
-            fetchTeamData(teamId); // Refresh team data
+            fetchTeamMembers(teamId); // Refresh team data
         } else {
             toast({ variant: "destructive", title: "Erro ao atualizar", description: result.message });
         }
@@ -340,6 +339,24 @@ export default function TeamDetailsPage() {
         return null;
     };
 
+    if (finalLoadingState) {
+        return (
+            <div className="space-y-6">
+                <PageHeader title={<Skeleton className="h-8 w-64" />} description={<Skeleton className="h-5 w-80" />} />
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-40 w-full" />
+                <Skeleton className="h-64 w-full" />
+            </div>
+        )
+    }
+    
+    if (accessDenied) {
+        return (
+             <div className="flex flex-col gap-6">
+                <PageHeader title="Acesso Negado" description="Você não tem permissão para visualizar esta página." />
+            </div>
+        )
+    }
 
     return (
         <>
@@ -355,20 +372,16 @@ export default function TeamDetailsPage() {
                         <CardDescription>Compartilhe este link para que novos usuários possam solicitar entrada na sua equipe.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        {isTeamLoading || !teamId ? (
-                            <Skeleton className="h-10 w-full" />
-                        ) : (
-                            <div className="flex items-center gap-2">
-                                <input
-                                    readOnly
-                                    value={invitationLink}
-                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                />
-                                <Button onClick={copyToClipboard} size="icon" disabled={!invitationLink}>
-                                    <Copy className="h-4 w-4" />
-                                </Button>
-                            </div>
-                        )}
+                        <div className="flex items-center gap-2">
+                            <input
+                                readOnly
+                                value={invitationLink}
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                            />
+                            <Button onClick={copyToClipboard} size="icon" disabled={!invitationLink}>
+                                <Copy className="h-4 w-4" />
+                            </Button>
+                        </div>
                     </CardContent>
                 </Card>
 
@@ -394,7 +407,7 @@ export default function TeamDetailsPage() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {finalLoadingState || !team ? (
+                                    {!team ? (
                                          Array.from({ length: 2 }).map((_, i) => (
                                             <TableRow key={i}>
                                                 <TableCell><Skeleton className="h-5 w-24" /></TableCell>
@@ -452,16 +465,7 @@ export default function TeamDetailsPage() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {finalLoadingState ? (
-                                        Array.from({ length: 3 }).map((_, i) => (
-                                            <TableRow key={i}>
-                                                <TableCell><Skeleton className="h-5 w-40" /></TableCell>
-                                                <TableCell><Skeleton className="h-6 w-20" /></TableCell>
-                                                <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                                                <TableCell className="text-right"><Skeleton className="h-8 w-48 ml-auto" /></TableCell>
-                                            </TableRow>
-                                        ))
-                                    ) : teamMembers && teamMembers.length > 0 ? (
+                                    {teamMembers && teamMembers.length > 0 ? (
                                         teamMembers.map(member => (
                                             <TableRow key={member.uid}>
                                                 <TableCell className="font-medium">{member.email}</TableCell>

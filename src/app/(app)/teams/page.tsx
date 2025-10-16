@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -117,14 +116,30 @@ export default function TeamsHubPage() {
     const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userProfileRef);
 
     useEffect(() => {
-        if (isUserLoading || isProfileLoading) return;
+        // Wait until both user auth and profile data are fully loaded
+        if (isUserLoading || isProfileLoading) {
+            return; 
+        }
 
-        if (userProfile?.role === 'manager' && userProfile.teamId) {
-            router.replace(`/teams/${userProfile.teamId}`);
+        // If loading is finished and we have a profile
+        if (userProfile) {
+            // If the user is a manager and has a teamId, redirect them to their specific team page
+            if (userProfile.role === 'manager' && userProfile.teamId) {
+                router.replace(`/teams/${userProfile.teamId}`);
+            }
+            // If the user is a super_admin, they will see the SuperAdminTeamView.
+            // If they are a manager without a teamId, they will see the message below.
+            // If they are a regular 'user', they shouldn't be on this page, but we'll show the fallback.
+        } else if (!isUserLoading && !isProfileLoading) {
+            // If all loading is done and there's still no profile, something is wrong.
+            // This could be a new user whose profile doc hasn't been created yet, or an error.
+            // A redirect to login or an error page might be appropriate here.
+             router.push('/');
         }
     }, [userProfile, isUserLoading, isProfileLoading, router]);
 
-    if (isUserLoading || isProfileLoading) {
+    if (isUserLoading || isProfileLoading || (userProfile?.role === 'manager' && userProfile.teamId)) {
+        // Show a full-page loader while authenticating, loading profile, or redirecting a manager
         return (
             <div className='space-y-6'>
                 <PageHeader title={<Skeleton className='h-8 w-48' />} description={<Skeleton className='h-5 w-80' />} />
@@ -166,10 +181,15 @@ export default function TeamsHubPage() {
          );
     }
 
-    // Fallback for user role or other cases
+    // Fallback for regular 'user' role or other unexpected cases.
     return (
-        <div className="flex flex-col items-center justify-center h-full">
-            <p>Carregando...</p>
+        <div className="flex flex-col gap-6">
+            <PageHeader title="Acesso Negado" />
+            <Card>
+                <CardContent className="pt-6">
+                    <p>Você não tem permissão para acessar esta página.</p>
+                </CardContent>
+            </Card>
         </div>
     );
 }
