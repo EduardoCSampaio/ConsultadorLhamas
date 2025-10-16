@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -11,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useUser, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
 import type { UserProfile, UserPermissions } from '@/app/actions/users';
 import { updateUserStatus, updateUserTeamAndSector } from '@/app/actions/users';
-import { updateTeamSectors, getTeamMembers, getTeamAndManager } from '@/app/actions/teams';
+import { updateTeamSectors, getTeamMembers } from '@/app/actions/teams';
 import { Copy, Users, Check, X, UserX, UserCheck, Pencil, Trash2, Plus, Save, Loader2, Settings } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Team } from '@/app/actions/teams';
@@ -81,7 +82,7 @@ export default function TeamDetailsPage() {
     const [teamMembers, setTeamMembers] = useState<UserProfile[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [updatingId, setUpdatingId] = useState<string | null>(null);
-    const [accessDenied, setAccessDenied] = useState(false);
+    const [canAccessTeam, setCanAccessTeam] = useState(false);
     
     // Sector management state
     const [isSavingSectors, setIsSavingSectors] = useState(false);
@@ -102,12 +103,31 @@ export default function TeamDetailsPage() {
     }, [firestore, currentUser]);
     
     const { data: currentUserProfile, isLoading: isCurrentUserProfileLoading } = useDoc<UserProfile>(currentUserProfileRef);
+    
+    useEffect(() => {
+        if (isCurrentUserProfileLoading || isCurrentUserAuthLoading) {
+            return; // Wait for profile to load
+        }
+        
+        if (currentUserProfile) {
+             const hasPermission = currentUserProfile.role === 'super_admin' || (currentUserProfile.role === 'manager' && currentUserProfile.teamId === teamId);
+             setCanAccessTeam(hasPermission);
+             if(!hasPermission) {
+                setIsLoading(false);
+                toast({ variant: 'destructive', title: 'Acesso Negado', description: 'Você não tem permissão para ver esta equipe.' });
+             }
+        } else if (!isCurrentUserAuthLoading) {
+             // If loading is done and there's no profile, they are not logged in.
+             router.push('/');
+        }
+    }, [currentUserProfile, isCurrentUserProfileLoading, isCurrentUserAuthLoading, teamId, router, toast]);
+
 
     const teamRef = useMemoFirebase(() => {
-        // We will only create this ref once permissions are confirmed, to avoid premature fetches
-        if (!firestore || !teamId) return null;
+        // Only create this ref once permissions are confirmed, to avoid premature fetches
+        if (!firestore || !teamId || !canAccessTeam) return null;
         return doc(firestore, 'teams', teamId);
-    }, [firestore, teamId]);
+    }, [firestore, teamId, canAccessTeam]);
 
     const { data: teamData, isLoading: isTeamLoading, error: teamError } = useDoc<Team>(teamRef);
 
@@ -120,7 +140,7 @@ export default function TeamDetailsPage() {
     }, [teamData, teamError, toast]);
 
     const fetchTeamMembers = useCallback(async (id: string) => {
-        if (!currentUser) return;
+        if (!currentUser || !canAccessTeam) return;
         
         setIsLoading(true);
         const { members, error } = await getTeamMembers({ teamId: id, currentUserId: currentUser.uid });
@@ -138,36 +158,13 @@ export default function TeamDetailsPage() {
         }
         
         setIsLoading(false);
-    }, [currentUser, toast]);
+    }, [currentUser, canAccessTeam, toast]);
 
     useEffect(() => {
-        // Wait until auth and profile are fully loaded
-        if (isCurrentUserAuthLoading || isCurrentUserProfileLoading) {
-            return;
+        if (canAccessTeam && teamId) {
+            fetchTeamMembers(teamId);
         }
-
-        // If loading is done, check for profile
-        if (!currentUserProfile) {
-            if (!isCurrentUserAuthLoading) { // Avoid redirect loops on hot-reload
-                 router.push('/');
-            }
-            return;
-        }
-        
-        // Now check permissions with the loaded profile
-        const hasPermission = currentUserProfile.role === 'super_admin' || (currentUserProfile.role === 'manager' && currentUserProfile.teamId === teamId);
-
-        if (hasPermission) {
-            setAccessDenied(false);
-            if (teamId) {
-                fetchTeamMembers(teamId);
-            }
-        } else {
-            setAccessDenied(true);
-            setIsLoading(false);
-            toast({ variant: 'destructive', title: 'Acesso Negado', description: 'Você não tem permissão para ver esta equipe.' });
-        }
-    }, [teamId, currentUserProfile, isCurrentUserAuthLoading, isCurrentUserProfileLoading, fetchTeamMembers, router, toast]);
+    }, [canAccessTeam, teamId, fetchTeamMembers]);
 
 
     const handleStatusChange = async (uid: string, status: UserStatus) => {
@@ -201,7 +198,7 @@ export default function TeamDetailsPage() {
         toast({ title: "Link de convite copiado!" });
     };
     
-    const finalLoadingState = isLoading || isCurrentUserAuthLoading || isCurrentUserProfileLoading || isTeamLoading;
+    const finalLoadingState = isLoading || isCurrentUserAuthLoading || isCurrentUserProfileLoading || (canAccessTeam && isTeamLoading);
     
     const handleOpenSectorModal = (sectorName?: string) => {
         if (sectorName && team?.sectors[sectorName]) {
@@ -350,7 +347,7 @@ export default function TeamDetailsPage() {
         )
     }
     
-    if (accessDenied) {
+    if (!canAccessTeam) {
         return (
              <div className="flex flex-col gap-6">
                 <PageHeader title="Acesso Negado" description="Você não tem permissão para visualizar esta página." />
