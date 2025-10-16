@@ -163,6 +163,7 @@ export async function getBatches(input?: { userId: string }): Promise<{ status: 
                 message: data.message,
                 userId: data.userId,
                 userEmail: data.userEmail,
+                results: data.results,
             };
         });
 
@@ -781,5 +782,3 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         message: 'Relatório gerado com sucesso.',
     };
 }
-
-    
