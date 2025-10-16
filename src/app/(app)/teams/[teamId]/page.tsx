@@ -38,7 +38,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { doc } from 'firebase/firestore';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -139,9 +138,15 @@ export default function TeamDetailsPage() {
     }, [currentUser, toast]);
 
     useEffect(() => {
-        if (isCurrentUserProfileLoading || isCurrentUserAuthLoading) return;
+        if (isCurrentUserAuthLoading || isCurrentUserProfileLoading) return; // Wait for profile to load
 
-        if (currentUserProfile?.role !== 'super_admin' && currentUserProfile?.teamId !== teamId) {
+        if (!currentUserProfile) {
+             router.push('/'); // Should not happen if logged in, but as a safeguard
+             return;
+        }
+        
+        // Now check permissions
+        if (currentUserProfile.role !== 'super_admin' && currentUserProfile.teamId !== teamId) {
             toast({ variant: 'destructive', title: 'Acesso Negado', description: 'Você não tem permissão para ver esta equipe.' });
             router.push('/dashboard');
             return;
@@ -152,7 +157,7 @@ export default function TeamDetailsPage() {
         } else {
             setIsLoading(false);
         }
-    }, [teamId, currentUserProfile, isCurrentUserProfileLoading, isCurrentUserAuthLoading, fetchTeamData, router, toast]);
+    }, [teamId, currentUser, currentUserProfile, isCurrentUserAuthLoading, isCurrentUserProfileLoading, fetchTeamData, router, toast]);
 
 
     const handleStatusChange = async (uid: string, status: UserStatus) => {

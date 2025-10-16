@@ -158,17 +158,13 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
     const { teamId, currentUserId } = validation.data;
 
     try {
-        const teamDoc = await firestore.collection('teams').doc(teamId).get();
-        if (!teamDoc.exists) {
-            return { success: false, error: "A equipe especificada não foi encontrada." };
-        }
-        const teamData = teamDoc.data()!;
-
         const currentUserDoc = await firestore.collection('users').doc(currentUserId).get();
         const currentUserData = currentUserDoc.data();
-
-        // Check for permission: either the manager of the team or a super admin can view members
-        if (teamData.managerId !== currentUserId && currentUserData?.role !== 'super_admin') {
+        
+        // The permission check for viewing members is now simplified.
+        // It's handled on the client-side before calling this function,
+        // but we keep a server-side check as a safeguard.
+        if (currentUserData?.role !== 'super_admin' && currentUserData?.teamId !== teamId) {
             return { success: false, error: "Você não tem permissão para visualizar os membros desta equipe." };
         }
         
@@ -176,6 +172,10 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
         if (membersSnapshot.empty) {
             return { success: true, members: [] };
         }
+
+        const teamDoc = await firestore.collection('teams').doc(teamId).get();
+        const managerId = teamDoc.data()?.managerId;
+
 
         const members = membersSnapshot.docs
             .map(doc => {
@@ -186,7 +186,7 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
                 } as UserProfile;
             })
             // Exclude the manager from the list of members
-            .filter(member => member.uid !== teamData.managerId); 
+            .filter(member => member.uid !== managerId); 
 
         return { success: true, members };
 
