@@ -394,7 +394,7 @@ async function processC6BatchInBackground(batchId: string) {
                     batchResults[cpfData.cpf] = { status: 'ERRO_LINK', message: linkResult.message };
                 }
             } else if (statusResult.success) {
-                 batchResults[cpfData.cpf] = { status: statusResult.data!.status, message: statusResult.data!.observacao };
+                 batchResults[cpfData.cpf] = { status: statusResult.data!.status, message: statusResult.data!.observacao || '' };
             } else {
                  batchResults[cpfData.cpf] = { status: 'ERRO_STATUS', message: statusResult.message };
             }
@@ -782,3 +782,5 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         message: 'Relatório gerado com sucesso.',
     };
 }
+
+    
