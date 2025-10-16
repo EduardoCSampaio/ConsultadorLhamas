@@ -253,15 +253,15 @@ export default function EsteiraPage() {
                             </AlertDialog>
                         </div>
                     </div>
-                    {batch.provider !== 'C6' && (
-                        <div>
-                            <div className="flex justify-between text-sm text-muted-foreground mb-1">
-                                <span>Progresso</span>
-                                <span>{batch.processedCpfs} / {batch.totalCpfs}</span>
-                            </div>
-                            <Progress value={(batch.processedCpfs / batch.totalCpfs) * 100} />
+                    
+                    <div>
+                        <div className="flex justify-between text-sm text-muted-foreground mb-1">
+                            <span>Progresso</span>
+                            <span>{batch.processedCpfs} / {batch.totalCpfs}</span>
                         </div>
-                    )}
+                        <Progress value={(batch.processedCpfs / batch.totalCpfs) * 100} />
+                    </div>
+
                     {batch.status === 'error' && (
                             <Alert variant="destructive" className="mt-2">
                             <AlertCircle className="h-4 w-4" />
