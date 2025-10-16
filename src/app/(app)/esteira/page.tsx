@@ -200,7 +200,7 @@ export default function EsteiraPage() {
                             <Badge variant={getStatusVariant(batch.status)} className="capitalize">{getStatusText(batch.status)}</Badge>
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
-                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10">
+                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={(e) => e.preventDefault()}>
                                         <Trash2 className="h-4 w-4" />
                                     </Button>
                                 </AlertDialogTrigger>
@@ -216,7 +216,6 @@ export default function EsteiraPage() {
                                     <AlertDialogAction
                                         className="bg-destructive hover:bg-destructive/90"
                                         onClick={(e) => {
-                                            e.stopPropagation();
                                             handleDeleteBatch(batch.id);
                                         }}
                                     >
