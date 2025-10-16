@@ -68,7 +68,7 @@ export type BatchJob = {
     type: 'fgts' | 'clt';
     provider: string; // 'V8DIGITAL' or 'facta' or 'c6'
     v8Provider?: V8Provider; // 'qi', 'cartos', 'bms' if provider is 'V8DIGITAL'
-    status: 'processing' | 'completed' | 'error';
+    status: 'processing' | 'completed' | 'error' | 'pending';
     totalCpfs: number;
     processedCpfs: number;
     cpfs: string[];
@@ -306,7 +306,7 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
       fileName: fileName,
       type: 'fgts',
       provider: displayProvider,
-      status: 'processing',
+      status: 'pending',
       totalCpfs: cpfs.length,
       processedCpfs: 0,
       cpfs: cpfs,
@@ -455,7 +455,7 @@ export async function processarLoteClt(input: z.infer<typeof processCltActionSch
       fileName: fileName,
       type: 'clt',
       provider: displayProvider,
-      status: 'processing',
+      status: 'pending',
       totalCpfs: cpfs.length,
       processedCpfs: 0,
       cpfs: cpfs,
@@ -782,5 +782,3 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         message: 'Relatório gerado com sucesso.',
     };
 }
-
-    

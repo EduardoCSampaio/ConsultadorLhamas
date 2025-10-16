@@ -77,8 +77,8 @@ export default function EsteiraPage() {
         // Interval to fetch data from the server every 10 seconds
         const dataFetchInterval = setInterval(() => {
             setBatches(currentBatches => {
-                // Only fetch data if there's a batch currently processing
-                if (currentBatches.some(b => b.status === 'processing')) {
+                // Only fetch data if there's a batch currently processing or pending
+                if (currentBatches.some(b => b.status === 'processing' || b.status === 'pending')) {
                     fetchBatches(false); // Fetch silently in the background
                 }
                 return currentBatches;
@@ -153,6 +153,7 @@ export default function EsteiraPage() {
             case 'completed': return 'default';
             case 'processing': return 'secondary';
             case 'error': return 'destructive';
+            case 'pending': return 'outline';
             default: return 'outline';
         }
     };
@@ -162,6 +163,7 @@ export default function EsteiraPage() {
             case 'completed': return 'Completo';
             case 'processing': return 'Processando';
             case 'error': return 'Erro';
+            case 'pending': return 'Pendente';
             default: return 'Desconhecido';
         }
     }
@@ -354,4 +356,3 @@ export default function EsteiraPage() {
         </div>
     );
 }
-
