@@ -171,36 +171,6 @@ export default function EsteiraPage() {
 
 
     const BatchCard = ({ batch }: { batch: BatchJob }) => {
-        const C6ResultDetails = () => {
-            if (batch.provider !== 'C6' || batch.status !== 'completed' || !batch.results) return null;
-            
-            const resultsArray = Object.entries(batch.results);
-
-            return (
-                <div className="mt-4 p-4 border rounded-md bg-muted/50">
-                    <h4 className="font-semibold mb-2">Resultados da Verificação C6</h4>
-                    <div className="max-h-60 overflow-y-auto space-y-2 pr-2">
-                        {resultsArray.map(([cpf, result]) => (
-                            <div key={cpf} className="flex items-center justify-between text-sm p-2 border-b last:border-b-0">
-                                <span className="font-mono">{cpf}</span>
-                                {result.status === 'NAO_AUTORIZADO' ? (
-                                    <Button size="sm" variant="secondary" asChild>
-                                        <a href={result.link} target="_blank" rel="noopener noreferrer">
-                                            Gerar Link <ExternalLink className="ml-2 h-3 w-3" />
-                                        </a>
-                                    </Button>
-                                ) : (
-                                    <Badge variant={result.status === 'AUTORIZADO' ? 'default' : 'destructive'} className="text-xs">
-                                        {result.status}
-                                    </Badge>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )
-        };
-
         return (
             <Card>
                 <CardContent className="p-4 space-y-3">
@@ -284,7 +254,6 @@ export default function EsteiraPage() {
                             </Button>
                         )}
                     </div>
-                    <C6ResultDetails />
                 </CardContent>
             </Card>
         );
