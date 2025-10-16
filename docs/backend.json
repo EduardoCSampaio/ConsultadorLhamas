@@ -142,7 +142,7 @@
     },
      "Team": {
       "title": "Team",
-      "description": "Represents a team or organization within the platform, managed by a 'manager'.",
+      "description": "Represents a team or organization within the platform, directly managed by a 'manager' user.",
       "type": "object",
       "properties": {
         "id": { "type": "string", "description": "Unique ID for the team." },
@@ -219,13 +219,27 @@
             "fileName": { "type": "string" },
             "type": { "type": "string", "enum": ["fgts", "clt"] },
             "provider": { "type": "string", "enum": ["v8", "facta", "c6"] },
-            "status": { "type": "string", "enum": ["processing", "completed", "error", "pending"] },
+            "status": { "type": "string", "enum": ["processing", "completed", "error"] },
             "totalCpfs": { "type": "number" },
             "processedCpfs": { "type": "number" },
             "message": { "type": "string" },
             "createdAt": { "type": "string", "format": "date-time" },
             "completedAt": { "type": "string", "format": "date-time", "description": "Timestamp indicating when the job finished (completed or errored)." },
-            "cpfs": { "type": "array", "items": { "type": "string" } }
+            "cpfs": { "type": "array", "items": { "type": "string" } },
+            "results": { 
+                "type": "object",
+                "description": "Stores individual results for each CPF in the batch.",
+                 "patternProperties": {
+                    "^[0-9]{11}$": {
+                        "type": "object",
+                        "properties": {
+                            "status": { "type": "string" },
+                            "link": { "type": "string", "format": "uri" },
+                            "message": { "type": "string" }
+                        }
+                    }
+                }
+            }
         },
         "required": ["id", "userId", "type", "provider", "status", "totalCpfs", "processedCpfs", "createdAt"]
     },
@@ -516,3 +530,5 @@
     }
   }
 }
+
+    
