@@ -47,6 +47,7 @@ const reportActionSchema = z.object({
   createdAt: z.string(),
   provider: z.string(),
   userId: z.string(),
+  batchId: z.string(),
 });
 
 const getBatchStatusSchema = z.object({
@@ -66,7 +67,7 @@ export type BatchJob = {
     id: string;
     fileName: string;
     type: 'fgts' | 'clt';
-    provider: string; // 'V8DIGITAL' or 'facta' or 'c6'
+    provider: string; // 'V8DIGITAL' or 'facta' or 'C6'
     v8Provider?: V8Provider; // 'qi', 'cartos', 'bms' if provider is 'V8DIGITAL'
     status: 'processing' | 'completed' | 'error' | 'pending';
     totalCpfs: number;
@@ -466,6 +467,11 @@ export async function processarLoteClt(input: z.infer<typeof processCltActionSch
 
   if (provider === 'c6') {
     batchData.cpfsData = cpfsData;
+    batchData.status = 'pending';
+  } else {
+    // For other providers, we mark as error for now as they are not implemented.
+     batchData.status = 'error';
+     batchData.message = 'Processamento de lote CLT ainda não implementado para este provedor.';
   }
   
   try {
@@ -482,8 +488,6 @@ export async function processarLoteClt(input: z.infer<typeof processCltActionSch
           processC6BatchInBackground(batchId); // Fire and forget
       } else {
          await batchRef.update({
-            status: 'error',
-            message: 'Processamento de lote CLT ainda não implementado para este provedor.',
             completedAt: FieldValue.serverTimestamp(),
         });
       }
@@ -649,7 +653,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         return { status: 'error', fileName: '', fileContent: '', message: 'Dados de entrada para o relatório são inválidos.' };
     }
 
-    const { cpfs, fileName: originalFileName, createdAt, provider: displayProvider, userId } = validation.data;
+    const { cpfs, createdAt, provider: displayProvider, userId, batchId } = validation.data;
     const mainProvider = displayProvider.toLowerCase();
     
     const formattedDate = new Date(createdAt).toLocaleDateString('pt-BR').replace(/\//g, '-');
@@ -664,82 +668,103 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         details: `Arquivo: ${fileName}`
     });
 
+    let results: any[] = [];
+    
+    // Handle C6 batch results
+    if (mainProvider === 'c6') {
+        const batchDoc = await firestore.collection('batches').doc(batchId).get();
+        if (batchDoc.exists) {
+            const batchData = batchDoc.data() as BatchJob;
+            if (batchData.results) {
+                results = Object.entries(batchData.results).map(([cpf, result]) => ({
+                    CPF: cpf,
+                    STATUS: result.status,
+                    MENSAGEM: result.message,
+                    LINK_AUTORIZACAO: result.link || '',
+                }));
+            }
+        }
+    } else {
+        // Handle V8 and Facta results
+        for (const cpf of cpfs) {
+            try {
+                const docId = mainProvider === 'v8digital' ? cpf : `facta-${cpf}`;
+                const docRef = firestore.collection('webhookResponses').doc(docId);
+                const docSnap = await docRef.get();
 
-    const results: any[] = [];
+                if (docSnap.exists) {
+                    const data = docSnap.data();
+                    const responseBody = data?.responseBody;
+                    
+                    const providerError = responseBody?.errorMessage || responseBody?.error || data?.message;
+                    const isSuccess = data?.status === 'success' && responseBody;
 
-    for (const cpf of cpfs) {
-        try {
-            const docId = mainProvider === 'v8digital' ? cpf : `facta-${cpf}`;
-            const docRef = firestore.collection('webhookResponses').doc(docId);
-            const docSnap = await docRef.get();
-
-            if (docSnap.exists) {
-                const data = docSnap.data();
-                const responseBody = data?.responseBody;
-                
-                const providerError = responseBody?.errorMessage || responseBody?.error || data?.message;
-                const isSuccess = data?.status === 'success' && responseBody;
-
-                if (isSuccess) {
-                    if (mainProvider === 'v8digital') {
-                        const balanceValue = parseFloat(responseBody.balance);
-                         results.push({
-                            CPF: cpf,
-                            Saldo: isNaN(balanceValue) ? '0.00' : balanceValue, 
-                            Mensagem: 'Sucesso',
-                        });
-                    } else if (mainProvider === 'facta') {
-                        const saldoTotal = parseFloat(responseBody.saldo_total);
-                        let row: any = {
-                            CPF: cpf,
-                            'Saldo Total': isNaN(saldoTotal) ? '0.00' : saldoTotal,
-                            Mensagem: responseBody.msg || 'Sucesso',
-                            'Data Saldo': responseBody.data_saldo,
-                        };
-                        for(let i=1; i<=12; i++){
-                            if(responseBody[`dataRepasse_${i}`]){
-                                row[`Data Repasse ${i}`] = responseBody[`dataRepasse_${i}`];
-                                row[`Valor ${i}`] = parseFloat(responseBody[`valor_${i}`]);
+                    if (isSuccess) {
+                        if (mainProvider === 'v8digital') {
+                            const balanceValue = parseFloat(responseBody.balance);
+                             results.push({
+                                CPF: cpf,
+                                Saldo: isNaN(balanceValue) ? '0.00' : balanceValue, 
+                                Mensagem: 'Sucesso',
+                            });
+                        } else if (mainProvider === 'facta') {
+                            const saldoTotal = parseFloat(responseBody.saldo_total);
+                            let row: any = {
+                                CPF: cpf,
+                                'Saldo Total': isNaN(saldoTotal) ? '0.00' : saldoTotal,
+                                Mensagem: responseBody.msg || 'Sucesso',
+                                'Data Saldo': responseBody.data_saldo,
+                            };
+                            for(let i=1; i<=12; i++){
+                                if(responseBody[`dataRepasse_${i}`]){
+                                    row[`Data Repasse ${i}`] = responseBody[`dataRepasse_${i}`];
+                                    row[`Valor ${i}`] = parseFloat(responseBody[`valor_${i}`]);
+                                }
                             }
+                            results.push(row);
                         }
-                        results.push(row);
+                    } else {
+                        results.push({ CPF: cpf, Saldo: '0.00', 'Saldo Total': '0.00', Mensagem: providerError || "Erro no processamento." });
                     }
                 } else {
-                    results.push({ CPF: cpf, Saldo: '0.00', 'Saldo Total': '0.00', Mensagem: providerError || "Erro no processamento." });
+                    results.push({ CPF: cpf, Saldo: '0.00', 'Saldo Total': '0.00', Mensagem: 'Nenhum resultado encontrado.' });
                 }
-            } else {
-                results.push({ CPF: cpf, Saldo: '0.00', 'Saldo Total': '0.00', Mensagem: 'Nenhum resultado encontrado.' });
+            } catch (error) {
+                 const message = error instanceof Error ? error.message : 'Erro interno ao consultar resultado.';
+                 results.push({ CPF: cpf, Saldo: '0.00', 'Saldo Total': '0.00', Mensagem: message });
             }
-        } catch (error) {
-             const message = error instanceof Error ? error.message : 'Erro interno ao consultar resultado.';
-             results.push({ CPF: cpf, Saldo: '0.00', 'Saldo Total': '0.00', Mensagem: message });
         }
     }
+
 
     if (results.length === 0) {
         return { status: 'error', fileName: '', fileContent: '', message: 'Nenhum dado para gerar relatório.' };
     }
     
-    const finalResults = results.map(r => ({
-        CPF: r.CPF,
-        SALDO: r.Saldo || r['Saldo Total'] || '0.00',
-        MENSAGEM: r.Mensagem,
-        ...(mainProvider === 'facta' && {
-            'DATA_SALDO': r['Data Saldo'],
-            'DATA_REPASSE_1': r['Data Repasse 1'], 'VALOR_1': r['Valor 1'],
-            'DATA_REPASSE_2': r['Data Repasse 2'], 'VALOR_2': r['Valor 2'],
-            'DATA_REPASSE_3': r['Data Repasse 3'], 'VALOR_3': r['Valor 3'],
-            'DATA_REpasse_4': r['Data Repasse 4'], 'VALOR_4': r['Valor 4'],
-            'DATA_REPASSE_5': r['Data Repasse 5'], 'VALOR_5': r['Valor 5'],
-            'DATA_REPASSE_6': r['Data Repasse 6'], 'VALOR_6': r['Valor 6'],
-            'DATA_REPASSE_7': r['Data Repasse 7'], 'VALOR_7': r['Valor 7'],
-            'DATA_REPASSE_8': r['Data Repasse 8'], 'VALOR_8': r['Valor 8'],
-            'DATA_REPASSE_9': r['Data Repasse 9'], 'VALOR_9': r['Valor 9'],
-            'DATA_REPASSE_10': r['Data Repasse 10'], 'VALOR_10': r['Valor 10'],
-            'DATA_REPASSE_11': r['Data Repasse 11'], 'VALOR_11': r['Valor 11'],
-            'DATA_REPASSE_12': r['Data Repasse 12'], 'VALOR_12': r['Valor 12'],
-        })
-    }));
+    let finalResults = results;
+    if (mainProvider !== 'c6') {
+        finalResults = results.map(r => ({
+            CPF: r.CPF,
+            SALDO: r.Saldo || r['Saldo Total'] || '0.00',
+            MENSAGEM: r.Mensagem,
+            ...(mainProvider === 'facta' && {
+                'DATA_SALDO': r['Data Saldo'],
+                'DATA_REPASSE_1': r['Data Repasse 1'], 'VALOR_1': r['Valor 1'],
+                'DATA_REPASSE_2': r['Data Repasse 2'], 'VALOR_2': r['Valor 2'],
+                'DATA_REPASSE_3': r['Data Repasse 3'], 'VALOR_3': r['Valor 3'],
+                'DATA_REpasse_4': r['Data Repasse 4'], 'VALOR_4': r['Valor 4'],
+                'DATA_REPASSE_5': r['Data Repasse 5'], 'VALOR_5': r['Valor 5'],
+                'DATA_REPASSE_6': r['Data Repasse 6'], 'VALOR_6': r['Valor 6'],
+                'DATA_REPASSE_7': r['Data Repasse 7'], 'VALOR_7': r['Valor 7'],
+                'DATA_REPASSE_8': r['Data Repasse 8'], 'VALOR_8': r['Valor 8'],
+                'DATA_REPASSE_9': r['Data Repasse 9'], 'VALOR_9': r['Valor 9'],
+                'DATA_REPASSE_10': r['Data Repasse 10'], 'VALOR_10': r['Valor 10'],
+                'DATA_REPASSE_11': r['Data Repasse 11'], 'VALOR_11': r['Valor 11'],
+                'DATA_REPASSE_12': r['Data Repasse 12'], 'VALOR_12': r['Valor 12'],
+            })
+        }));
+    }
+
 
     const worksheet = XLSX.utils.json_to_sheet(finalResults);
     
@@ -749,26 +774,28 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
             wch: Math.max(15, key.length + 2) 
         }));
         
-        const formatCurrencyCells = (colName: string) => {
-            const colIndex = header.indexOf(colName);
-            if (colIndex !== -1) {
-                finalResults.forEach((_, index) => {
-                    const cellRef = XLSX.utils.encode_cell({c: colIndex, r: index + 1});
-                     if (worksheet[cellRef] && typeof worksheet[cellRef].v === 'number') {
-                        worksheet[cellRef].z = '"R$"#,##0.00';
-                    }
-                });
+        if (mainProvider !== 'c6') {
+            const formatCurrencyCells = (colName: string) => {
+                const colIndex = header.indexOf(colName);
+                if (colIndex !== -1) {
+                    finalResults.forEach((_, index) => {
+                        const cellRef = XLSX.utils.encode_cell({c: colIndex, r: index + 1});
+                         if (worksheet[cellRef] && typeof worksheet[cellRef].v === 'number') {
+                            worksheet[cellRef].z = '"R$"#,##0.00';
+                        }
+                    });
+                }
+            };
+            
+            formatCurrencyCells('SALDO');
+            for (let i = 1; i <= 12; i++) {
+                formatCurrencyCells(`VALOR_${i}`);
             }
-        };
-        
-        formatCurrencyCells('SALDO');
-        for (let i = 1; i <= 12; i++) {
-            formatCurrencyCells(`VALOR_${i}`);
         }
     }
 
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Resultados FGTS');
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Resultados');
 
     const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
     const base64String = buffer.toString('base64');

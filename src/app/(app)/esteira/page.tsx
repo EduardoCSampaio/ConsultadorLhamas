@@ -103,6 +103,7 @@ export default function EsteiraPage() {
             createdAt: batch.createdAt, 
             provider: batch.provider,
             userId: user.uid,
+            batchId: batch.id,
         });
         
         if (result.status === 'success' && result.fileContent && result.fileName) {
@@ -270,7 +271,7 @@ export default function EsteiraPage() {
                             </Alert>
                     )}
                     <div className="mt-4 flex flex-wrap gap-2">
-                        {batch.status === 'completed' && batch.provider !== 'C6' && (
+                        {batch.status === 'completed' && (
                             <Button onClick={() => handleDownloadReport(batch)} size="sm">
                                 <Download className="mr-2 h-4 w-4" />
                                 Baixar Relatório
