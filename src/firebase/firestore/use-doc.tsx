@@ -7,7 +7,6 @@ import {
   DocumentData,
   FirestoreError,
   DocumentSnapshot,
-  Timestamp,
 } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -63,15 +62,8 @@ export function useDoc<T = any>(
     const unsubscribe = onSnapshot(
       memoizedDocRef,
       (snapshot: DocumentSnapshot<DocumentData>) => {
-        if (snapshot.exists) {
-          const docData = snapshot.data();
-          // Convert any Timestamp fields to ISO strings for serialization
-          Object.keys(docData).forEach(key => {
-              if (docData[key] instanceof Timestamp) {
-                  docData[key] = docData[key].toDate().toISOString();
-              }
-          });
-          setData({ ...(docData as T), id: snapshot.id });
+        if (snapshot.exists()) {
+          setData({ ...(snapshot.data() as T), id: snapshot.id });
         } else {
           // Document does not exist
           setData(null);

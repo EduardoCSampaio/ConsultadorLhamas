@@ -1,534 +1,112 @@
-
 {
   "entities": {
-    "WebhookResponse": {
+    "UserProfile": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "WebhookResponse",
+      "title": "UserProfile",
       "type": "object",
-      "description": "Represents the response received from a webhook or a synchronous API call.",
+      "description": "Represents a user profile within the Beleza Integrada application.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the response, typically cpf or provider-cpf."
+          "description": "Unique identifier for the user profile."
         },
-        "status": {
+        "email": {
           "type": "string",
-          "description": "The status of the response (e.g., success, error)."
+          "description": "Email address of the user.",
+          "format": "email"
         },
-        "message": {
+        "name": {
           "type": "string",
-          "description": "A descriptive message associated with the response."
+          "description": "Full name of the user."
         },
-        "provider": {
-          "type": "string",
-          "description": "The API provider that generated this response (e.g., v8, facta)."
-        },
-        "responseBody": {
-          "type": "object",
-          "description": "The full response body received from the API."
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp indicating when the response was stored.",
-          "format": "date-time"
+        "teamIds": {
+          "type": "array",
+          "description": "References to Teams. (Relationship: UserProfile N:N Team)",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
         "id",
-        "status",
-        "message"
+        "email",
+        "name"
       ]
     },
-    "UserProfile": {
-      "title": "User Profile",
-      "description": "Stores user profile information, including their role and status.",
+    "Team": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Team",
       "type": "object",
+      "description": "Represents a team within the Beleza Integrada application.",
       "properties": {
-        "uid": {
+        "id": {
           "type": "string",
-          "description": "The user's unique ID from Firebase Authentication."
+          "description": "Unique identifier for the team."
         },
-        "email": {
+        "name": {
           "type": "string",
-          "format": "email",
-          "description": "The user's email address."
+          "description": "Name of the team."
         },
-        "photoURL": {
-            "type": "string",
-            "format": "uri",
-            "description": "The URL of the user's profile picture."
-        },
-        "role": {
+        "description": {
           "type": "string",
-          "enum": [
-            "super_admin",
-            "manager",
-            "user"
-          ],
-          "description": "The user's role in the system. 'super_admin' is the highest level, 'manager' can manage a team."
+          "description": "Description of the team."
         },
-        "teamId": {
-            "type": "string",
-            "description": "The ID of the team the user belongs to, if any."
-        },
-        "sector": {
-            "type": "string",
-            "description": "The name of the sector the user belongs to within their team."
-        },
-        "status": {
-          "type": "string",
-          "enum": [
-            "pending",
-            "active",
-            "rejected",
-            "inactive"
-          ],
-          "description": "The current status of the user's account."
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "The timestamp when the user profile was created."
-        },
-        "v8_username": {
-            "type": "string",
-            "description": "Username for the V8 API integration."
-        },
-        "v8_password": {
-            "type": "string",
-            "description": "Password for the V8 API integration (should be stored securely)."
-        },
-        "v8_audience": {
-            "type": "string",
-            "description": "Audience for the V8 API integration."
-        },
-        "v8_client_id": {
-            "type": "string",
-            "description": "Client ID for the V8 API integration."
-        },
-        "facta_username": {
-            "type": "string",
-            "description": "Username for the Facta API integration."
-        },
-        "facta_password": {
-            "type": "string",
-            "description": "Password for the Facta API integration (should be stored securely)."
-        },
-        "c6_username": {
-            "type": "string",
-            "description": "Username for the C6 API integration."
-        },
-        "c6_password": {
-            "type": "string",
-            "description": "Password for the C6 API integration."
-        },
-        "permissions": {
-          "type": "object",
-          "description": "Granular access control for different app features. For 'user' roles, these are determined by their team's sector.",
-          "properties": {
-            "canViewFGTS": { "type": "boolean", "description": "Access to FGTS batch and manual query pages." },
-            "canViewCLT": { "type": "boolean", "description": "Access to CLT credit query pages." },
-            "canViewINSS": { "type": "boolean", "description": "Access to INSS benefit card query pages." }
+        "userProfileIds": {
+          "type": "array",
+          "description": "References to UserProfiles. (Relationship: Team N:N UserProfile)",
+          "items": {
+            "type": "string"
           }
         }
       },
       "required": [
-        "uid",
-        "email",
-        "role",
-        "status",
-        "createdAt"
+        "id",
+        "name",
+        "description"
       ]
-    },
-     "Team": {
-      "title": "Team",
-      "description": "Represents a team or organization within the platform, directly managed by a 'manager' user.",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string", "description": "Unique ID for the team." },
-        "name": { "type": "string", "description": "The name of the team." },
-        "managerId": { "type": "string", "description": "The UID of the user who manages this team." },
-        "createdAt": { "type": "string", "format": "date-time" },
-        "sectors": {
-          "type": "object",
-          "description": "A map of sectors (roles) within the team and their specific permissions.",
-          "patternProperties": {
-            "^[a-zA-Z0-9_ -]+$": {
-              "type": "object",
-              "properties": {
-                "isManager": { "type": "boolean", "description": "If true, users in this sector have manager-level permissions for the team." },
-                "permissions": {
-                  "type": "object",
-                  "properties": {
-                    "canViewFGTS": { "type": "boolean" },
-                    "canViewCLT": { "type": "boolean" },
-                    "canViewINSS": { "type": "boolean" }
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "required": ["id", "name", "managerId", "createdAt"]
-    },
-    "ActivityLog": {
-        "title": "Activity Log",
-        "description": "Stores a record of user actions within the application.",
-        "type": "object",
-        "properties": {
-            "userId": {
-                "type": "string",
-                "description": "The UID of the user who performed the action."
-            },
-            "userEmail": {
-                "type": "string",
-                "description": "The email of the user for easy reference."
-            },
-            "action": {
-                "type": "string",
-                "description": "A description of the action performed (e.g., 'Consulta FGTS - V8')."
-            },
-             "provider": {
-                "type": "string",
-                "description": "The API provider used for the action (e.g., v8, facta)."
-            },
-            "documentNumber": {
-                "type": "string",
-                "description": "The document number (CPF) related to the action."
-            },
-            "details": {
-                "type": "string",
-                "description": "Additional details about the action, such as a filename or error message."
-            },
-            "createdAt": {
-                "type": "string",
-                "format": "date-time",
-                "description": "The timestamp when the action occurred."
-            }
-        },
-        "required": ["userId", "userEmail", "action", "createdAt"]
-    },
-    "BatchJob": {
-        "title": "Batch Job",
-        "description": "Represents a batch processing job for FGTS or CLT queries.",
-        "type": "object",
-        "properties": {
-            "id": { "type": "string" },
-            "userId": { "type": "string" },
-            "fileName": { "type": "string" },
-            "type": { "type": "string", "enum": ["fgts", "clt"] },
-            "provider": { "type": "string", "enum": ["v8", "facta", "c6"] },
-            "status": { "type": "string", "enum": ["processing", "completed", "error"] },
-            "totalCpfs": { "type": "number" },
-            "processedCpfs": { "type": "number" },
-            "message": { "type": "string" },
-            "createdAt": { "type": "string", "format": "date-time" },
-            "completedAt": { "type": "string", "format": "date-time", "description": "Timestamp indicating when the job finished (completed or errored)." },
-            "cpfs": { "type": "array", "items": { "type": "string" } },
-            "results": { 
-                "type": "object",
-                "description": "Stores individual results for each CPF in the batch.",
-                 "patternProperties": {
-                    "^[0-9]{11}$": {
-                        "type": "object",
-                        "properties": {
-                            "status": { "type": "string" },
-                            "link": { "type": "string", "format": "uri" },
-                            "message": { "type": "string" }
-                        }
-                    }
-                }
-            }
-        },
-        "required": ["id", "userId", "type", "provider", "status", "totalCpfs", "processedCpfs", "createdAt"]
-    },
-     "FGTSBalance": {
-        "title": "FGTS Balance",
-        "description": "Represents the result of an FGTS balance check from a single provider.",
-        "type": "object",
-        "properties": {
-            "provider": {
-                "type": "string",
-                "description": "The name of the provider (e.g., 'qi', 'cartos', 'bms', 'facta')."
-            },
-            "balance": {
-                "type": "number",
-                "description": "The available FGTS balance."
-            }
-        },
-        "required": ["provider", "balance"]
-    },
-    "CLTConsent": {
-        "title": "CLT Consent",
-        "description": "Represents the consent term data for a CLT credit consultation.",
-        "type": "object",
-        "properties": {
-            "consultationId": { "type": "string" },
-            "borrowerDocumentNumber": { "type": "string" },
-            "gender": { "type": "string", "enum": ["male", "female"] },
-            "birthDate": { "type": "string", "format": "date" },
-            "signerName": { "type": "string" },
-            "signerEmail": { "type": "string", "format": "email" },
-            "signerPhone": { 
-                "type": "object",
-                "properties": {
-                    "countryCode": { "type": "string" },
-                    "areaCode": { "type": "string" },
-                    "phoneNumber": { "type": "string" }
-                }
-            },
-            "provider": { "type": "string" },
-            "userId": { "type": "string" },
-            "createdAt": { "type": "string", "format": "date-time" }
-        },
-        "required": ["consultationId", "borrowerDocumentNumber", "userId", "createdAt"]
-    },
-    "SimulationConfig": {
-      "title": "Simulation Config",
-      "description": "Configuration for a CLT credit simulation.",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "slug": { "type": "string" },
-        "monthly_interest_rate": { "type": "string" },
-        "number_of_installments": { "type": "array", "items": { "type": "string" } }
-      }
-    },
-    "SimulationResult": {
-      "title": "Simulation Result",
-      "description": "The result of a CLT credit simulation.",
-      "type": "object",
-      "properties": {
-        "id_simulation": { "type": "string" },
-        "installment_value": { "type": "number" },
-        "number_of_installments": { "type": "number" },
-        "operation_amount": { "type": "number" },
-        "disbursement_amount": { "type": "number" },
-        "monthly_interest_rate": { "type": "number" },
-        "disbursement_option": {
-          "type": "object",
-          "properties": {
-            "cet": { "type": "number" },
-            "first_due_date": { "type": "string", "format": "date" }
-          }
-        }
-      }
-    },
-    "InssSimulationRequest": {
-      "title": "INSS Simulation Request",
-      "description": "Parameters for simulating INSS benefit card operations.",
-      "type": "object",
-      "properties": {
-        "cpf": { "type": "string" },
-        "data_nascimento": { "type": "string", "format": "date" },
-        "valor_renda": { "type": "number" },
-        "valor_desejado": { "type": "number" },
-        "userId": { "type": "string" }
-      },
-      "required": ["cpf", "data_nascimento", "valor_renda", "valor_desejado", "userId"]
-    },
-    "InssSimulationResult": {
-      "title": "INSS Simulation Result",
-      "description": "Result of an INSS benefit card operation simulation.",
-      "type": "object",
-      "properties": {
-        "tabela": { "type": "string" },
-        "taxa": { "type": "number" },
-        "prazo": { "type": "number" },
-        "codigoTabela": { "type": "number" },
-        "contrato": { "type": "number" },
-        "parcela": { "type": "number" }
-      },
-      "required": ["tabela", "taxa", "prazo", "codigoTabela", "contrato", "parcela"]
-    },
-    "InssCreditOffer": {
-      "title": "INSS Credit Offer",
-      "description": "Represents an INSS new credit or margin complement offer from Facta.",
-      "type": "object",
-      "properties": {
-        "convenio": { "type": "string" },
-        "idConvenio": { "type": "number" },
-        "averbador": { "type": "string" },
-        "tabela": { "type": "string" },
-        "taxa": { "type": "number" },
-        "prazo": { "type": "number" },
-        "tipoop": { "type": "number" },
-        "tipoOperacao": { "type": "string" },
-        "codigoTabela": { "type": "number" },
-        "coeficiente": { "type": "number" },
-        "primeiro_vencimento": { "type": ["string", "null"] },
-        "contrato": { "type": "number" },
-        "parcela": { "type": "number" }
-      },
-      "required": ["tabela", "taxa", "prazo", "codigoTabela", "contrato", "parcela"]
-    },
-    "Ticket": {
-      "title": "Ticket",
-      "description": "Represents a user support ticket or 'chamado'.",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string", "description": "Unique identifier for the ticket." },
-        "ticketNumber": { "type": "string", "description": "Human-readable ticket number (e.g., #0001)." },
-        "userId": { "type": "string", "description": "UID of the user who created the ticket." },
-        "userEmail": { "type": "string", "description": "Email of the user for easy reference." },
-        "title": { "type": "string", "description": "The subject or title of the ticket." },
-        "status": {
-          "type": "string",
-          "enum": ["aberto", "em_atendimento", "em_desenvolvimento", "testando", "liberado", "resolvido"],
-          "description": "The current status of the support ticket."
-        },
-        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp when the ticket was created." },
-        "updatedAt": { "type": "string", "format": "date-time", "description": "Timestamp for the last update." },
-        "lastMessage": { "type": "string", "description": "A snippet of the last message for quick preview." },
-        "unreadByUser": { "type": "number", "description": "Count of unread messages for the user." },
-        "unreadByAdmin": { "type": "number", "description": "Count of unread messages for the admin." }
-      },
-      "required": ["id", "userId", "userEmail", "title", "status", "createdAt", "updatedAt"]
-    },
-    "TicketMessage": {
-      "title": "Ticket Message",
-      "description": "Represents a single message within a support ticket.",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string", "description": "Unique identifier for the message." },
-        "ticketId": { "type": "string", "description": "The ID of the parent ticket." },
-        "senderId": { "type": "string", "description": "UID of the message sender (user or admin)." },
-        "senderEmail": { "type": "string", "description": "Email of the sender." },
-        "content": { "type": "string", "description": "The text content of the message." },
-        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp when the message was sent." }
-      },
-      "required": ["id", "ticketId", "senderId", "senderEmail", "content", "createdAt"]
-    },
-    "FactaProposal": {
-      "title": "Facta Proposal",
-      "description": "Represents a proposal status from the Facta 'andamento-propostas' endpoint.",
-      "type": "object",
-      "properties": {
-        "proposta": { "type": "string" },
-        "data_digitacao": { "type": "string" },
-        "hora_digitacao": { "type": "string" },
-        "data_efetivacao": { "type": "string" },
-        "data_pgto_cliente": { "type": "string" },
-        "situacao": { "type": "string" },
-        "convenio": { "type": "string" },
-        "cpf": { "type": "string" },
-        "cliente": { "type": "string" },
-        "valor_liberado": { "type": "number" },
-        "vlrprestacao": { "type": "number" },
-        "numeroprestacao": { "type": "number" },
-        "login_corretor": { "type": "string" },
-        "nome_login": { "type": "string" },
-        "corretor": { "type": "string" },
-        "codigo_indicador": { "type": "string" },
-        "codigo_master": { "type": "string" },
-        "data_movimento": { "type": "string" },
-        "data_movimento_ocorrencia": { "type": "string" },
-        "hora_movimento_ocorrencia": { "type": "string" },
-        "observacao_ocorrencia": { "type": "string" },
-        "averbador": { "type": "string" },
-        "codigo_af": { "type": "string" },
-        "numero_contrato": { "type": "string" },
-        "numero_contrato_refin": { "type": "string" },
-        "produto": { "type": "string" },
-        "saldo_devedor": { "type": "number" },
-        "status_proposta": { "type": "string" },
-        "status_crivo": { "type": "string" },
-        "tabela": { "type": "string" },
-        "tipo_operacao": { "type": "string" },
-        "valor_af": { "type": "number" },
-        "valor_bruto": { "type": "number" },
-        "taxa": { "type": "number" },
-        "valor_iof": { "type": "number" },
-        "valor_seguro": { "type": "number" },
-        "vendedor": { "type": "string" },
-        "matricula": { "type": "string" },
-        "especie_beneficio": { "type": "string" },
-        "meio_pagamento_beneficio": { "type": "string" },
-        "banco": { "type": "string" },
-        "agencia": { "type": "string" },
-        "conta": { "type": "string" },
-        "banco_desconto": { "type": "string" },
-        "agencia_desconto": { "type": "string" },
-        "conta_desconto": { "type": "string" },
-        "assinatura_digital": { "type": "string" },
-        "tipo_chave_pix": { "type": "string" },
-        "chave_pix": { "type": "string" }
-      },
-      "required": ["proposta", "data_digitacao", "cpf", "cliente"]
-    },
-    "Notification": {
-      "title": "Notification",
-      "description": "Represents an in-app notification for a user.",
-      "type": "object",
-      "properties": {
-        "userId": { "type": "string", "description": "The UID of the user who will receive the notification." },
-        "title": { "type": "string", "description": "The title of the notification." },
-        "message": { "type": "string", "description": "The main content of the notification." },
-        "link": { "type": "string", "format": "uri", "description": "A URL to navigate to when the notification is clicked." },
-        "isRead": { "type": "boolean", "description": "Whether the user has read the notification." },
-        "createdAt": { "type": "string", "format": "date-time", "description": "The timestamp when the notification was created." }
-      },
-      "required": ["userId", "title", "message", "isRead", "createdAt"]
     }
   },
   "auth": {
     "providers": [
       "password",
       "anonymous"
-    ],
-    "customClaims": {
-       "super_admin": {
-        "type": "boolean"
-      }
-    }
+    ]
   },
   "firestore": {
-    "/webhookResponses/{responseId}": {
-      "schema": {
-        "$ref": "#/entities/WebhookResponse"
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "UserProfile",
+          "schema": {
+            "$ref": "#/backend/entities/UserProfile"
+          },
+          "description": "Stores user profile information. Accessible only to the user themselves. Includes fields like email, name and teamIds (which doesn't directly affect authorization).",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            }
+          ]
+        }
       },
-      "description": "Stores API responses. The responseId can be a CPF for V8, or a provider-prefixed ID for others."
-    },
-    "/users/{userId}": {
-      "schema": {
-        "$ref": "#/entities/UserProfile"
-      },
-      "description": "Stores user profiles. The userId is the same as the Firebase Auth UID."
-    },
-     "/teams/{teamId}": {
-      "schema": { "$ref": "#/entities/Team" },
-      "description": "Stores team information, including sectors and permissions."
-    },
-    "/activityLogs/{logId}": {
-        "schema": {
-            "$ref": "#/entities/ActivityLog"
-        },
-        "description": "Stores records of user activities for auditing and dashboard metrics."
-    },
-    "/batches/{batchId}": {
-        "schema": { "$ref": "#/entities/BatchJob" },
-        "description": "Stores the state and progress of a batch processing job."
-    },
-    "/cltConsents/{consentId}": {
-        "schema": { "$ref": "#/entities/CLTConsent" },
-        "description": "Stores generated CLT consent terms."
-    },
-    "/tickets/{ticketId}": {
-      "schema": { "$ref": "#/entities/Ticket" },
-      "description": "Stores support tickets created by users."
-    },
-    "/tickets/{ticketId}/messages/{messageId}": {
-      "schema": { "$ref": "#/entities/TicketMessage" },
-      "description": "Stores all messages related to a specific support ticket."
-    },
-     "/users/{userId}/notifications/{notificationId}": {
-      "schema": {
-        "$ref": "#/entities/Notification"
-      },
-      "description": "Stores notifications for a specific user."
-    }
+      {
+        "path": "/teams/{teamId}",
+        "definition": {
+          "entityName": "Team",
+          "schema": {
+            "$ref": "#/backend/entities/Team"
+          },
+          "description": "Stores team information. Includes denormalized 'members' map for authorization independence. The 'members' map contains userId: role key-value pairs.",
+          "params": [
+            {
+              "name": "teamId",
+              "description": "The unique identifier of the team."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to address the 'Missing or insufficient permissions' error and ensure secure and scalable data access for the Beleza Integrada application. The core principle is Authorization Independence, achieved through denormalization, eliminating the need for `get()` calls in security rules. This allows for atomic operations (transactions/batches) and simplifies debugging. The structure employs structural segregation to ensure all documents within a collection share the same security requirements and utilizes access modeling for consistent authorization patterns.\n\nSpecifically, user profiles are stored under `/users/{userId}`, providing path-based ownership for private user data. Teams are stored in `/teams/{teamId}`, with a membership map denormalized within each team document to manage team member roles directly. This denormalization enables security rules to validate access based on the requesting user's presence in the team's `members` map without requiring additional `get()` calls.\n\nThe data structure also takes into account the N:N relationship between UserProfile and Team. The teamIds field in the UserProfile and userProfileIds field in the Team schema reflect this relationship. While these fields do not play a direct role in authorization, they allow for efficient querying and data retrieval based on team or user membership.\n\nThis design supports secure `list` operations (QAPs) as the security rules can directly evaluate a user's membership in a team based on the denormalized `members` map within each team document. The use of dedicated collections and denormalized authorization data makes the intent clear and enhances debuggability."
   }
 }
-
-    
