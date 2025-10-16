@@ -47,6 +47,8 @@ export default function EsteiraPage() {
     const [isReprocessing, setIsReprocessing] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [_, setTick] = useState(0); // For re-rendering to update timer
+    const [isModalOpen, setIsModalOpen] = useState(false);
+
 
     const fetchBatches = useCallback(async (showLoading = true) => {
         if (!user) return;
@@ -72,7 +74,9 @@ export default function EsteiraPage() {
     useEffect(() => {
         // Interval to update the visual timer every second
         const timerInterval = setInterval(() => {
-            setTick(t => t + 1);
+            if (!isModalOpen) {
+                setTick(t => t + 1);
+            }
         }, 1000);
         
         // Interval to fetch data from the server every 10 seconds
@@ -90,7 +94,7 @@ export default function EsteiraPage() {
             clearInterval(timerInterval);
             clearInterval(dataFetchInterval);
         };
-    }, [fetchBatches]);
+    }, [fetchBatches, isModalOpen]);
     
     const handleDownloadReport = async (batch: BatchJob) => {
         if (!user) {
@@ -172,7 +176,7 @@ export default function EsteiraPage() {
 
     const BatchCard = ({ batch }: { batch: BatchJob }) => {
         return (
-             <AlertDialog>
+             <AlertDialog onOpenChange={setIsModalOpen}>
                 <Card>
                     <CardContent className="p-4 space-y-3">
                         <div className="flex justify-between items-start">
