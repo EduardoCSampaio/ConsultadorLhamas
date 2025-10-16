@@ -15,19 +15,26 @@ import { useUser } from '@/firebase';
 import Link from 'next/link';
 
 type Provider = 'v8' | 'facta' | 'c6';
+type CpfData = {
+    cpf: string;
+    nome?: string;
+    data_nascimento?: string;
+    telefone_ddd?: string;
+    telefone_numero?: string;
+}
 
 export default function CltBatchPage() {
     const { toast } = useToast();
     const { user } = useUser();
     const [file, setFile] = useState<File | null>(null);
-    const [cpfs, setCpfs] = useState<string[]>([]);
+    const [cpfsData, setCpfsData] = useState<CpfData[]>([]);
     const [selectedProviders, setSelectedProviders] = useState<Provider[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
     
     const onDrop = useCallback((acceptedFiles: File[]) => {
         if (acceptedFiles.length > 0) {
             const uploadedFile = acceptedFiles[0];
-            if (uploadedFile.type !== 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' && uploadedFile.name.split('.').pop() !== 'xlsx') {
+            if (uploadedFile.type !== 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' && !uploadedFile.name.endsWith('.xlsx')) {
                 toast({
                     variant: "destructive",
                     title: "Tipo de arquivo inválido",
@@ -38,19 +45,60 @@ export default function CltBatchPage() {
             setFile(uploadedFile);
             const reader = new FileReader();
             reader.onload = (event) => {
-                const data = new Uint8Array(event.target?.result as ArrayBuffer);
-                const workbook = XLSX.read(data, { type: 'array' });
-                const sheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[sheetName];
-                const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                const extractedCpfs = json.flat().map(String).filter(cpf => cpf && /^\d{11}$/.test(cpf.trim()));
-                setCpfs(extractedCpfs);
-                if (extractedCpfs.length === 0) {
-                    toast({
+                try {
+                    const data = new Uint8Array(event.target?.result as ArrayBuffer);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    const header = (jsonData[0] as string[]).map(h => h.toLowerCase().trim());
+                    const cpfIndex = header.indexOf('cpf');
+                    const nomeIndex = header.indexOf('nome');
+                    const dataNascimentoIndex = header.indexOf('data_nascimento');
+                    const dddIndex = header.indexOf('telefone_ddd');
+                    const numeroIndex = header.indexOf('telefone_numero');
+
+                    if (cpfIndex === -1) {
+                         toast({
+                            variant: "destructive",
+                            title: "Coluna 'cpf' não encontrada",
+                            description: "A planilha deve conter uma coluna chamada 'cpf'.",
+                        });
+                        return;
+                    }
+
+                    const extractedData: CpfData[] = jsonData.slice(1).map(row => {
+                        const cpf = String(row[cpfIndex]).trim().replace(/\D/g, '');
+                        if (cpf && /^\d{11}$/.test(cpf)) {
+                            return {
+                                cpf: cpf,
+                                nome: nomeIndex > -1 ? String(row[nomeIndex]) : undefined,
+                                data_nascimento: dataNascimentoIndex > -1 ? String(row[dataNascimentoIndex]) : undefined,
+                                telefone_ddd: dddIndex > -1 ? String(row[dddIndex]) : undefined,
+                                telefone_numero: numeroIndex > -1 ? String(row[numeroIndex]) : undefined,
+                            }
+                        }
+                        return null;
+                    }).filter((item): item is CpfData => item !== null);
+                    
+
+                    setCpfsData(extractedData);
+
+                    if (extractedData.length === 0) {
+                        toast({
+                            variant: "destructive",
+                            title: "Nenhum CPF válido encontrado",
+                            description: "A planilha não contém CPFs válidos na coluna 'cpf'.",
+                        });
+                    }
+                } catch(e) {
+                     toast({
                         variant: "destructive",
-                        title: "Nenhum CPF válido encontrado",
-                        description: "A planilha não contém CPFs válidos na primeira coluna.",
+                        title: "Erro ao ler planilha",
+                        description: "Ocorreu um erro ao processar o arquivo. Verifique o formato.",
                     });
+                     console.error(e);
                 }
             };
             reader.readAsArrayBuffer(uploadedFile);
@@ -70,7 +118,7 @@ export default function CltBatchPage() {
     };
 
     const handleProcessBatch = async () => {
-        if (!file || cpfs.length === 0 || selectedProviders.length === 0 || !user) {
+        if (!file || cpfsData.length === 0 || selectedProviders.length === 0 || !user) {
             toast({
                 variant: "destructive",
                 title: "Faltam informações",
@@ -82,7 +130,7 @@ export default function CltBatchPage() {
         setIsProcessing(true);
         for (const provider of selectedProviders) {
             const result = await processarLoteClt({
-                cpfs,
+                cpfsData,
                 provider,
                 userId: user.uid,
                 userEmail: user.email!,
@@ -92,7 +140,7 @@ export default function CltBatchPage() {
             if (result.status === 'success' && result.batch) {
                 toast({
                     title: `Lote CLT para ${result.batch.provider.toUpperCase()} iniciado`,
-                    description: `${cpfs.length} CPFs foram enviados para a esteira.`,
+                    description: `${cpfsData.length} CPFs foram enviados para a esteira.`,
                 });
             } else {
                 toast({
@@ -103,7 +151,7 @@ export default function CltBatchPage() {
             }
         }
         setFile(null);
-        setCpfs([]);
+        setCpfsData([]);
         setSelectedProviders([]);
         setIsProcessing(false);
          toast({
@@ -129,6 +177,9 @@ export default function CltBatchPage() {
             <Card>
                 <CardHeader>
                     <CardTitle>1. Enviar Planilha</CardTitle>
+                     <CardDescription>
+                        A planilha deve ter o formato .xlsx e conter uma coluna chamada "cpf". Para o provedor C6, inclua também as colunas "nome", "data_nascimento", "telefone_ddd" e "telefone_numero".
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div {...getRootProps()} className={`flex flex-col items-center justify-center p-10 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${isDragActive ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}>
@@ -137,7 +188,7 @@ export default function CltBatchPage() {
                         {file ? (
                             <div className='text-center'>
                                 <p className="font-semibold">{file.name}</p>
-                                <p className="text-sm text-muted-foreground">{cpfs.length} CPFs válidos encontrados.</p>
+                                <p className="text-sm text-muted-foreground">{cpfsData.length} CPFs válidos encontrados.</p>
                             </div>
                         ) : (
                             <div className='text-center'>
@@ -172,10 +223,11 @@ export default function CltBatchPage() {
                 </CardContent>
             </Card>
 
-            <Button onClick={handleProcessBatch} disabled={isProcessing || !file || cpfs.length === 0 || selectedProviders.length === 0}>
+            <Button onClick={handleProcessBatch} disabled={isProcessing || !file || cpfsData.length === 0 || selectedProviders.length === 0}>
                 {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <File className="mr-2 h-4 w-4" />}
                 Processar Lote
             </Button>
         </div>
     );
 }
+    

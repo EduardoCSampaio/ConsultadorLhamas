@@ -274,60 +274,62 @@ export async function consultarOfertasCLTC6(input: z.infer<typeof getOffersSchem
 }
 
 
-export async function verificarStatusAutorizacaoC6(input: z.infer<typeof getOffersSchema>): Promise<C6StatusResult> {
-    const validation = getOffersSchema.safeParse(input);
-    if (!validation.success) {
-        return { success: false, message: 'CPF inválido.' };
-    }
-
-    const { userId, cpf } = validation.data;
-
-    const { credentials, error: credError } = await getC6UserCredentials(userId);
-    if (credError || !credentials) {
-        return { success: false, message: credError || "Credenciais não encontradas." };
-    }
-
-    const { token, error: tokenError } = await getC6AuthToken(credentials.c6_username, credentials.c6_password);
-    if (tokenError || !token) {
-        return { success: false, message: tokenError || "Não foi possível obter o token do C6." };
-    }
-
-    await logActivity({ userId, action: 'Verifica Status Autorização C6', provider: 'c6', documentNumber: cpf });
-
-    const apiUrl = `https://marketplace-proposal-service-api-p.c6bank.info/marketplace/authorization/status`;
-
-    try {
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-                'Accept': 'application/vnd.c6bank.authorization_status_v1+json',
-                'Content-Type': 'application/json',
-                'Authorization': `${token}`
-            },
-            body: JSON.stringify({ cpf: cpf.replace(/\D/g, '') })
-        });
-        
-        const textResponse = await response.text();
-        if (!response.ok) {
-            const errorMessage = textResponse.startsWith('{') ? JSON.parse(textResponse).message : textResponse;
-            console.error('[C6 API Error - Check Status]', errorMessage);
-            return { success: false, message: `Erro da API do C6: ${errorMessage}` };
+export async function verificarStatusAutorizacaoC6(input: Omit<z.infer<typeof getOffersSchema>, 'userId'> & { userId?: string }): Promise<C6StatusResult> {
+    const { cpf, userId } = input;
+    if (!cpf) return { success: false, message: 'CPF inválido.' };
+    
+    // Only fetch credentials and token if a userId is provided for logging/auth context
+    if(userId) {
+        const { credentials, error: credError } = await getC6UserCredentials(userId);
+        if (credError || !credentials) {
+            return { success: false, message: credError || "Credenciais não encontradas." };
         }
+
+        const { token, error: tokenError } = await getC6AuthToken(credentials.c6_username, credentials.c6_password);
+        if (tokenError || !token) {
+            return { success: false, message: tokenError || "Não foi possível obter o token do C6." };
+        }
+
+        await logActivity({ userId, action: 'Verifica Status Autorização C6', provider: 'c6', documentNumber: cpf });
         
-        const data = JSON.parse(textResponse);
+        const apiUrl = `https://marketplace-proposal-service-api-p.c6bank.info/marketplace/authorization/status`;
 
-        return { 
-            success: true, 
-            message: 'Status verificado com sucesso.',
-            data: data 
-        };
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/vnd.c6bank.authorization_status_v1+json',
+                    'Content-Type': 'application/json',
+                    'Authorization': `${token}`
+                },
+                body: JSON.stringify({ cpf: cpf.replace(/\D/g, '') })
+            });
+            
+            const textResponse = await response.text();
+            if (!response.ok) {
+                const errorMessage = textResponse.startsWith('{') ? JSON.parse(textResponse).message : textResponse;
+                console.error('[C6 API Error - Check Status]', errorMessage);
+                return { success: false, message: `Erro da API do C6: ${errorMessage}` };
+            }
+            
+            const data = JSON.parse(textResponse);
 
-    } catch (error) {
-        const message = error instanceof Error ? error.message : "Erro de comunicação ao verificar o status no C6.";
-        console.error('[C6 API Error - Check Status]', message);
-        return { success: false, message };
+            return { 
+                success: true, 
+                message: 'Status verificado com sucesso.',
+                data: data 
+            };
+
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Erro de comunicação ao verificar o status no C6.";
+            console.error('[C6 API Error - Check Status]', message);
+            return { success: false, message };
+        }
     }
+    // Fallback for calls without userId, although it might be better to enforce userId
+    return { success: false, message: 'UserId é necessário para esta operação no momento.' };
 }
     
 
+    
     

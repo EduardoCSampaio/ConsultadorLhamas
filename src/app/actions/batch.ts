@@ -4,6 +4,7 @@
 import { z } from 'zod';
 import { consultarSaldoFgts as consultarSaldoV8, getAuthToken as getV8AuthToken } from './fgts';
 import { consultarSaldoFgtsFacta, getFactaAuthToken } from './facta';
+import { consultarLinkAutorizacaoC6, verificarStatusAutorizacaoC6 } from './c6';
 import * as XLSX from 'xlsx';
 import { firestore } from '@/firebase/server-init';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
@@ -22,8 +23,17 @@ const processActionSchema = z.object({
   v8Provider: z.enum(['qi', 'cartos', 'bms']).optional(),
 });
 
+const cpfDataSchema = z.object({
+    cpf: z.string(),
+    nome: z.string().optional(),
+    data_nascimento: z.string().optional(),
+    telefone_ddd: z.string().optional(),
+    telefone_numero: z.string().optional(),
+});
+
+
 const processCltActionSchema = z.object({
-  cpfs: z.array(z.string()),
+  cpfsData: z.array(cpfDataSchema),
   provider: z.enum(["v8", "facta", "c6"]),
   userId: z.string(),
   userEmail: z.string(),
@@ -58,7 +68,7 @@ export type BatchJob = {
     type: 'fgts' | 'clt';
     provider: string; // 'V8DIGITAL' or 'facta' or 'c6'
     v8Provider?: V8Provider; // 'qi', 'cartos', 'bms' if provider is 'V8DIGITAL'
-    status: 'processing' | 'completed' | 'error' | 'pending';
+    status: 'processing' | 'completed' | 'error';
     totalCpfs: number;
     processedCpfs: number;
     cpfs: string[];
@@ -67,6 +77,7 @@ export type BatchJob = {
     message?: string;
     userId: string;
     userEmail: string;
+    results?: Record<string, { status: string; link?: string; message: string }>;
 };
 
 
@@ -294,7 +305,7 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
       fileName: fileName,
       type: 'fgts',
       provider: displayProvider,
-      status: 'pending',
+      status: 'processing',
       totalCpfs: cpfs.length,
       processedCpfs: 0,
       cpfs: cpfs,
@@ -345,6 +356,82 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
 }
 
 
+async function processC6BatchInBackground(batchId: string) {
+    console.log(`[Batch C6 ${batchId}] Starting C6 background processing...`);
+    const batchRef = firestore.collection('batches').doc(batchId);
+
+    try {
+        const batchDoc = await batchRef.get();
+        if (!batchDoc.exists) throw new Error(`Lote ${batchId} não encontrado.`);
+        
+        const batchData = batchDoc.data() as BatchJob & { cpfsData: any[] };
+        await batchRef.update({ status: 'processing', message: 'Verificando status de autorização...' });
+
+        const batchResults: Record<string, { status: string; link?: string; message: string }> = {};
+
+        for (const [index, cpfData] of batchData.cpfsData.entries()) {
+            const statusResult = await verificarStatusAutorizacaoC6({ cpf: cpfData.cpf, userId: batchData.userId });
+
+            if (statusResult.success && statusResult.data?.status === 'NAO_AUTORIZADO') {
+                if (!cpfData.nome || !cpfData.data_nascimento || !cpfData.telefone_ddd || !cpfData.telefone_numero) {
+                     batchResults[cpfData.cpf] = { status: 'ERRO_DADOS', message: 'Dados insuficientes para gerar link.' };
+                     continue;
+                }
+                const linkResult = await consultarLinkAutorizacaoC6({
+                    cpf: cpfData.cpf,
+                    nome: cpfData.nome,
+                    data_nascimento: cpfData.data_nascimento,
+                    telefone: {
+                        codigo_area: cpfData.telefone_ddd,
+                        numero: cpfData.telefone_numero
+                    },
+                    userId: batchData.userId,
+                });
+                if (linkResult.success && linkResult.data) {
+                    batchResults[cpfData.cpf] = { status: 'NAO_AUTORIZADO', link: linkResult.data.link, message: 'Link de autorização gerado.' };
+                } else {
+                    batchResults[cpfData.cpf] = { status: 'ERRO_LINK', message: linkResult.message };
+                }
+            } else if (statusResult.success) {
+                 batchResults[cpfData.cpf] = { status: statusResult.data!.status, message: statusResult.data!.observacao };
+            } else {
+                 batchResults[cpfData.cpf] = { status: 'ERRO_STATUS', message: statusResult.message };
+            }
+             await batchRef.update({ processedCpfs: index + 1 });
+        }
+        
+        await batchRef.update({
+            status: 'completed',
+            message: 'Processamento de verificação concluído.',
+            completedAt: FieldValue.serverTimestamp(),
+            results: batchResults,
+        });
+
+        await createNotification({
+            userId: batchData.userId,
+            title: `Lote C6 "${batchData.fileName}" concluído`,
+            message: `A verificação de autorizações foi finalizada.`,
+            link: '/esteira'
+        });
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "An unknown error occurred.";
+        console.error(`[Batch C6 ${batchId}] FATAL ERROR:`, error);
+        await batchRef.update({ status: 'error', message: message, completedAt: FieldValue.serverTimestamp() });
+        const batchDoc = await batchRef.get();
+        if(batchDoc.exists) {
+            const batchData = batchDoc.data()!;
+            await createNotification({
+                userId: batchData.userId,
+                title: `Erro no lote C6 "${batchData.fileName}"`,
+                message: `Ocorreu um erro fatal durante o processamento.`,
+                link: '/esteira'
+            });
+        }
+    }
+}
+
+
 export async function processarLoteClt(input: z.infer<typeof processCltActionSchema>): Promise<ProcessActionResult> {
   const validation = processCltActionSchema.safeParse(input);
 
@@ -355,18 +442,19 @@ export async function processarLoteClt(input: z.infer<typeof processCltActionSch
     };
   }
 
-  const { cpfs, provider, userId, userEmail, fileName } = validation.data;
+  const { cpfsData, provider, userId, userEmail, fileName } = validation.data;
+  const cpfs = cpfsData.map(d => d.cpf);
   
-  const displayProvider = provider === 'v8' ? 'V8' : provider.toUpperCase();
+  const displayProvider = provider.toUpperCase();
   
   const batchId = `batch-clt-${displayProvider}-${Date.now()}-${userId.substring(0, 5)}`;
   const batchRef = firestore.collection('batches').doc(batchId);
   
-  const batchData: Omit<BatchJob, 'id' | 'createdAt'> & { createdAt: FieldValue } = {
+  const batchData: Omit<BatchJob, 'id' | 'createdAt'> & { createdAt: FieldValue; cpfsData?: any[] } = {
       fileName: fileName,
       type: 'clt',
       provider: displayProvider,
-      status: 'pending',
+      status: 'processing',
       totalCpfs: cpfs.length,
       processedCpfs: 0,
       cpfs: cpfs,
@@ -374,6 +462,10 @@ export async function processarLoteClt(input: z.infer<typeof processCltActionSch
       userId: userId,
       userEmail: userEmail,
   };
+
+  if (provider === 'c6') {
+    batchData.cpfsData = cpfsData;
+  }
   
   try {
       await batchRef.set(batchData);
@@ -384,12 +476,16 @@ export async function processarLoteClt(input: z.infer<typeof processCltActionSch
           provider: displayProvider,
           details: `Arquivo: ${fileName} (${cpfs.length} CPFs)`
       });
-      
-       await batchRef.update({
-        status: 'error',
-        message: 'Processamento de lote CLT ainda não implementado para este provedor.',
-        completedAt: FieldValue.serverTimestamp(),
-      });
+
+      if (provider === 'c6') {
+          processC6BatchInBackground(batchId); // Fire and forget
+      } else {
+         await batchRef.update({
+            status: 'error',
+            message: 'Processamento de lote CLT ainda não implementado para este provedor.',
+            completedAt: FieldValue.serverTimestamp(),
+        });
+      }
 
 
   } catch(error) {
@@ -399,7 +495,7 @@ export async function processarLoteClt(input: z.infer<typeof processCltActionSch
   }
   
   const serializableBatch: BatchJob = {
-    ...batchData,
+    ...(batchData as any),
     id: batchId,
     createdAt: new Date().toISOString(),
   }
@@ -685,3 +781,5 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         message: 'Relatório gerado com sucesso.',
     };
 }
+
+    
