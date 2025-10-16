@@ -661,7 +661,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
     
     const formattedDate = new Date(createdAt).toLocaleDateString('pt-BR').replace(/\//g, '-');
     const formattedTime = new Date(createdAt).toTimeString().split(' ')[0].replace(/:/g, '-');
-    const fileName = `WORKBANK${displayProvider.toUpperCase()}_${formattedDate}_${formattedTime}.xlsx`;
+    const fileName = `${displayProvider.toUpperCase()}_${formattedDate}_${formattedTime}.xlsx`;
 
 
     await logActivity({
