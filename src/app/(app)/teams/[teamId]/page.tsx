@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -12,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useUser, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
 import type { UserProfile, UserPermissions } from '@/app/actions/users';
 import { updateUserStatus, updateUserTeamAndSector } from '@/app/actions/users';
-import { updateTeamSectors, getTeamMembers } from '@/app/actions/teams';
+import { updateTeamSectors, getTeamMembers, getTeamAndManager } from '@/app/actions/teams';
 import { Copy, Users, Check, X, UserX, UserCheck, Pencil, Trash2, Plus, Save, Loader2, Settings } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Team } from '@/app/actions/teams';
@@ -103,18 +102,31 @@ export default function TeamDetailsPage() {
     
     const { data: currentUserProfile, isLoading: isCurrentUserProfileLoading } = useDoc<UserProfile>(currentUserProfileRef);
 
-    const teamRef = useMemoFirebase(() => {
-        if (!firestore || !teamId) return null;
-        return doc(firestore, 'teams', teamId);
-    }, [firestore, teamId]);
+    const isAllowedToView = useMemo(() => {
+        if (!currentUserProfile) return false;
+        if (currentUserProfile.role === 'super_admin') return true;
+        if (currentUserProfile.role === 'manager' && currentUserProfile.teamId === teamId) return true;
+        return false;
+    }, [currentUserProfile, teamId]);
 
-    const { data: teamData, isLoading: isTeamLoading } = useDoc<Team>(teamRef);
+
+    const teamRef = useMemoFirebase(() => {
+        // Only create the ref if the user is allowed to view
+        if (!firestore || !teamId || !isAllowedToView) return null;
+        return doc(firestore, 'teams', teamId);
+    }, [firestore, teamId, isAllowedToView]);
+
+    const { data: teamData, isLoading: isTeamLoading, error: teamError } = useDoc<Team>(teamRef);
 
      useEffect(() => {
         if (teamData) {
             setTeam(teamData);
         }
-    }, [teamData]);
+        if (teamError) {
+             toast({ variant: 'destructive', title: 'Erro ao carregar equipe', description: teamError.message });
+             router.push('/dashboard');
+        }
+    }, [teamData, teamError, toast, router]);
 
     const fetchTeamData = useCallback(async (id: string) => {
         if (!currentUser) return;
@@ -146,18 +158,17 @@ export default function TeamDetailsPage() {
         }
         
         // Now check permissions
-        if (currentUserProfile.role !== 'super_admin' && currentUserProfile.teamId !== teamId) {
+        if (isAllowedToView) {
+            if (teamId) {
+                fetchTeamData(teamId);
+            } else {
+                setIsLoading(false);
+            }
+        } else {
             toast({ variant: 'destructive', title: 'Acesso Negado', description: 'Você não tem permissão para ver esta equipe.' });
             router.push('/dashboard');
-            return;
         }
-
-        if (teamId) {
-            fetchTeamData(teamId);
-        } else {
-            setIsLoading(false);
-        }
-    }, [teamId, currentUser, currentUserProfile, isCurrentUserAuthLoading, isCurrentUserProfileLoading, fetchTeamData, router, toast]);
+    }, [teamId, currentUserProfile, isCurrentUserAuthLoading, isCurrentUserProfileLoading, fetchTeamData, router, toast, isAllowedToView]);
 
 
     const handleStatusChange = async (uid: string, status: UserStatus) => {

@@ -32,6 +32,7 @@ const createTeamSchema = z.object({
 
 const getTeamAndManagerSchema = z.object({
     teamId: z.string().min(1),
+    userId: z.string().min(1),
 });
 
 
@@ -161,9 +162,7 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
         const currentUserDoc = await firestore.collection('users').doc(currentUserId).get();
         const currentUserData = currentUserDoc.data();
         
-        // The permission check for viewing members is now simplified.
-        // It's handled on the client-side before calling this function,
-        // but we keep a server-side check as a safeguard.
+        // Server-side permission check as a safeguard
         if (currentUserData?.role !== 'super_admin' && currentUserData?.teamId !== teamId) {
             return { success: false, error: "Você não tem permissão para visualizar os membros desta equipe." };
         }
@@ -200,29 +199,33 @@ export async function getTeamMembers(input: z.infer<typeof getTeamMembersSchema>
 export async function getTeamAndManager(input: z.infer<typeof getTeamAndManagerSchema>): Promise<GetTeamAndManagerResult> {
     const validation = getTeamAndManagerSchema.safeParse(input);
     if (!validation.success) {
-        return { success: false, error: "ID do time inválido." };
+        return { success: false, error: "Dados de entrada inválidos." };
     }
-    const { teamId } = validation.data;
+    const { teamId, userId } = validation.data;
 
     try {
-        const teamDoc = await firestore.collection('teams').doc(teamId).get();
+        const userDoc = await firestore.collection('users').doc(userId).get();
+        if (!userDoc.exists) {
+            return { success: false, error: "Usuário atual não encontrado." };
+        }
+        const currentUser = userDoc.data() as UserProfile;
         
+        // Permission check: user must be a super_admin or the manager of the requested team.
+        if (currentUser.role !== 'super_admin' && currentUser.teamId !== teamId) {
+            return { success: false, error: "Acesso negado para visualizar esta equipe." };
+        }
+
+        const teamDoc = await firestore.collection('teams').doc(teamId).get();
         if (!teamDoc.exists) {
             return { success: false, error: "Time não encontrado." };
         }
-        const teamData = teamDoc.data();
-        if (!teamData) {
-            return { success: false, error: "Dados do time não puderam ser lidos." };
-        }
+        const teamData = teamDoc.data()!;
 
         const managerDoc = await firestore.collection('users').doc(teamData.managerId).get();
         if (!managerDoc.exists) {
              return { success: false, error: "Dados do gerente do time não encontrados." };
         }
-        const managerData = managerDoc.data();
-         if (!managerData) {
-            return { success: false, error: "Dados do gerente não puderam ser lidos." };
-        }
+        const managerData = managerDoc.data()!;
         
         const serializableTeam: Team = {
             id: teamDoc.id,
