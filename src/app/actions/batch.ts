@@ -361,46 +361,51 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
 async function processC6BatchInBackground(batchId: string) {
     console.log(`[Batch C6 ${batchId}] Starting C6 background processing...`);
     const batchRef = firestore.collection('batches').doc(batchId);
+    let batchData: (BatchJob & { cpfsData: any[] }) | null = null;
 
     try {
         const batchDoc = await batchRef.get();
         if (!batchDoc.exists) throw new Error(`Lote ${batchId} não encontrado.`);
         
-        const batchData = batchDoc.data() as BatchJob & { cpfsData: any[] };
+        batchData = batchDoc.data() as BatchJob & { cpfsData: any[] };
         await batchRef.update({ status: 'processing', message: 'Verificando status de autorização...' });
 
-        const batchResults: Record<string, { status: string; link?: string; message: string }> = {};
-
-        for (const [index, cpfData] of batchData.cpfsData.entries()) {
-            const statusResult = await verificarStatusAutorizacaoC6({ cpf: cpfData.cpf, userId: batchData.userId });
-
-            if (statusResult.success && statusResult.data?.status === 'NAO_AUTORIZADO') {
-                if (!cpfData.nome || !cpfData.data_nascimento || !cpfData.telefone_ddd || !cpfData.telefone_numero) {
-                     batchResults[cpfData.cpf] = { status: 'ERRO_DADOS', message: 'Dados insuficientes para gerar link.' };
-                     continue;
-                }
-                const linkResult = await consultarLinkAutorizacaoC6({
-                    cpf: cpfData.cpf,
-                    nome: cpfData.nome,
-                    data_nascimento: cpfData.data_nascimento,
-                    telefone: {
-                        codigo_area: cpfData.telefone_ddd,
-                        numero: cpfData.telefone_numero
-                    },
-                    userId: batchData.userId,
-                });
-                if (linkResult.success && linkResult.data) {
-                    batchResults[cpfData.cpf] = { status: 'NAO_AUTORIZADO', link: linkResult.data.link, message: 'Link de autorização gerado.' };
+        const processCpf = async (cpfData: any): Promise<[string, { status: string; link?: string; message: string }]> => {
+            try {
+                const statusResult = await verificarStatusAutorizacaoC6({ cpf: cpfData.cpf, userId: batchData!.userId });
+                
+                if (statusResult.success && statusResult.data?.status === 'NAO_AUTORIZADO') {
+                    if (!cpfData.nome || !cpfData.data_nascimento || !cpfData.telefone_ddd || !cpfData.telefone_numero) {
+                         return [cpfData.cpf, { status: 'ERRO_DADOS', message: 'Dados insuficientes para gerar link.' }];
+                    }
+                    const linkResult = await consultarLinkAutorizacaoC6({
+                        cpf: cpfData.cpf,
+                        nome: cpfData.nome,
+                        data_nascimento: cpfData.data_nascimento,
+                        telefone: {
+                            codigo_area: cpfData.telefone_ddd,
+                            numero: cpfData.telefone_numero
+                        },
+                        userId: batchData!.userId,
+                    });
+                    if (linkResult.success && linkResult.data) {
+                        return [cpfData.cpf, { status: 'NAO_AUTORIZADO', link: linkResult.data.link, message: 'Link de autorização gerado.' }];
+                    } else {
+                        return [cpfData.cpf, { status: 'ERRO_LINK', message: linkResult.message }];
+                    }
+                } else if (statusResult.success) {
+                     return [cpfData.cpf, { status: statusResult.data!.status, message: statusResult.data!.observacao || '' }];
                 } else {
-                    batchResults[cpfData.cpf] = { status: 'ERRO_LINK', message: linkResult.message };
+                     return [cpfData.cpf, { status: 'ERRO_STATUS', message: statusResult.message }];
                 }
-            } else if (statusResult.success) {
-                 batchResults[cpfData.cpf] = { status: statusResult.data!.status, message: statusResult.data!.observacao || '' };
-            } else {
-                 batchResults[cpfData.cpf] = { status: 'ERRO_STATUS', message: statusResult.message };
+            } finally {
+                // Increment progress after each CPF is processed, regardless of outcome
+                await batchRef.update({ processedCpfs: FieldValue.increment(1) });
             }
-             await batchRef.update({ processedCpfs: index + 1 });
-        }
+        };
+
+        const resultsArray = await Promise.all(batchData.cpfsData.map(processCpf));
+        const batchResults = Object.fromEntries(resultsArray);
         
         await batchRef.update({
             status: 'completed',
@@ -420,9 +425,7 @@ async function processC6BatchInBackground(batchId: string) {
         const message = error instanceof Error ? error.message : "An unknown error occurred.";
         console.error(`[Batch C6 ${batchId}] FATAL ERROR:`, error);
         await batchRef.update({ status: 'error', message: message, completedAt: FieldValue.serverTimestamp() });
-        const batchDoc = await batchRef.get();
-        if(batchDoc.exists) {
-            const batchData = batchDoc.data()!;
+        if(batchData) {
             await createNotification({
                 userId: batchData.userId,
                 title: `Erro no lote C6 "${batchData.fileName}"`,
