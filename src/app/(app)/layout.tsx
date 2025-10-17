@@ -49,7 +49,6 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from '@/lib/utils';
 import type { UserProfile } from '@/app/actions/users';
-import { NotificationBell } from '@/components/notification-bell';
 
 const allBaseMenuItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard", permission: 'isLoggedIn' as const },
@@ -351,7 +350,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex items-center gap-2">
             <React.Suspense fallback={<Skeleton className="h-8 w-8 rounded-full" />}>
-              <NotificationBell userId={user.uid} />
+              
             </React.Suspense>
             <ThemeToggle />
           </div>
@@ -361,5 +360,3 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     </SidebarProvider>
   );
 }
-
-    

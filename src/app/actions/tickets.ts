@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import { firestore } from '@/firebase/server-init';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
-import { createNotification, createNotificationsForAdmins } from './notifications';
+
 
 const ticketStatusEnum = z.enum(["aberto", "em_atendimento", "em_desenvolvimento", "testando", "liberado", "resolvido"]);
 
@@ -155,12 +155,6 @@ export async function createTicket(input: z.infer<typeof createTicketSchema>): P
         batch.set(messageRef, newMessageData);
         await batch.commit();
 
-        await createNotificationsForAdmins({
-            title: `Novo Chamado: ${ticketNumber}`,
-            message: `De: ${input.userEmail} - "${input.title}"`,
-            link: `/chamados/${ticketRef.id}`
-        });
-
         return {
             success: true,
             message: 'Chamado criado com sucesso.',
@@ -304,20 +298,9 @@ export async function addMessageToTicket(input: z.infer<typeof addMessageSchema>
 
         if (isAdmin) {
             ticketUpdates.unreadByUser = FieldValue.increment(1);
-            await createNotification({
-                userId: ticketData.userId,
-                title: `Nova resposta no chamado #${ticketData.ticketNumber}`,
-                message: `Sua solicitação "${ticketData.title}" foi respondida.`,
-                link: `/chamados/${ticketId}`
-            });
 
         } else {
             ticketUpdates.unreadByAdmin = FieldValue.increment(1);
-            await createNotificationsForAdmins({
-                title: `Nova Mensagem no Chamado #${ticketData.ticketNumber}`,
-                message: `De: ${userEmail} - "${content.substring(0, 50)}..."`,
-                link: `/chamados/${ticketId}`
-            });
         }
 
         

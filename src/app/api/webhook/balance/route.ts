@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { firestore } from '@/firebase/server-init';
 import { FieldValue } from 'firebase-admin/firestore';
-import { createNotification } from '@/app/actions/notifications';
+
 
 /**
  * Handles POST requests from the V8 API balance webhook.
@@ -98,15 +98,6 @@ export async function POST(request: NextRequest) {
                     updates.message = 'Processamento concluído via webhooks.';
                     updates.completedAt = FieldValue.serverTimestamp();
                     
-                    // Create notification for user when batch is completed
-                    if (batchData.userId) {
-                         await createNotification({
-                            userId: batchData.userId,
-                            title: `Lote "${batchData.fileName}" concluído`,
-                            message: `O processamento do lote enviado para V8 foi finalizado.`,
-                            link: '/esteira'
-                        });
-                    }
                 }
 
                 transaction.update(batchRef, updates);

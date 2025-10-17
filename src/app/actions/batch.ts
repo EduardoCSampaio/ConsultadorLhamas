@@ -9,7 +9,7 @@ import * as XLSX from 'xlsx';
 import { firestore } from '@/firebase/server-init';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { type ApiCredentials, logActivity } from './users';
-import { createNotification } from './notifications';
+
 
 type Provider = "v8" | "facta" | "c6";
 type V8Provider = 'qi' | 'cartos' | 'bms';
@@ -219,12 +219,6 @@ async function processFactaBatchInBackground(batchId: string) {
 
             await batchRef.update({ status: finalStatus, processedCpfs: batchData.totalCpfs, message: finalMessage, completedAt: FieldValue.serverTimestamp() });
             
-            await createNotification({
-                userId: batchData.userId,
-                title: `Lote "${batchData.fileName}" finalizado`,
-                message: `O processamento do seu lote foi concluído com status: ${finalStatus}.`,
-                link: '/esteira'
-            });
             console.log(`[Batch ${batchId}] All CPFs processed. Batch completed.`);
             return;
         }
@@ -262,12 +256,6 @@ async function processFactaBatchInBackground(batchId: string) {
         } else {
              const finalStatus = batchData.status === 'error' ? 'error' : 'completed';
              await batchRef.update({ status: finalStatus, message: "Todos os CPFs foram processados.", completedAt: FieldValue.serverTimestamp() });
-             await createNotification({
-                userId: batchData.userId,
-                title: `Lote "${batchData.fileName}" concluído`,
-                message: `O processamento foi finalizado.`,
-                link: '/esteira'
-             });
             console.log(`[Batch ${batchId}] Final chunk processed. Batch completed.`);
         }
 
@@ -275,14 +263,6 @@ async function processFactaBatchInBackground(batchId: string) {
         const message = error instanceof Error ? error.message : "An unknown error occurred.";
         console.error(`[Batch ${batchId}] FACTA BATCH FATAL ERROR:`, error);
         await batchRef.update({ status: 'error', message: message, completedAt: FieldValue.serverTimestamp() });
-         if (batchData!) {
-            await createNotification({
-                userId: batchData.userId,
-                title: `Erro no lote "${batchData.fileName}"`,
-                message: `Ocorreu um erro fatal durante o processamento.`,
-                link: '/esteira'
-            });
-        }
     }
 }
 
@@ -414,25 +394,10 @@ async function processC6BatchInBackground(batchId: string) {
             results: batchResults,
         });
 
-        await createNotification({
-            userId: batchData.userId,
-            title: `Lote C6 "${batchData.fileName}" concluído`,
-            message: `A verificação de autorizações foi finalizada.`,
-            link: '/esteira'
-        });
-
     } catch (error) {
         const message = error instanceof Error ? error.message : "An unknown error occurred.";
         console.error(`[Batch C6 ${batchId}] FATAL ERROR:`, error);
         await batchRef.update({ status: 'error', message: message, completedAt: FieldValue.serverTimestamp() });
-        if(batchData) {
-            await createNotification({
-                userId: batchData.userId,
-                title: `Erro no lote C6 "${batchData.fileName}"`,
-                message: `Ocorreu um erro fatal durante o processamento.`,
-                link: '/esteira'
-            });
-        }
     }
 }
 
@@ -560,14 +525,6 @@ async function processV8BatchInBackground(batchId: string) {
         const message = error instanceof Error ? error.message : "An unknown error occurred.";
         console.error(`[Batch ${batchId}] V8 BATCH FATAL ERROR:`, error);
         await batchRef.update({ status: 'error', message: message, completedAt: FieldValue.serverTimestamp() });
-        if (batchData!) {
-            await createNotification({
-                userId: batchData.userId,
-                title: `Erro no lote "${batchData.fileName}"`,
-                message: `Ocorreu um erro fatal durante o processamento.`,
-                link: '/esteira'
-            });
-        }
     }
 }
 
