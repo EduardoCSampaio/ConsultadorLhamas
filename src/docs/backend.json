@@ -142,7 +142,7 @@
     },
      "Team": {
       "title": "Team",
-      "description": "Represents a team or organization within the platform, managed by a 'manager'.",
+      "description": "Represents a team or organization within the platform, managed by a 'manager'. This entity defines the structure of a team.",
       "type": "object",
       "properties": {
         "id": { "type": "string", "description": "Unique ID for the team." },
@@ -476,58 +476,56 @@
     "providers": [
       "password",
       "anonymous"
-    ],
-    "customClaims": {
-       "super_admin": {
-        "type": "boolean"
-      }
-    }
+    ]
   },
   "firestore": {
-    "/webhookResponses/{responseId}": {
-      "schema": {
-        "$ref": "#/entities/WebhookResponse"
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "UserProfile",
+          "schema": {
+            "$ref": "#/backend/entities/UserProfile"
+          },
+          "description": "Stores user profile information. Accessible only to the user themselves. Includes fields like email, name and teamIds (which doesn't directly affect authorization).",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            }
+          ]
+        }
       },
-      "description": "Stores API responses. The responseId can be a CPF for V8, or a provider-prefixed ID for others."
-    },
-    "/users/{userId}": {
-      "schema": {
-        "$ref": "#/entities/UserProfile"
+      {
+        "path": "/teams/{teamId}",
+        "definition": {
+          "entityName": "Team",
+          "schema": {
+            "$ref": "#/backend/entities/Team"
+          },
+          "description": "Stores team information. Includes denormalized 'members' map for authorization independence. The 'members' map contains userId: role key-value pairs.",
+          "params": [
+            {
+              "name": "teamId",
+              "description": "The unique identifier of the team."
+            }
+          ]
+        }
       },
-      "description": "Stores user profiles. The userId is the same as the Firebase Auth UID."
-    },
-     "/teams/{teamId}": {
-      "schema": { "$ref": "#/entities/Team" },
-      "description": "Stores team information, including sectors and permissions."
-    },
-    "/activityLogs/{logId}": {
-        "schema": {
-            "$ref": "#/entities/ActivityLog"
-        },
-        "description": "Stores records of user activities for auditing and dashboard metrics."
-    },
-    "/batches/{batchId}": {
-        "schema": { "$ref": "#/entities/BatchJob" },
-        "description": "Stores the state and progress of a batch processing job."
-    },
-    "/cltConsents/{consentId}": {
-        "schema": { "$ref": "#/entities/CLTConsent" },
-        "description": "Stores generated CLT consent terms."
-    },
-    "/tickets/{ticketId}": {
-      "schema": { "$ref": "#/entities/Ticket" },
-      "description": "Stores support tickets created by users."
-    },
-    "/tickets/{ticketId}/messages/{messageId}": {
-      "schema": { "$ref": "#/entities/TicketMessage" },
-      "description": "Stores all messages related to a specific support ticket."
-    },
-     "/users/{userId}/notifications/{notificationId}": {
-      "schema": {
-        "$ref": "#/entities/Notification"
-      },
-      "description": "Stores notifications for a specific user."
-    }
+      {
+        "path": "/users/{userId}/notifications/{notificationId}",
+        "definition": {
+          "entityName": "Notification",
+          "schema": { "$ref": "#/entities/Notification" },
+          "description": "Stores notifications for a specific user. Only the owner of the user profile can read, write, or delete their own notifications.",
+          "params": [
+            { "name": "userId", "description": "The user's unique identifier." },
+            { "name": "notificationId", "description": "The unique identifier of the notification." }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to address the 'Missing or insufficient permissions' error and ensure secure and scalable data access for the Beleza Integrada application. The core principle is Authorization Independence, achieved through denormalization, eliminating the need for `get()` calls in security rules. This allows for atomic operations (transactions/batches) and simplifies debugging. The structure employs structural segregation to ensure all documents within a collection share the same security requirements and utilizes access modeling for consistent authorization patterns.\n\nSpecifically, user profiles are stored under `/users/{userId}`, providing path-based ownership for private user data. Teams are stored in `/teams/{teamId}`, with a membership map denormalized within each team document to manage team member roles directly. This denormalization enables security rules to validate access based on the requesting user's presence in the team's `members` map without requiring additional `get()` calls.\n\nThe data structure also takes into account the N:N relationship between UserProfile and Team. The teamIds field in the UserProfile and userProfileIds field in the Team schema reflect this relationship. While these fields do not play a direct role in authorization, they allow for efficient querying and data retrieval based on team or user membership.\n\nThe inclusion of a dedicated `/users/{userId}/notifications` subcollection ensures that a user's notifications are stored directly under their own profile. Security rules can then enforce that only the authenticated user matching the `{userId}` in the path can access their own notifications, providing secure, path-based ownership for this data.\n\nThis design supports secure `list` operations (QAPs) as the security rules can directly evaluate a user's membership in a team based on the denormalized `members` map within each team document. The use of dedicated collections and denormalized authorization data makes the intent clear and enhances debuggability."
   }
 }
 

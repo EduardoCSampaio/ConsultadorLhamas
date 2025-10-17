@@ -350,7 +350,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {/* We can add breadcrumbs here */}
           </div>
           <div className="flex items-center gap-2">
-            <NotificationBell userId={user.uid} />
+            <React.Suspense fallback={<Skeleton className="h-8 w-8 rounded-full" />}>
+              <NotificationBell userId={user.uid} />
+            </React.Suspense>
             <ThemeToggle />
           </div>
         </header>
@@ -359,3 +361,5 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     </SidebarProvider>
   );
 }
+
+    
