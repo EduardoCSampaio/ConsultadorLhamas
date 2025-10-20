@@ -18,7 +18,7 @@ export default {
     extend: {
       fontFamily: {
         sans: ['var(--font-inter)'],
-        headline: ['var(--font-inter)'],
+        headline: ['var(--font-alegreya)'],
       },
       colors: {
         background: 'hsl(var(--background))',
