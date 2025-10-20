@@ -17,8 +17,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
-        headline: ['Inter', 'sans-serif'],
+        sans: ['var(--font-inter)'],
+        headline: ['var(--font-inter)'],
       },
       colors: {
         background: 'hsl(var(--background))',

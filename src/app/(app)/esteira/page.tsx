@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from 'next/link';
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -25,7 +24,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useUser } from "@/firebase";
-import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const formatDuration = (ms: number) => {
     if (ms < 0) ms = 0;
@@ -154,6 +153,14 @@ export default function EsteiraPage() {
         setIsReprocessing(null);
     };
 
+    const { inProgressBatches, completedBatches, errorBatches } = useMemo(() => {
+        return {
+            inProgressBatches: batches.filter(b => b.status === 'processing' || b.status === 'pending'),
+            completedBatches: batches.filter(b => b.status === 'completed'),
+            errorBatches: batches.filter(b => b.status === 'error'),
+        }
+    }, [batches]);
+
     const getStatusVariant = (status: BatchJob['status']) => {
         switch (status) {
             case 'completed': return 'default';
@@ -264,6 +271,53 @@ export default function EsteiraPage() {
             </AlertDialog>
         );
     }
+    
+    const BatchList = ({ list, emptyMessage }: { list: BatchJob[], emptyMessage: string }) => {
+        if (isLoading) {
+            return (
+                <div className="space-y-4">
+                    {Array.from({ length: 2 }).map((_, i) => (
+                         <Card key={i}>
+                            <CardContent className="p-4 space-y-3">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <Skeleton className="h-5 w-48 mb-2" />
+                                        <Skeleton className="h-4 w-64" />
+                                    </div>
+                                    <Skeleton className="h-8 w-24" />
+                                </div>
+                                <div>
+                                    <div className="flex justify-between mb-1">
+                                        <Skeleton className="h-4 w-16" />
+                                        <Skeleton className="h-4 w-20" />
+                                    </div>
+                                    <Skeleton className="h-2 w-full" />
+                                </div>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+            );
+        }
+        
+        if (list.length === 0) {
+            return (
+                 <div className="flex flex-col items-center justify-center gap-4 text-center h-60 border-2 border-dashed rounded-lg">
+                    <Inbox className="h-12 w-12 text-muted-foreground" />
+                    <h3 className="text-2xl font-bold tracking-tight">Nenhum Lote Encontrado</h3>
+                    <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+                </div>
+            );
+        }
+        
+        return (
+            <div className="space-y-4">
+                {list.map(batch => (
+                    <BatchCard key={batch.id} batch={batch} />
+                ))}
+            </div>
+        );
+    }
 
     return (
         <div className="flex flex-col gap-6">
@@ -285,50 +339,34 @@ export default function EsteiraPage() {
                  </Alert>
             )}
 
-            {isLoading ? (
-                <div className="space-y-4">
-                    {Array.from({ length: 3 }).map((_, i) => (
-                        <Card key={i}>
-                            <CardContent className="p-4 space-y-3">
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <Skeleton className="h-5 w-48 mb-2" />
-                                        <Skeleton className="h-4 w-64" />
-                                    </div>
-                                    <Skeleton className="h-8 w-24" />
-                                </div>
-                                <div>
-                                    <div className="flex justify-between mb-1">
-                                        <Skeleton className="h-4 w-16" />
-                                        <Skeleton className="h-4 w-20" />
-                                    </div>
-                                    <Skeleton className="h-2 w-full" />
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
-                </div>
-            ) : batches.length === 0 && !error ? (
-                <Card>
-                    <CardContent className="pt-6">
-                        <div className="flex flex-col items-center justify-center gap-4 text-center h-60 border-2 border-dashed rounded-lg">
-                            <Inbox className="h-12 w-12 text-muted-foreground" />
-                            <h3 className="text-2xl font-bold tracking-tight">
-                                Nenhum Lote na Esteira
-                            </h3>
-                            <div className="text-sm text-muted-foreground">
-                               Envie um lote nas páginas de consulta em lote para começar.
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            ) : (
-                <div className="space-y-4">
-                    {batches.map(batch => (
-                        <BatchCard key={batch.id} batch={batch} />
-                    ))}
-                </div>
-            )}
+            <Tabs defaultValue="in-progress" className="w-full">
+                <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="in-progress">Em Andamento ({inProgressBatches.length})</TabsTrigger>
+                    <TabsTrigger value="completed">Concluídos ({completedBatches.length})</TabsTrigger>
+                    <TabsTrigger value="errors">Com Erro ({errorBatches.length})</TabsTrigger>
+                </TabsList>
+                <TabsContent value="in-progress">
+                    <Card>
+                        <CardContent className="pt-6">
+                            <BatchList list={inProgressBatches} emptyMessage="Não há lotes sendo processados no momento."/>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+                 <TabsContent value="completed">
+                    <Card>
+                        <CardContent className="pt-6">
+                             <BatchList list={completedBatches} emptyMessage="Nenhum lote foi concluído ainda."/>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+                 <TabsContent value="errors">
+                    <Card>
+                        <CardContent className="pt-6">
+                             <BatchList list={errorBatches} emptyMessage="Nenhum lote apresentou erro."/>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+            </Tabs>
         </div>
     );
 }
