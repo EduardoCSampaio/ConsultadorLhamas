@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import { consultarSaldoFgts as consultarSaldoV8, getAuthToken as getV8AuthToken } from './fgts';
 import { consultarSaldoFgtsFacta, getFactaAuthToken } from './facta';
-import { consultarLinkAutorizacaoC6, verificarStatusAutorizacaoC6 } from './c6';
+import { consultarLinkAutorizacaoC6, consultarOfertasCLTC6, verificarStatusAutorizacaoC6, type C6Offer } from './c6';
 import * as XLSX from 'xlsx';
 import { firestore } from '@/firebase/server-init';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
@@ -78,7 +78,7 @@ export type BatchJob = {
     message?: string;
     userId: string;
     userEmail: string;
-    results?: Record<string, { status: string; link?: string; message: string }>;
+    results?: Record<string, { status: string; link?: string; message: string; offers?: C6Offer[] }>;
 };
 
 
@@ -348,13 +348,26 @@ async function processC6BatchInBackground(batchId: string) {
         if (!batchDoc.exists) throw new Error(`Lote ${batchId} não encontrado.`);
         
         batchData = batchDoc.data() as BatchJob & { cpfsData: any[] };
-        await batchRef.update({ status: 'processing', message: 'Verificando status de autorização...' });
+        await batchRef.update({ status: 'processing', message: 'Verificando status e buscando ofertas...' });
 
-        const processCpf = async (cpfData: any): Promise<[string, { status: string; link?: string; message: string }]> => {
+        const processCpf = async (cpfData: any): Promise<[string, { status: string; link?: string; message: string; offers?: C6Offer[] }]> => {
             try {
                 const statusResult = await verificarStatusAutorizacaoC6({ cpf: cpfData.cpf, userId: batchData!.userId });
                 
-                if (statusResult.success && statusResult.data?.status === 'NAO_AUTORIZADO') {
+                if (statusResult.success && statusResult.data?.status === 'AUTORIZADO') {
+                    // If authorized, fetch offers
+                    const offersResult = await consultarOfertasCLTC6({ cpf: cpfData.cpf, userId: batchData!.userId });
+                    if (offersResult.success && offersResult.data) {
+                        return [cpfData.cpf, {
+                            status: 'AUTORIZADO',
+                            message: offersResult.data.length > 0 ? `${offersResult.data.length} oferta(s) encontrada(s).` : 'Nenhuma oferta encontrada.',
+                            offers: offersResult.data
+                        }];
+                    } else {
+                        // Failed to fetch offers, but status is still authorized
+                        return [cpfData.cpf, { status: 'AUTORIZADO', message: `Autorizado, mas falhou ao buscar ofertas: ${offersResult.message}`, offers: [] }];
+                    }
+                } else if (statusResult.success && statusResult.data?.status === 'NAO_AUTORIZADO') {
                     if (!cpfData.nome || !cpfData.data_nascimento || !cpfData.telefone_ddd || !cpfData.telefone_numero) {
                          return [cpfData.cpf, { status: 'ERRO_DADOS', message: 'Dados insuficientes para gerar link.' }];
                     }
@@ -373,9 +386,9 @@ async function processC6BatchInBackground(batchId: string) {
                     } else {
                         return [cpfData.cpf, { status: 'ERRO_LINK', message: linkResult.message }];
                     }
-                } else if (statusResult.success) {
+                } else if (statusResult.success) { // Other statuses like AGUARDANDO_AUTORIZACAO
                      return [cpfData.cpf, { status: statusResult.data!.status, message: statusResult.data!.observacao || '' }];
-                } else {
+                } else { // Status check failed
                      return [cpfData.cpf, { status: 'ERRO_STATUS', message: statusResult.message }];
                 }
             } finally {
@@ -389,7 +402,7 @@ async function processC6BatchInBackground(batchId: string) {
         
         await batchRef.update({
             status: 'completed',
-            message: 'Processamento de verificação concluído.',
+            message: 'Processamento de verificação e ofertas concluído.',
             completedAt: FieldValue.serverTimestamp(),
             results: batchResults,
         });
@@ -636,12 +649,32 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         if (batchDoc.exists) {
             const batchData = batchDoc.data() as BatchJob;
             if (batchData.results) {
-                results = Object.entries(batchData.results).map(([cpf, result]) => ({
-                    CPF: cpf,
-                    STATUS: result.status,
-                    MENSAGEM: result.message,
-                    LINK_AUTORIZACAO: result.link || '',
-                }));
+                for (const [cpf, result] of Object.entries(batchData.results)) {
+                    if (result.offers && result.offers.length > 0) {
+                        result.offers.forEach(offer => {
+                            results.push({
+                                'CPF': cpf,
+                                'STATUS': result.status,
+                                'MENSAGEM': result.message,
+                                'LINK_AUTORIZACAO': result.link || '',
+                                'ID_OFERTA': offer.id_oferta,
+                                'PRODUTO_OFERTA': offer.nome_produto,
+                                'VALOR_FINANCIADO': offer.valor_financiado,
+                                'VALOR_PARCELA': offer.valor_parcela,
+                                'QTD_PARCELAS': offer.qtd_parcelas,
+                                'TAXA_MES': offer.taxa_mes,
+                                'STATUS_OFERTA': offer.status
+                            });
+                        });
+                    } else {
+                        results.push({
+                            'CPF': cpf,
+                            'STATUS': result.status,
+                            'MENSAGEM': result.message,
+                            'LINK_AUTORIZACAO': result.link || '',
+                        });
+                    }
+                }
             }
         }
     } else {
@@ -751,6 +784,20 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
             for (let i = 1; i <= 12; i++) {
                 formatCurrencyCells(`VALOR_${i}`);
             }
+        } else {
+             const formatCurrencyCellsC6 = (colName: string) => {
+                const colIndex = header.indexOf(colName);
+                if (colIndex !== -1) {
+                    finalResults.forEach((_, index) => {
+                        const cellRef = XLSX.utils.encode_cell({c: colIndex, r: index + 1});
+                         if (worksheet[cellRef] && typeof worksheet[cellRef].v === 'number') {
+                            worksheet[cellRef].z = '"R$"#,##0.00';
+                        }
+                    });
+                }
+            };
+            formatCurrencyCellsC6('VALOR_FINANCIADO');
+            formatCurrencyCellsC6('VALOR_PARCELA');
         }
     }
 
@@ -769,3 +816,6 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         message: 'Relatório gerado com sucesso.',
     };
 }
+
+
+      
