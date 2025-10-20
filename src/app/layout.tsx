@@ -3,15 +3,15 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { FirebaseClientProvider } from '@/firebase';
 import { ThemeProvider } from '@/components/theme-provider';
-import { Inter } from 'next/font/google'
+import { Alegreya } from 'next/font/google'
 
-const inter = Inter({
+const alegreya = Alegreya({
   subsets: ['latin'],
-  variable: '--font-inter',
+  variable: '--font-alegreya',
 })
 
 export const metadata: Metadata = {
-  title: 'Lhamascred',
+  title: 'Beleza Integrada',
   description: 'Gestão de crédito e finanças, simplificada.',
   icons: {
     icon: '/favicon.ico',
@@ -26,7 +26,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans antialiased`}>
+      <body className={`${alegreya.variable} font-sans antialiased`}>
         <ThemeProvider
             attribute="class"
             defaultTheme="system"
