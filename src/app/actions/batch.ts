@@ -71,6 +71,7 @@ export type BatchJob = {
     userId: string;
     userEmail: string;
     results?: Record<string, { status: string; link?: string; message: string; offers?: C6Offer[] }>;
+    cpfsData?: CpfData[];
 };
 
 
@@ -258,8 +259,8 @@ async function processFactaBatchInBackground(batchId: string) {
     }
 }
 
-export async function processarLoteFgts(input: z.infer<typeof processActionSchema>): Promise<ProcessActionResult> {
-  const validation = processActionSchema.safeParse(input);
+export async function processarLoteFgts(input: z.infer<typeof processCltActionSchema> & { v8Provider?: V8Provider }): Promise<ProcessActionResult> {
+  const validation = processCltActionSchema.extend({ v8Provider: z.enum(['qi', 'cartos', 'bms']).optional() }).safeParse(input);
 
   if (!validation.success) {
     return { 
@@ -268,7 +269,8 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
     };
   }
 
-  const { cpfs, provider, userId, userEmail, fileName, v8Provider } = validation.data;
+  const { cpfsData, provider, userId, userEmail, fileName, v8Provider } = validation.data;
+  const cpfs = cpfsData.map(d => d.cpf);
   
   const displayProvider = provider === 'v8' ? 'V8DIGITAL' : 'facta';
   
@@ -333,13 +335,16 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
 async function processC6BatchInBackground(batchId: string) {
     console.log(`[Batch C6 ${batchId}] Starting C6 background processing...`);
     const batchRef = firestore.collection('batches').doc(batchId);
-    let batchData: (BatchJob & { cpfsData: CpfData[] }) | null = null;
+    let batchData: BatchJob | null = null;
 
     try {
         const batchDoc = await batchRef.get();
         if (!batchDoc.exists) throw new Error(`Lote ${batchId} não encontrado.`);
         
-        batchData = batchDoc.data() as BatchJob & { cpfsData: CpfData[] };
+        batchData = batchDoc.data() as BatchJob;
+        if (!batchData.cpfsData) {
+            throw new Error(`Dados de CPFs não encontrados no lote ${batchId}.`);
+        }
         await batchRef.update({ status: 'processing', message: 'Verificando status e buscando ofertas...' });
 
         const processCpf = async (cpfData: CpfData): Promise<[string, { status: string; link?: string; message: string; offers?: C6Offer[] }]> => {
@@ -358,7 +363,7 @@ async function processC6BatchInBackground(batchId: string) {
                         return [cpfData.cpf, { status: 'AUTORIZADO', message: `Autorizado, mas falhou ao buscar ofertas: ${offersResult.message}`, offers: [] }];
                     }
                 } else if (statusResult.success && statusResult.data?.status === 'NAO_AUTORIZADO') {
-                    if (!cpfData.nome || !cpfData.data_nascimento || !cpfData.telefone_ddd || !cpfData.telefone_numero) {
+                     if (!cpfData.nome || !cpfData.data_nascimento || !cpfData.telefone_ddd || !cpfData.telefone_numero) {
                          return [cpfData.cpf, { status: 'ERRO_DADOS', message: 'Dados insuficientes para gerar link.' }];
                     }
                     const linkResult = await consultarLinkAutorizacaoC6({
@@ -381,8 +386,9 @@ async function processC6BatchInBackground(batchId: string) {
                 } else { // Status check failed
                      return [cpfData.cpf, { status: 'ERRO_STATUS', message: statusResult.message }];
                 }
-            } finally {
-                await batchRef.update({ processedCpfs: FieldValue.increment(1) });
+            } catch (e) {
+                const message = e instanceof Error ? e.message : "Erro desconhecido ao processar CPF.";
+                 return [cpfData.cpf, { status: 'ERRO_FATAL', message }];
             }
         };
 
@@ -394,6 +400,7 @@ async function processC6BatchInBackground(batchId: string) {
             message: 'Processamento de verificação e ofertas concluído.',
             completedAt: FieldValue.serverTimestamp(),
             results: batchResults,
+            processedCpfs: batchData.totalCpfs,
         });
 
     } catch (error) {
@@ -580,8 +587,8 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
             return { status: 'success', message: 'Todos os CPFs já haviam sido processados com sucesso. Lote finalizado.' };
         }
 
-        const newBatchAction: z.infer<typeof processActionSchema> = {
-            cpfs: cpfsToReprocess,
+        const newBatchAction: z.infer<typeof processCltActionSchema> & {v8Provider?: V8Provider} = {
+            cpfsData: cpfsToReprocess.map(cpf => ({cpf})),
             provider: originalBatchData.provider === 'V8DIGITAL' ? 'v8' : 'facta',
             userId: originalBatchData.userId,
             userEmail: originalBatchData.userEmail,
@@ -810,4 +817,5 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
     
 
     
+
 
