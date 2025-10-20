@@ -30,6 +30,7 @@ const cpfDataSchema = z.object({
     telefone_ddd: z.string().optional(),
     telefone_numero: z.string().optional(),
 });
+export type CpfData = z.infer<typeof cpfDataSchema>;
 
 
 const processCltActionSchema = z.object({
@@ -341,21 +342,20 @@ export async function processarLoteFgts(input: z.infer<typeof processActionSchem
 async function processC6BatchInBackground(batchId: string) {
     console.log(`[Batch C6 ${batchId}] Starting C6 background processing...`);
     const batchRef = firestore.collection('batches').doc(batchId);
-    let batchData: (BatchJob & { cpfsData: any[] }) | null = null;
+    let batchData: (BatchJob & { cpfsData: CpfData[] }) | null = null;
 
     try {
         const batchDoc = await batchRef.get();
         if (!batchDoc.exists) throw new Error(`Lote ${batchId} não encontrado.`);
         
-        batchData = batchDoc.data() as BatchJob & { cpfsData: any[] };
+        batchData = batchDoc.data() as BatchJob & { cpfsData: CpfData[] };
         await batchRef.update({ status: 'processing', message: 'Verificando status e buscando ofertas...' });
 
-        const processCpf = async (cpfData: any): Promise<[string, { status: string; link?: string; message: string; offers?: C6Offer[] }]> => {
+        const processCpf = async (cpfData: CpfData): Promise<[string, { status: string; link?: string; message: string; offers?: C6Offer[] }]> => {
             try {
                 const statusResult = await verificarStatusAutorizacaoC6({ cpf: cpfData.cpf, userId: batchData!.userId });
                 
                 if (statusResult.success && statusResult.data?.status === 'AUTORIZADO') {
-                    // If authorized, fetch offers
                     const offersResult = await consultarOfertasCLTC6({ cpf: cpfData.cpf, userId: batchData!.userId });
                     if (offersResult.success && offersResult.data) {
                         return [cpfData.cpf, {
@@ -364,7 +364,6 @@ async function processC6BatchInBackground(batchId: string) {
                             offers: offersResult.data
                         }];
                     } else {
-                        // Failed to fetch offers, but status is still authorized
                         return [cpfData.cpf, { status: 'AUTORIZADO', message: `Autorizado, mas falhou ao buscar ofertas: ${offersResult.message}`, offers: [] }];
                     }
                 } else if (statusResult.success && statusResult.data?.status === 'NAO_AUTORIZADO') {
@@ -392,7 +391,6 @@ async function processC6BatchInBackground(batchId: string) {
                      return [cpfData.cpf, { status: 'ERRO_STATUS', message: statusResult.message }];
                 }
             } finally {
-                // Increment progress after each CPF is processed, regardless of outcome
                 await batchRef.update({ processedCpfs: FieldValue.increment(1) });
             }
         };
@@ -817,5 +815,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
     };
 }
       
+
+    
 
     
