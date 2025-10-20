@@ -14,15 +14,6 @@ import { type ApiCredentials, logActivity } from './users';
 type Provider = "v8" | "facta" | "c6";
 type V8Provider = 'qi' | 'cartos' | 'bms';
 
-const processActionSchema = z.object({
-  cpfs: z.array(z.string()),
-  provider: z.enum(["v8", "facta"]),
-  userId: z.string(),
-  userEmail: z.string(),
-  fileName: z.string(),
-  v8Provider: z.enum(['qi', 'cartos', 'bms']).optional(),
-});
-
 const cpfDataSchema = z.object({
     cpf: z.string(),
     nome: z.string().optional(),
