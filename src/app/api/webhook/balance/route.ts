@@ -35,11 +35,8 @@ export async function POST(request: NextRequest) {
     }
     
     const docRef = firestore.collection('webhookResponses').doc(consultationId.toString());
-
-    // New Robust Logic: Read first to get batchId if it exists
     const docSnapshot = await docRef.get();
     const existingData = docSnapshot.data();
-    const batchId = existingData?.batchId; // Get batchId safely from existing document
 
     const v8Partner = payload.provider || 'qi';
     const errorMessage = payload.errorMessage || payload.error || payload.message;
@@ -58,7 +55,6 @@ export async function POST(request: NextRequest) {
     }
     
     const dataToUpdate: any = {
-        ...existingData, // Preserve existing data like original batchId
         responseBody: payload,
         updatedAt: FieldValue.serverTimestamp(),
         status: status,
@@ -71,6 +67,8 @@ export async function POST(request: NextRequest) {
     await docRef.set(dataToUpdate, { merge: true });
 
     console.log(`Payload stored in Firestore with ID: ${consultationId}. Status: ${status}. Provider: V8DIGITAL (${v8Partner})`);
+    
+    const batchId = existingData?.batchId;
     
     // If a batchId was found, update the batch progress
     if (batchId) {
