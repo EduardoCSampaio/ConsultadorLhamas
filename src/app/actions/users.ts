@@ -288,7 +288,7 @@ const combineUserData = async (userRecord: UserRecord, teamsMap: Map<string, str
         c6_username: profileData.c6_username,
         c6_password: profileData.c6_password,
         permissions: profileData.permissions || {},
-    } as UserProfile;
+    };
 };
 
 
