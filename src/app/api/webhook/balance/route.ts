@@ -39,8 +39,17 @@ export async function POST(request: NextRequest) {
     // Use the unique consultationId as the document ID.
     const docRef = firestore.collection('webhookResponses').doc(consultationId.toString());
 
-    // Correctly extract the batchId from the consultationId (e.g., 'batch-fgts-V8-12345-abcde-00011122233')
-    const batchId = consultationId.startsWith('batch-') ? consultationId.split('-').slice(0, 5).join('-') : undefined;
+    // --- START: ROBUST BATCH ID EXTRACTION ---
+    let batchId: string | undefined;
+    if (typeof consultationId === 'string' && consultationId.startsWith('batch-')) {
+        // Regex to match the batch ID pattern: batch-provider-subprovider-timestamp-userId-cpf
+        // We want to extract 'batch-provider-subprovider-timestamp-userId'
+        const match = consultationId.match(/^(batch-[^-]+-[^-]+-[^-]+-[^-]+)-/);
+        if (match && match[1]) {
+            batchId = match[1];
+        }
+    }
+    // --- END: ROBUST BATCH ID EXTRACTION ---
 
     const v8Partner = payload.provider || 'qi';
     const errorMessage = payload.errorMessage || payload.error || payload.message;
@@ -67,7 +76,7 @@ export async function POST(request: NextRequest) {
       v8Provider: v8Partner,
     };
     
-    // Only add batchId if it exists to avoid saving 'undefined'
+    // CRITICAL FIX: Only add batchId to the object if it has a valid string value.
     if (batchId) {
       dataToUpdate.batchId = batchId;
     }
