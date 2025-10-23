@@ -135,6 +135,7 @@ export async function deleteBatch(input: z.infer<typeof deleteBatchSchema>): Pro
 export async function getBatches(input: { userId: string }): Promise<{ status: 'success' | 'error'; batches?: BatchJob[]; message?: string, error?: string }> {
     try {
         let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> = firestore.collection('batches');
+
         query = query.where('userId', '==', input.userId);
         
         const batchesSnapshot = await query.get();
@@ -197,7 +198,7 @@ async function processFactaBatchInBackground(batchId: string) {
             .get();
         const processedCpfIds = new Set(processedCpfsSnapshot.docs.map(doc => doc.id.replace('facta-', '')));
         
-        const currentProcessedCount = processedCpfIds.size;
+        const currentProcessedCount = processedCpfsSnapshot.docs.length;
         
         // Start processing if not already processing
         if (batchData.status === 'pending') {
@@ -214,7 +215,7 @@ async function processFactaBatchInBackground(batchId: string) {
         
         const cpfsToProcess = batchData.cpfs.filter(cpf => !processedCpfIds.has(cpf));
 
-        if (cpfsToProcess.length === 0) {
+        if (cpfsToProcess.length === 0 && currentProcessedCount >= batchData.totalCpfs) {
             await batchRef.update({ status: 'completed', processedCpfs: batchData.totalCpfs, message: "Todos os CPFs foram processados.", completedAt: FieldValue.serverTimestamp() });
             console.log(`[Batch ${batchId}] All CPFs processed. Batch completed.`);
             return;
@@ -223,7 +224,8 @@ async function processFactaBatchInBackground(batchId: string) {
         console.log(`[Batch ${batchId}] Processing ${cpfsToProcess.length} CPFs in parallel.`);
 
         const processingPromises = cpfsToProcess.map(async (cpf) => {
-            const docRef = firestore.collection('webhookResponses').doc(`facta-${cpf}`);
+            const docId = `facta-${cpf}`;
+            const docRef = firestore.collection('webhookResponses').doc(docId);
             try {
                 const result = await consultarSaldoFgtsFacta({ cpf: cpf, userId: batchData.userId, token });
                 const responseData = {
@@ -231,7 +233,7 @@ async function processFactaBatchInBackground(batchId: string) {
                     createdAt: FieldValue.serverTimestamp(),
                     status: result.success ? 'success' : 'error',
                     message: result.message || (result.success ? 'Sucesso' : 'Erro desconhecido'),
-                    id: `facta-${cpf}`,
+                    id: docId,
                     provider: 'facta',
                     batchId: batchId,
                 };
@@ -273,7 +275,7 @@ export async function processarLoteFgts(input: z.infer<typeof processFgtsActionS
   
   const displayProvider = provider === 'v8' ? 'V8DIGITAL' : 'facta';
   
-  const batchId = `batch-${displayProvider}-${v8Provider || ''}-${Date.now()}-${userId.substring(0, 5)}`;
+  const batchId = `batch-fgts-${displayProvider}-${v8Provider || ''}-${Date.now()}-${userId.substring(0, 5)}`;
   const batchRef = firestore.collection('batches').doc(batchId);
   
   const baseBatchData: Omit<BatchJob, 'id' | 'createdAt' | 'v8Provider'> & { createdAt: FieldValue } = {
@@ -520,13 +522,14 @@ async function processV8BatchInBackground(batchId: string) {
         if (authError || !authToken) throw new Error(authError || "Failed to get V8 auth token.");
         
         for (const cpf of cpfs) {
+            const consultationId = `${batchId}-${cpf}`;
              consultarSaldoV8({ 
                 documentNumber: cpf, 
                 userId, 
                 userEmail,
                 token: authToken, 
                 provider: v8Provider,
-                batchId: batchId
+                consultationId
             });
         }
         
@@ -574,6 +577,9 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
              const docId = doc.id;
              if (originalBatchData.provider.toLowerCase() === 'facta') {
                  return docId.replace('facta-', '');
+             }
+             if (originalBatchData.provider.toLowerCase() === 'v8digital') {
+                 return docId.split('-').pop();
              }
              return docId;
         }));
@@ -680,7 +686,16 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
         // Handle V8 and Facta results
         for (const cpf of cpfs) {
             try {
-                const docId = mainProvider === 'v8digital' ? cpf : `facta-${cpf}`;
+                let docId = '';
+                if (mainProvider === 'v8digital') {
+                    docId = `${batchId}-${cpf}`;
+                } else if (mainProvider === 'facta') {
+                    docId = `facta-${cpf}`;
+                } else {
+                     results.push({ CPF: cpf, Saldo: '0.00', Mensagem: 'Provedor desconhecido no relatório.' });
+                     continue;
+                }
+
                 const docRef = firestore.collection('webhookResponses').doc(docId);
                 const docSnap = await docRef.get();
 

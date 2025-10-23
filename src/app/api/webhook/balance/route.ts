@@ -16,26 +16,30 @@ export async function POST(request: NextRequest) {
     console.log("Headers:", Object.fromEntries(request.headers));
     console.log("Body (Payload):", JSON.stringify(payload, null, 2));
 
-    const docId = payload.documentNumber || payload.id;
+    // The unique ID for this specific consultation request.
+    const consultationId = payload.consultationId;
 
-    if (!docId) {
-      console.log("Webhook validation request received (empty or invalid body). Responding 200 OK.");
+    if (!consultationId) {
+      // This could be a webhook validation request from the V8 panel.
+      if (!payload.documentNumber && !payload.id) {
+        console.log("Webhook validation request received (empty or invalid body). Responding 200 OK.");
+        return NextResponse.json({
+          status: 'success',
+          message: 'Webhook test successful. Endpoint is active.',
+        }, { status: 200 });
+      }
+      
+      console.error("Webhook payload missing 'consultationId'. Cannot process.", payload);
       return NextResponse.json({
-        status: 'success',
-        message: 'Webhook test successful. Endpoint is active.',
-      }, { status: 200 });
+        status: 'error',
+        message: "Webhook payload is missing the required 'consultationId' field.",
+      }, { status: 400 });
     }
     
-    const docRef = firestore.collection('webhookResponses').doc(docId.toString());
+    // Use the unique consultationId as the document ID.
+    const docRef = firestore.collection('webhookResponses').doc(consultationId.toString());
 
-    // Prioritize batchId from payload, then from existing doc.
-    let batchId: string | undefined = payload.batchId;
-    if (!batchId) {
-        const existingDoc = await docRef.get();
-        if (existingDoc.exists) {
-            batchId = existingDoc.data()?.batchId;
-        }
-    }
+    const batchId = consultationId.startsWith('batch-') ? consultationId.split('-')[1] : undefined;
 
     const v8Partner = payload.provider || 'qi';
     const errorMessage = payload.errorMessage || payload.error || payload.message;
@@ -66,7 +70,7 @@ export async function POST(request: NextRequest) {
 
     await docRef.set(dataToUpdate, { merge: true });
 
-    console.log(`Payload stored in Firestore with ID: ${docId}. Status: ${status}. Provider: V8DIGITAL (${v8Partner})`);
+    console.log(`Payload stored in Firestore with ID: ${consultationId}. Status: ${status}. Provider: V8DIGITAL (${v8Partner})`);
     
     if (batchId) {
         const batchRef = firestore.collection('batches').doc(batchId);
