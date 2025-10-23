@@ -45,7 +45,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 type UserStatus = UserProfile['status'];
 const permissionLabels: Record<keyof UserPermissions, string> = {
-    canViewFGTS: "Acesso a Consultas FGTS",
+    canViewFGTS: "Consulta em Lote FGTS",
     canViewCLT: "Acesso a Consultas CLT",
     canViewINSS: "Acesso a Consultas INSS",
 };
@@ -542,7 +542,7 @@ export default function TeamDetailsPage() {
                                                     disabled={!managerHasPermission}
                                                 />
                                                 <Label htmlFor={`perm-${key}`} className={`font-normal text-sm ${!managerHasPermission && 'text-muted-foreground'}`}>
-                                                    {permissionLabels[key]}
+                                                    {permissionLabels[key as keyof UserPermissions]}
                                                     {!managerHasPermission && <span className='text-xs'> (Você não possui esta permissão)</span>}
                                                 </Label>
                                             </div>
