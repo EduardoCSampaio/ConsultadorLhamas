@@ -16,40 +16,30 @@ export async function POST(request: NextRequest) {
     console.log("Headers:", Object.fromEntries(request.headers));
     console.log("Body (Payload):", JSON.stringify(payload, null, 2));
 
-    // The unique ID for this specific consultation request.
     const consultationId = payload.consultationId;
 
     if (!consultationId) {
-      // This could be a webhook validation request from the V8 panel.
-      if (!payload.documentNumber && !payload.id) {
-        console.log("Webhook validation request received (empty or invalid body). Responding 200 OK.");
+        if (!payload.documentNumber && !payload.id) {
+            console.log("Webhook validation request received (empty or invalid body). Responding 200 OK.");
+            return NextResponse.json({
+                status: 'success',
+                message: 'Webhook test successful. Endpoint is active.',
+            }, { status: 200 });
+        }
+        
+        console.error("Webhook payload missing 'consultationId'. Cannot process.", payload);
         return NextResponse.json({
-          status: 'success',
-          message: 'Webhook test successful. Endpoint is active.',
-        }, { status: 200 });
-      }
-      
-      console.error("Webhook payload missing 'consultationId'. Cannot process.", payload);
-      return NextResponse.json({
-        status: 'error',
-        message: "Webhook payload is missing the required 'consultationId' field.",
-      }, { status: 400 });
+            status: 'error',
+            message: "Webhook payload is missing the required 'consultationId' field.",
+        }, { status: 400 });
     }
     
-    // Use the unique consultationId as the document ID.
     const docRef = firestore.collection('webhookResponses').doc(consultationId.toString());
 
-    // --- START: ROBUST BATCH ID EXTRACTION ---
-    let batchId: string | undefined;
-    if (typeof consultationId === 'string' && consultationId.startsWith('batch-')) {
-        // Regex to match the batch ID pattern: batch-provider-subprovider-timestamp-userId-cpf
-        // We want to extract 'batch-provider-subprovider-timestamp-userId'
-        const match = consultationId.match(/^(batch-[^-]+-[^-]+-[^-]+-[^-]+)-/);
-        if (match && match[1]) {
-            batchId = match[1];
-        }
-    }
-    // --- END: ROBUST BATCH ID EXTRACTION ---
+    // New Robust Logic: Read first to get batchId if it exists
+    const docSnapshot = await docRef.get();
+    const existingData = docSnapshot.data();
+    const batchId = existingData?.batchId; // Get batchId safely from existing document
 
     const v8Partner = payload.provider || 'qi';
     const errorMessage = payload.errorMessage || payload.error || payload.message;
@@ -66,26 +56,23 @@ export async function POST(request: NextRequest) {
         status = 'success';
         statusMessage = 'Webhook payload with balance successfully stored.';
     }
-
+    
     const dataToUpdate: any = {
-      responseBody: payload,
-      updatedAt: FieldValue.serverTimestamp(),
-      status: status,
-      message: statusMessage,
-      provider: "V8DIGITAL",
-      v8Provider: v8Partner,
+        ...existingData, // Preserve existing data like original batchId
+        responseBody: payload,
+        updatedAt: FieldValue.serverTimestamp(),
+        status: status,
+        message: statusMessage,
+        provider: "V8DIGITAL",
+        v8Provider: v8Partner,
     };
     
-    // CRITICAL FIX: Only add batchId to the object if it has a valid string value.
-    if (batchId) {
-      dataToUpdate.batchId = batchId;
-    }
-
-
+    // Write the updated response data
     await docRef.set(dataToUpdate, { merge: true });
 
     console.log(`Payload stored in Firestore with ID: ${consultationId}. Status: ${status}. Provider: V8DIGITAL (${v8Partner})`);
     
+    // If a batchId was found, update the batch progress
     if (batchId) {
         const batchRef = firestore.collection('batches').doc(batchId);
         try {
@@ -103,14 +90,12 @@ export async function POST(request: NextRequest) {
 
                 const updates: any = { };
 
-                // Change status from 'pending' to 'processing' on the first response
                 if (batchData.status === 'pending') {
                     updates.status = 'processing';
                     updates.message = 'Processamento iniciado.';
                 }
                 
                 updates.processedCpfs = FieldValue.increment(1);
-
                 transaction.update(batchRef, updates);
 
                 // Check for completion after incrementing
@@ -122,7 +107,6 @@ export async function POST(request: NextRequest) {
                         message: 'Processamento concluído via webhooks.',
                         completedAt: FieldValue.serverTimestamp()
                      };
-                     // We run a second update within the transaction to ensure it happens atomically
                      transaction.update(batchRef, finalUpdates);
                 }
             });
@@ -131,7 +115,6 @@ export async function POST(request: NextRequest) {
             console.error(`[Batch ${batchId}] Failed to update batch progress transaction: `, e);
         }
     }
-
 
     return NextResponse.json({ 
         status: 'success', 
