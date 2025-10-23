@@ -43,12 +43,12 @@ export type FgtsBalance = {
 // Helper function to construct the webhook URL
 function getWebhookUrl(): string {
     const vercelUrl = process.env.NEXT_PUBLIC_VERCEL_URL;
-    // Check if running in production on Vercel
     if (vercelUrl) {
-      return `https://${vercelUrl}/api/webhook/balance`;
+        // Ensure it starts with https
+        return `https://${vercelUrl}/api/webhook/balance`;
     }
     // Fallback to localhost for local development
-    return `http://localhost:9002/api/webhook/balance`;
+    return 'http://localhost:9002/api/webhook/balance';
 }
 
 
