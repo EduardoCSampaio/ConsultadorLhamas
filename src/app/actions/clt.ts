@@ -72,7 +72,7 @@ type CreateSimulacaoResult = {
     simulation?: SimulationResult;
 };
 
-async function getUserCredentials(userId: string): Promise<{ credentials: ApiCredentials | null; error: string | null }> {
+export async function getUserCredentials(userId: string): Promise<{ credentials: ApiCredentials | null; error: string | null }> {
     if (!userId) {
         return { credentials: null, error: 'ID do usuário não fornecido.' };
     }
@@ -96,7 +96,7 @@ async function getUserCredentials(userId: string): Promise<{ credentials: ApiCre
                 !credentials.v8_audience && "Audience",
                 !credentials.v8_client_id && "Client ID"
             ].filter(Boolean).join(', ');
-            return { credentials: null, error: `Credenciais de API incompletas. Faltando: ${missing}. Por favor, configure-as na página de Configurações.` };
+            return { credentials: null, error: `Credenciais da V8 incompletas. Faltando: ${missing}. Por favor, configure-as na página de Configurações.` };
         }
 
         return { credentials, error: null };
@@ -107,7 +107,7 @@ async function getUserCredentials(userId: string): Promise<{ credentials: ApiCre
     }
 }
 
-async function getAuthToken(credentials: ApiCredentials): Promise<{token: string | null, error: string | null}> {
+export async function getAuthToken(credentials: ApiCredentials): Promise<{token: string | null, error: string | null}> {
   const { v8_username, v8_password, v8_audience, v8_client_id } = credentials;
   
   const tokenUrl = 'https://auth.v8sistema.com/oauth/token';
@@ -282,3 +282,5 @@ export async function criarSimulacaoCLT(input: z.infer<typeof simulationActionSc
         return { success: false, message };
     }
 }
+
+  

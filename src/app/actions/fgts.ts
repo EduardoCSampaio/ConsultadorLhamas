@@ -7,7 +7,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import type { ApiCredentials } from './users';
 import { getFactaAuthToken, consultarSaldoFgtsFacta } from './facta';
 import { logActivity } from './users';
-import { getAuthToken } from './clt';
+import { getAuthToken, getUserCredentials } from './clt';
 
 
 const actionSchema = z.object({
@@ -51,29 +51,12 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   
 
   if (!authToken) {
-      let userCredentials: ApiCredentials;
-      try {
-        const userDoc = await firestore.collection('users').doc(userId).get();
-        
-        if (!userDoc.exists) {
-            return { status: 'error', stepIndex: 0, message: 'Usuário não encontrado para buscar as credenciais.' };
-        }
-        
-        const userData = userDoc.data();
-        userCredentials = {
-          v8_username: userData?.v8_username,
-          v8_password: userData?.v8_password,
-          v8_audience: userData?.v8_audience,
-          v8_client_id: userData?.v8_client_id,
-        };
-
-      } catch(error) {
-          const message = error instanceof Error ? error.message : "Ocorreu um erro desconhecido ao buscar credenciais.";
-          console.error("Erro ao buscar credenciais do usuário:", message);
-          return { status: 'error', stepIndex: 0, message: 'Não foi possível carregar as credenciais de API do usuário.' };
+      const { credentials, error: credError } = await getUserCredentials(userId);
+      if (credError || !credentials) {
+         return { status: 'error', stepIndex: 0, message: credError || "Credenciais V8 não encontradas." };
       }
       
-      const { token, error: tokenError } = await getAuthToken(userCredentials);
+      const { token, error: tokenError } = await getAuthToken(credentials);
       if (tokenError) {
         return { status: 'error', stepIndex: 0, message: tokenError };
       }
@@ -85,6 +68,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       const webhookResponseRef = firestore.collection('webhookResponses').doc(documentNumber);
       await webhookResponseRef.set({
           batchId: batchId,
+          userId: userId, // <<< Store the userId here
           status: 'pending_webhook',
           provider: 'V8DIGITAL',
           v8Provider: provider,
@@ -229,26 +213,31 @@ export async function consultarSaldoManual(input: z.infer<typeof manualActionSch
     
     // --- V8 Call (Simulated Synchronous) ---
     if (providers.includes('v8') && v8Provider) {
-        const { token: v8Token, error: v8TokenError } = await getAuthToken(user);
-        if (v8Token) {
-            const v8Promise = new Promise(async (resolve) => {
-                // Clear any previous webhook response for this CPF to ensure we get a fresh one
-                await firestore.collection('webhookResponses').doc(cpf).delete().catch(() => {});
-                
-                await consultarSaldoFgts({ documentNumber: cpf, userId, userEmail, provider: v8Provider, token: v8Token });
-                const v8result = await waitForV8Response(cpf); // Wait for webhook
-                if (v8result && v8result.balance > 0) {
-                    finalBalances.push({ 
-                        provider: 'V8DIGITAL', 
-                        balance: v8result.balance,
-                        v8Provider: v8result.v8Provider
-                    });
-                }
-                resolve(null);
-            });
-            promises.push(v8Promise);
+        const { credentials, error: credError } = await getUserCredentials(userId);
+        if (credentials) {
+            const { token: v8Token, error: v8TokenError } = await getAuthToken(credentials);
+            if (v8Token) {
+                const v8Promise = new Promise(async (resolve) => {
+                    // Clear any previous webhook response for this CPF to ensure we get a fresh one
+                    await firestore.collection('webhookResponses').doc(cpf).delete().catch(() => {});
+                    
+                    await consultarSaldoFgts({ documentNumber: cpf, userId, userEmail, provider: v8Provider, token: v8Token });
+                    const v8result = await waitForV8Response(cpf); // Wait for webhook
+                    if (v8result && v8result.balance > 0) {
+                        finalBalances.push({ 
+                            provider: 'V8DIGITAL', 
+                            balance: v8result.balance,
+                            v8Provider: v8result.v8Provider
+                        });
+                    }
+                    resolve(null);
+                });
+                promises.push(v8Promise);
+            } else {
+                 console.error("[Manual FGTS] V8 auth error:", v8TokenError);
+            }
         } else {
-            console.error("[Manual FGTS] V8 auth error:", v8TokenError);
+             console.error("[Manual FGTS] V8 credentials error:", credError);
         }
     }
     
@@ -260,3 +249,5 @@ export async function consultarSaldoManual(input: z.infer<typeof manualActionSch
 
     return { balances: finalBalances };
 }
+
+  
