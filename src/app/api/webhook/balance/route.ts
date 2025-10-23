@@ -35,42 +35,37 @@ export async function POST(request: NextRequest) {
     }
     
     const docRef = firestore.collection('webhookResponses').doc(consultationId.toString());
+    
+    // --- START: NEW ROBUST LOGIC ---
+
+    // 1. First, get the existing document to safely retrieve the batchId.
     const docSnapshot = await docRef.get();
     const existingData = docSnapshot.data();
+    const batchId = existingData?.batchId; // This is the safe way to get batchId.
 
-    const v8Partner = payload.provider || 'qi';
+    // 2. Prepare the update data for the webhook response document itself.
     const errorMessage = payload.errorMessage || payload.error || payload.message;
     const isError = !!errorMessage;
     const isSuccess = payload.balance !== undefined && payload.balance !== null;
 
     let status: 'received' | 'error' | 'success' = 'received';
-    let statusMessage: string = 'Webhook payload successfully stored in Firestore via Admin SDK.';
+    if (isError) status = 'error';
+    else if (isSuccess) status = 'success';
 
-    if (isError) {
-        status = 'error';
-        statusMessage = `Webhook received with error: ${errorMessage}`;
-    } else if (isSuccess) {
-        status = 'success';
-        statusMessage = 'Webhook payload with balance successfully stored.';
-    }
-    
-    const dataToUpdate: any = {
+    const dataToUpdate = {
         responseBody: payload,
         updatedAt: FieldValue.serverTimestamp(),
         status: status,
-        message: statusMessage,
+        message: isError ? `Webhook received with error: ${errorMessage}` : 'Webhook payload successfully stored.',
         provider: "V8DIGITAL",
-        v8Provider: v8Partner,
+        v8Provider: payload.provider || 'qi',
     };
     
-    // Write the updated response data
+    // 3. Update the webhook response document. This does NOT include `batchId`.
     await docRef.set(dataToUpdate, { merge: true });
+    console.log(`Payload stored/updated in Firestore for ID: ${consultationId}. Status: ${status}.`);
 
-    console.log(`Payload stored in Firestore with ID: ${consultationId}. Status: ${status}. Provider: V8DIGITAL (${v8Partner})`);
-    
-    const batchId = existingData?.batchId;
-    
-    // If a batchId was found, update the batch progress
+    // 4. If a batchId was found in the original document, update the batch progress in a transaction.
     if (batchId) {
         const batchRef = firestore.collection('batches').doc(batchId);
         try {
@@ -86,8 +81,7 @@ export async function POST(request: NextRequest) {
                     return;
                 }
 
-                const updates: any = { };
-
+                const updates: any = {};
                 if (batchData.status === 'pending') {
                     updates.status = 'processing';
                     updates.message = 'Processamento iniciado.';
@@ -95,12 +89,11 @@ export async function POST(request: NextRequest) {
                 
                 updates.processedCpfs = FieldValue.increment(1);
                 transaction.update(batchRef, updates);
-
-                // Check for completion after incrementing
+                
                 const newProcessedCount = (batchData.processedCpfs || 0) + 1;
                 if (newProcessedCount >= batchData.totalCpfs) {
                      console.log(`[Batch ${batchId}] Final CPF received. Marking as complete.`);
-                     const finalUpdates: any = { 
+                     const finalUpdates = { 
                         status: 'completed',
                         message: 'Processamento concluído via webhooks.',
                         completedAt: FieldValue.serverTimestamp()
@@ -108,11 +101,13 @@ export async function POST(request: NextRequest) {
                      transaction.update(batchRef, finalUpdates);
                 }
             });
-             console.log(`[Batch ${batchId}] Progress transaction completed successfully.`);
+            console.log(`[Batch ${batchId}] Progress transaction completed successfully.`);
         } catch (e) {
             console.error(`[Batch ${batchId}] Failed to update batch progress transaction: `, e);
         }
     }
+    
+    // --- END: NEW ROBUST LOGIC ---
 
     return NextResponse.json({ 
         status: 'success', 
