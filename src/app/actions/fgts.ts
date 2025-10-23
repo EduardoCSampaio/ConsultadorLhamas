@@ -73,7 +73,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       if (tokenError) {
         return { status: 'error', stepIndex: 0, message: tokenError };
       }
-      authToken = token;
+      authToken = token!;
   }
 
   // Use the unique consultationId as the document ID
