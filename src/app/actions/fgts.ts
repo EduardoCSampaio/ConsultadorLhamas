@@ -16,7 +16,7 @@ const actionSchema = z.object({
   provider: z.enum(['qi', 'cartos', 'bms']),
   userId: z.string(), 
   userEmail: z.string(),
-  consultationId: z.string(),
+  balanceId: z.string(), // Changed from consultationId to balanceId
   batchId: z.string(),
 });
 
@@ -42,15 +42,16 @@ export type FgtsBalance = {
 
 // Helper function to construct the webhook URL
 function getWebhookUrl(): string {
-    const isProduction = process.env.VERCEL_ENV === 'production';
+    const vercelEnv = process.env.VERCEL_ENV;
     const vercelUrl = process.env.NEXT_PUBLIC_VERCEL_URL;
 
-    if (isProduction && vercelUrl) {
+    if (vercelEnv === 'production' && vercelUrl) {
         return `https://${vercelUrl}/api/webhook/balance`;
     }
     
-    // Fallback for local development or non-Vercel environments
-    return 'http://localhost:9002/api/webhook/balance';
+    // Fallback for local development or other environments
+    // Ensure you have a tunnel like ngrok if testing webhooks locally
+    return process.env.LOCAL_WEBHOOK_URL || 'http://localhost:9002/api/webhook/balance';
 }
 
 
@@ -61,7 +62,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
     return { status: 'error', stepIndex: 0, message: 'Dados de entrada inválidos.' };
   }
   
-  const { documentNumber, userId, userEmail, provider, consultationId, batchId } = validation.data;
+  const { documentNumber, userId, userEmail, provider, balanceId, batchId } = validation.data;
   let authToken = validation.data.token;
   
 
@@ -78,18 +79,18 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       authToken = token!;
   }
 
-  // Use the unique consultationId as the document ID
-  const webhookResponseRef = firestore.collection('webhookResponses').doc(consultationId);
+  // Use the unique balanceId as the document ID
+  const webhookResponseRef = firestore.collection('webhookResponses').doc(balanceId);
   
   const initialWebhookData = {
-      consultationId: consultationId,
+      balanceId: balanceId,
       userId: userId,
       status: 'pending_webhook',
       provider: 'V8DIGITAL',
       v8Provider: provider,
       id: documentNumber, // Keep the CPF here for reference
       createdAt: FieldValue.serverTimestamp(),
-      batchId: batchId, // Salva o ID do lote no documento de resposta
+      batchId: batchId, 
   };
   
   await webhookResponseRef.set(initialWebhookData, { merge: true });
@@ -100,13 +101,12 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   const requestBody = { 
       documentNumber, 
       provider,
-      webhookUrl: getWebhookUrl(), // Dynamically add the webhook URL
-      consultationId // Pass the unique ID to the API
+      webhookUrl: getWebhookUrl(),
+      balanceId // Pass the unique ID to the API
   };
 
   try {
-    // Log activity is handled in processarLoteFgts to avoid one log per CPF in a batch
-    if (batchId === `manual-${consultationId}`) {
+    if (batchId.startsWith('manual-')) {
         await logActivity({
             userId: userId,
             action: `Consulta FGTS - V8`,
@@ -116,7 +116,6 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
         });
     }
 
-    // Fire-and-forget the consultation request
     fetch(API_URL_CONSULTA, {
       method: 'POST',
       headers: {
@@ -125,7 +124,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       },
       body: JSON.stringify(requestBody),
     }).catch(fetchError => {
-        console.error(`[V8 BATCH] Failed to send request for consultation ${consultationId}:`, fetchError);
+        console.error(`[V8 BATCH] Failed to send request for balanceId ${balanceId}:`, fetchError);
         webhookResponseRef.set({
             status: 'error',
             message: `Falha ao enviar a requisição para a API V8: ${fetchError.message}`,
@@ -133,7 +132,6 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
         }, { merge: true });
     });
     
-    // Always return success immediately, as the actual result comes via webhook
     return { 
         status: 'success', 
         stepIndex: 1, 
@@ -153,21 +151,19 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   }
 }
 
-async function waitForV8Response(consultationId: string, timeout = 7000): Promise<{ balance: number, v8Provider?: 'qi' | 'cartos' | 'bms' } | null> {
-    const docRef = firestore.collection('webhookResponses').doc(consultationId);
+async function waitForV8Response(balanceId: string, timeout = 7000): Promise<{ balance: number, v8Provider?: 'qi' | 'cartos' | 'bms' } | null> {
+    const docRef = firestore.collection('webhookResponses').doc(balanceId);
 
     return new Promise((resolve) => {
         const unsubscribe = docRef.onSnapshot((doc) => {
             if (doc.exists) {
                 const data = doc.data();
-                // Check for success status and a positive balance
                 if (data?.status === 'success' && data.responseBody?.balance > 0) {
                     unsubscribe();
                     resolve({ 
                         balance: data.responseBody.balance,
                         v8Provider: data.v8Provider
                     });
-                // Also resolve if there is an error to stop waiting
                 } else if (data?.status === 'error' || (data?.status === 'success' && data.responseBody?.balance === 0)) {
                     unsubscribe();
                     resolve(null);
@@ -175,10 +171,9 @@ async function waitForV8Response(consultationId: string, timeout = 7000): Promis
             }
         });
         
-        // Timeout to stop listening after a while
         setTimeout(() => {
             unsubscribe();
-            resolve(null); // Resolve with null if no response within timeout
+            resolve(null); 
         }, timeout);
     });
 }
@@ -201,13 +196,12 @@ export async function consultarSaldoManual(input: z.infer<typeof manualActionSch
     const finalBalances: FgtsBalance[] = [];
     const promises: Promise<any>[] = [];
 
-    // --- Facta Call (Synchronous) ---
     if (providers.includes('facta')) {
         const factaPromise = new Promise(async (resolve) => {
             const { token, error: tokenError } = await getFactaAuthToken(user.facta_username, user.facta_password);
             if (tokenError || !token) {
                 console.error("[Manual FGTS] Facta auth error:", tokenError);
-                resolve(null); // Don't add to balances
+                resolve(null);
                 return;
             }
             const factaResult = await consultarSaldoFgtsFacta({cpf, userId, token });
@@ -219,14 +213,13 @@ export async function consultarSaldoManual(input: z.infer<typeof manualActionSch
         promises.push(factaPromise);
     }
     
-    // --- V8 Call (Simulated Synchronous) ---
     if (providers.includes('v8') && v8Provider) {
         const { credentials, error: credError } = await getUserCredentials(userId);
         if (credentials) {
             const { token: v8Token, error: v8TokenError } = await getAuthToken(credentials);
             if (v8Token) {
                 const v8Promise = new Promise(async (resolve) => {
-                    const consultationId = `manual-${Date.now()}-${cpf}`;
+                    const balanceId = `manual-${Date.now()}-${cpf}`;
                     
                     await consultarSaldoFgts({ 
                         documentNumber: cpf, 
@@ -234,11 +227,11 @@ export async function consultarSaldoManual(input: z.infer<typeof manualActionSch
                         userEmail, 
                         provider: v8Provider, 
                         token: v8Token, 
-                        consultationId,
-                        batchId: `manual-${consultationId}` // Pass a dummy batchId for consistency
+                        balanceId,
+                        batchId: `manual-${balanceId}`
                     });
 
-                    const v8result = await waitForV8Response(consultationId); // Wait for webhook
+                    const v8result = await waitForV8Response(balanceId);
                     if (v8result && v8result.balance > 0) {
                         finalBalances.push({ 
                             provider: 'V8DIGITAL', 

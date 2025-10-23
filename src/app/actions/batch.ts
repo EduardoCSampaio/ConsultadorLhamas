@@ -10,6 +10,7 @@ import { firestore } from '@/firebase/server-init';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { type ApiCredentials, logActivity } from './users';
 import { getAuthToken, getUserCredentials } from './clt';
+import { randomUUID } from 'crypto';
 
 
 type Provider = "v8" | "facta" | "c6";
@@ -187,7 +188,6 @@ async function processFactaBatchInBackground(batchId: string) {
         
         const batchData = batchDoc.data() as BatchJob;
         
-        // Don't re-run if already completed or errored and fully processed
         if (batchData.status === 'completed' || (batchData.status === 'error' && batchData.processedCpfs === batchData.totalCpfs)) {
              console.log(`[Batch ${batchId}] Batch already finished with status: ${batchData.status}.`);
              return;
@@ -200,7 +200,6 @@ async function processFactaBatchInBackground(batchId: string) {
         
         const currentProcessedCount = processedCpfsSnapshot.docs.length;
         
-        // Start processing if not already processing
         if (batchData.status === 'pending') {
             await batchRef.update({ status: 'processing', message: 'Iniciando processamento...', processedCpfs: currentProcessedCount });
         }
@@ -242,7 +241,7 @@ async function processFactaBatchInBackground(batchId: string) {
             } catch (cpfError) {
                 const message = cpfError instanceof Error ? cpfError.message : "Erro desconhecido ao processar CPF.";
                 await docRef.set({ status: 'error', message, batchId: batchId, provider: 'facta' }, { merge: true });
-                await batchRef.update({ processedCpfs: FieldValue.increment(1) }); // Increment even on error
+                await batchRef.update({ processedCpfs: FieldValue.increment(1) });
             }
         });
 
@@ -312,7 +311,6 @@ export async function processarLoteFgts(input: z.infer<typeof processFgtsActionS
     return { status: 'error', message };
   }
   
-  // Do not await this, let it run in the background
   if (provider === 'v8') {
     processV8BatchInBackground(batchId);
   } else if (provider === 'facta') {
@@ -452,7 +450,6 @@ export async function processarLoteClt(input: z.infer<typeof processCltActionSch
     batchData.cpfsData = cpfsData;
     batchData.status = 'pending';
   } else {
-    // For other providers, we mark as error for now as they are not implemented.
      batchData.status = 'error';
      batchData.message = 'Processamento de lote CLT ainda não implementado para este provedor.';
   }
@@ -522,16 +519,15 @@ async function processV8BatchInBackground(batchId: string) {
         const { token: authToken, error: authError } = await getAuthToken(credentials);
         if (authError || !authToken) throw new Error(authError || "Failed to get V8 auth token.");
         
-        // Don't await these, let them run in parallel
         for (const cpf of cpfs) {
-            const consultationId = `${batchId}-${cpf}`;
+            const balanceId = randomUUID();
              consultarSaldoV8({ 
                 documentNumber: cpf, 
                 userId, 
                 userEmail,
                 token: authToken, 
                 provider: v8Provider,
-                consultationId,
+                balanceId,
                 batchId
             });
         }
@@ -650,7 +646,6 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
 
     let results: any[] = [];
     
-    // Handle C6 batch results
     if (mainProvider === 'c6') {
         const batchDoc = await firestore.collection('batches').doc(batchId).get();
         if (batchDoc.exists) {
@@ -685,28 +680,24 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
             }
         }
     } else {
-        // Handle V8 and Facta results
+        const webhookDocs = await firestore.collection('webhookResponses').where('batchId', '==', batchId).get();
+        const responsesByCpf: Record<string, any> = {};
+
+        webhookDocs.forEach(doc => {
+            const data = doc.data();
+            const cpf = data.id; // Assuming `id` field in webhookResponses is the CPF
+            if (cpf) {
+                responsesByCpf[cpf] = data;
+            }
+        });
+
         for (const cpf of cpfs) {
-            try {
-                let docId = '';
-                if (mainProvider === 'v8digital') {
-                    docId = `${batchId}-${cpf}`;
-                } else if (mainProvider === 'facta') {
-                    docId = `facta-${cpf}`;
-                } else {
-                     results.push({ CPF: cpf, Saldo: '0.00', Mensagem: 'Provedor desconhecido no relatório.' });
-                     continue;
-                }
-
-                const docRef = firestore.collection('webhookResponses').doc(docId);
-                const docSnap = await docRef.get();
-
-                if (docSnap.exists) {
-                    const data = docSnap.data();
-                    const responseBody = data?.responseBody;
+            const docData = responsesByCpf[cpf];
+            if (docData) {
+                 const responseBody = docData?.responseBody;
                     
-                    const providerError = responseBody?.errorMessage || responseBody?.error || data?.message;
-                    const isSuccess = data?.status === 'success' && responseBody;
+                    const providerError = responseBody?.errorMessage || responseBody?.error || docData?.message;
+                    const isSuccess = docData?.status === 'success' && responseBody;
 
                     if (isSuccess) {
                         if (mainProvider === 'v8digital') {
@@ -735,12 +726,8 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
                     } else {
                         results.push({ CPF: cpf, Saldo: '0.00', 'Saldo Total': '0.00', Mensagem: providerError || "Erro no processamento." });
                     }
-                } else {
-                    results.push({ CPF: cpf, Saldo: '0.00', 'Saldo Total': '0.00', Mensagem: 'Nenhum resultado encontrado.' });
-                }
-            } catch (error) {
-                 const message = error instanceof Error ? error.message : 'Erro interno ao consultar resultado.';
-                 results.push({ CPF: cpf, Saldo: '0.00', 'Saldo Total': '0.00', Mensagem: message });
+            } else {
+                results.push({ CPF: cpf, Saldo: '0.00', 'Saldo Total': '0.00', Mensagem: 'Nenhum resultado encontrado.' });
             }
         }
     }

@@ -4,10 +4,6 @@ import { firestore } from '@/firebase/server-init';
 import { FieldValue } from 'firebase-admin/firestore';
 
 
-/**
- * Handles GET requests to the webhook URL for validation purposes.
- * Some APIs will send a GET request to verify the endpoint is active.
- */
 export async function GET(request: NextRequest) {
   return NextResponse.json({
     status: 'success',
@@ -16,11 +12,6 @@ export async function GET(request: NextRequest) {
 }
 
 
-/**
- * Handles POST requests from the V8 API balance webhook.
- * This endpoint now uses the Admin SDK to write directly to Firestore,
- * bypassing client-side security rules and not interfering with user auth sessions.
- */
 export async function POST(request: NextRequest) {
   try {
     const payload = await request.json();
@@ -28,32 +19,34 @@ export async function POST(request: NextRequest) {
     console.log("Headers:", Object.fromEntries(request.headers));
     console.log("Body (Payload):", JSON.stringify(payload, null, 2));
 
-    const consultationId = payload.consultationId;
+    const balanceId = payload.balanceId;
 
-    if (!consultationId) {
-        if (!payload.documentNumber && !payload.id) {
-            console.log("Webhook validation request received (empty or invalid body). Responding 200 OK.");
-            return NextResponse.json({
-                status: 'success',
-                message: 'Webhook test successful. Endpoint is active.',
-            }, { status: 200 });
-        }
-        
-        console.error("Webhook payload missing 'consultationId'. Cannot process.", payload);
-        return NextResponse.json({
-            status: 'error',
-            message: "Webhook payload is missing the required 'consultationId' field.",
-        }, { status: 400 });
+    if (!balanceId) {
+      if (!payload.documentNumber && !payload.id) {
+          console.log("Webhook validation request received (empty or invalid body). Responding 200 OK.");
+          return NextResponse.json({
+              status: 'success',
+              message: 'Webhook test successful. Endpoint is active.',
+          }, { status: 200 });
+      }
+      
+      console.error("Webhook payload missing 'balanceId'. Cannot process.", payload);
+      return NextResponse.json({
+          status: 'error',
+          message: "Webhook payload is missing the required 'balanceId' field.",
+      }, { status: 400 });
     }
     
-    const docRef = firestore.collection('webhookResponses').doc(consultationId.toString());
+    const docRef = firestore.collection('webhookResponses').doc(balanceId.toString());
 
-    // 1. First, get the existing document to safely retrieve the batchId.
     const docSnapshot = await docRef.get();
+    if (!docSnapshot.exists) {
+        console.error(`Webhook received for unknown balanceId: ${balanceId}. Storing anyway.`);
+        // Even if we don't know this ID, we should store the response for debugging.
+    }
     const existingData = docSnapshot.data();
     const batchId = existingData?.batchId;
-
-    // 2. Prepare the update data for the webhook response document itself.
+    
     const errorMessage = payload.errorMessage || payload.error || payload.message;
     const isError = !!errorMessage;
     const isSuccess = payload.balance !== undefined && payload.balance !== null;
@@ -69,12 +62,10 @@ export async function POST(request: NextRequest) {
         message: isError ? `Webhook received with error: ${errorMessage}` : 'Webhook payload successfully stored.',
     };
     
-    // 3. Update the webhook response document. 
-    await docRef.update(dataToUpdate);
-    console.log(`Payload stored/updated in Firestore for ID: ${consultationId}. Status: ${status}.`);
+    await docRef.set(dataToUpdate, { merge: true });
+    console.log(`Payload stored/updated in Firestore for ID: ${balanceId}. Status: ${status}.`);
 
-    // 4. If a batchId was found, update the batch progress in a transaction.
-    if (batchId && batchId.startsWith('batch-')) { // Check if it's a real batch
+    if (batchId && batchId.startsWith('batch-')) {
         const batchRef = firestore.collection('batches').doc(batchId);
         try {
             await firestore.runTransaction(async (transaction) => {
