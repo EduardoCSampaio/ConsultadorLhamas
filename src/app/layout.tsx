@@ -11,7 +11,7 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'Beleza Integrada',
+  title: 'Lhamascred',
   description: 'Gestão de crédito e finanças, simplificada.',
   icons: {
     icon: '/favicon.ico',
