@@ -17,6 +17,7 @@ const actionSchema = z.object({
   userId: z.string(), 
   userEmail: z.string(),
   consultationId: z.string(),
+  batchId: z.string().optional(), // Make batchId optional for manual calls
 });
 
 const manualActionSchema = z.object({
@@ -42,8 +43,12 @@ export type FgtsBalance = {
 // Helper function to construct the webhook URL
 function getWebhookUrl(): string {
     const vercelUrl = process.env.NEXT_PUBLIC_VERCEL_URL;
-    const baseUrl = vercelUrl ? `https://${vercelUrl}` : 'http://localhost:9002';
-    return `${baseUrl}/api/webhook/balance`;
+    // Check if running in production on Vercel
+    if (vercelUrl) {
+      return `https://${vercelUrl}/api/webhook/balance`;
+    }
+    // Fallback to localhost for local development
+    return `http://localhost:9002/api/webhook/balance`;
 }
 
 
@@ -54,7 +59,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
     return { status: 'error', stepIndex: 0, message: 'Dados de entrada inválidos.' };
   }
   
-  const { documentNumber, userId, userEmail, provider, consultationId } = validation.data;
+  const { documentNumber, userId, userEmail, provider, consultationId, batchId } = validation.data;
   let authToken = validation.data.token;
   
 
@@ -74,7 +79,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   // Use the unique consultationId as the document ID
   const webhookResponseRef = firestore.collection('webhookResponses').doc(consultationId);
   await webhookResponseRef.set({
-      batchId: consultationId.split('-')[1], // Extract batchId from consultationId
+      batchId: batchId,
       consultationId: consultationId,
       userId: userId,
       status: 'pending_webhook',
@@ -96,7 +101,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
 
   try {
     // Log activity only for manual queries, batch queries are logged once per file.
-    if (!consultationId.startsWith('batch-')) {
+    if (!batchId) {
       await logActivity({
           userId: userId,
           action: `Consulta FGTS - V8`,
