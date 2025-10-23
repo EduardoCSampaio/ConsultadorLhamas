@@ -498,14 +498,15 @@ export async function processarLoteClt(input: z.infer<typeof processCltActionSch
 
 async function processV8BatchInBackground(batchId: string) {
     console.log(`[Batch ${batchId}] Starting V8 background processing...`);
-    let batchData: BatchJob;
     const batchRef = firestore.collection('batches').doc(batchId);
 
     try {
+        await batchRef.update({ status: 'processing', message: 'Iniciando processamento...' });
+
         const batchDoc = await batchRef.get();
         if (!batchDoc.exists) throw new Error(`Lote ${batchId} não encontrado.`);
 
-        batchData = batchDoc.data() as BatchJob;
+        const batchData = batchDoc.data() as BatchJob;
         
         const { cpfs, userId, userEmail, v8Provider } = batchData;
         
@@ -533,7 +534,6 @@ async function processV8BatchInBackground(batchId: string) {
             });
         }
         
-        // Don't update status here, let the webhook do it on the first response
         console.log(`[Batch ${batchId}] All ${cpfs.length} requests sent. Waiting for webhooks.`);
 
     } catch (error) {
@@ -905,6 +905,9 @@ async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiC
 
     
 
+
+
+    
 
 
     
