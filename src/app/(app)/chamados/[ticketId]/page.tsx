@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Send, ArrowLeft, AlertCircle } from 'lucide-react';
 import { addMessageToTicket, markTicketAsRead, updateTicketStatus, type Ticket, type TicketMessage } from '@/app/actions/tickets';
 import { useUser, useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase";
-import { doc, collection, orderBy, query, getDoc } from 'firebase/firestore';
+import { doc, collection, orderBy, query, getDoc, type Timestamp } from 'firebase/firestore';
 import type { UserProfile } from '@/app/actions/users';
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -349,4 +349,3 @@ export default function ChamadoDetalhePage() {
     );
 }
 
-    
