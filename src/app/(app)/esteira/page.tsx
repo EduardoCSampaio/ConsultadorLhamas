@@ -207,7 +207,7 @@ export default function EsteiraPage() {
                                 {(batch.status === 'completed' || batch.status === 'error') && batch.completedAt && (
                                         <div className="text-sm text-muted-foreground flex items-center gap-1.5">
                                         <CheckCircle className="h-3.5 w-3.5"/>
-                                        Concluído em: {formatDuration(new Date(batch.completedAt).getTime() - new Date(batch.createdAt).getTime())} - {new Date(batch.completedAt).toLocaleDateString('pt-BR')} às {new Date(batch.completedAt).toLocaleTimeString('pt-BR')}
+                                        Concluído em: {formatDuration(new Date(batch.completedAt).getTime() - new Date(batch.createdAt).getTime())}
                                     </div>
                                 )}
                             </div>

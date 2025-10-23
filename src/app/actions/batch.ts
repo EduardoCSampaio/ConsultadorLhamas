@@ -181,14 +181,18 @@ async function processFactaBatchInBackground(batchId: string) {
     const batchRef = firestore.collection('batches').doc(batchId);
     const CHUNK_SIZE = 25; 
 
-    let batchData: BatchJob;
-
     try {
         const batchDoc = await batchRef.get();
         if (!batchDoc.exists) throw new Error(`Lote ${batchId} não encontrado.`);
         
-        batchData = batchDoc.data() as BatchJob;
+        const batchData = batchDoc.data() as BatchJob;
         
+        // Don't re-run if already completed or errored and fully processed
+        if (batchData.status === 'completed' || (batchData.status === 'error' && batchData.processedCpfs === batchData.totalCpfs)) {
+             console.log(`[Batch ${batchId}] Batch already finished with status: ${batchData.status}.`);
+             return;
+        }
+
         const processedCpfsSnapshot = await firestore.collection('webhookResponses')
             .where('batchId', '==', batchId)
             .get();
@@ -196,12 +200,7 @@ async function processFactaBatchInBackground(batchId: string) {
         
         const currentProcessedCount = processedCpfIds.size;
         
-        if (batchData.status === 'completed' || (batchData.status === 'error' && currentProcessedCount === batchData.totalCpfs)) {
-            console.log(`[Batch ${batchId}] Batch already finished with status: ${batchData.status}.`);
-            return;
-        }
-
-        await batchRef.update({ status: 'processing', message: 'Iniciando processamento...' });
+        await batchRef.update({ status: 'processing', message: 'Iniciando processamento...', processedCpfs: currentProcessedCount });
         
         const userDoc = await firestore.collection('users').doc(batchData.userId).get();
         if (!userDoc.exists) throw new Error("Usuário do lote não encontrado.");
@@ -212,13 +211,7 @@ async function processFactaBatchInBackground(batchId: string) {
         const cpfsToProcess = batchData.cpfs.filter(cpf => !processedCpfIds.has(cpf)).slice(0, CHUNK_SIZE);
 
         if (cpfsToProcess.length === 0) {
-            const finalStatus = batchData.status === 'error' ? 'error' : 'completed';
-            const finalMessage = finalStatus === 'completed' 
-                ? "Todos os CPFs foram processados." 
-                : batchData.message || 'Lote processado com alguns erros.';
-
-            await batchRef.update({ status: finalStatus, processedCpfs: batchData.totalCpfs, message: finalMessage, completedAt: FieldValue.serverTimestamp() });
-            
+            await batchRef.update({ status: 'completed', processedCpfs: batchData.totalCpfs, message: "Todos os CPFs foram processados.", completedAt: FieldValue.serverTimestamp() });
             console.log(`[Batch ${batchId}] All CPFs processed. Batch completed.`);
             return;
         }
@@ -254,8 +247,7 @@ async function processFactaBatchInBackground(batchId: string) {
             console.log(`[Batch ${batchId}] Chunk processed. Triggering next one.`);
             await processFactaBatchInBackground(batchId); // Recursive call
         } else {
-             const finalStatus = batchData.status === 'error' ? 'error' : 'completed';
-             await batchRef.update({ status: finalStatus, message: "Todos os CPFs foram processados.", completedAt: FieldValue.serverTimestamp() });
+             await batchRef.update({ status: 'completed', message: "Todos os CPFs foram processados.", completedAt: FieldValue.serverTimestamp() });
             console.log(`[Batch ${batchId}] Final chunk processed. Batch completed.`);
         }
 
