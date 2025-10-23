@@ -17,7 +17,7 @@ const actionSchema = z.object({
   userId: z.string(), 
   userEmail: z.string(),
   consultationId: z.string(),
-  batchId: z.string(), // Tornando obrigatório para garantir a rastreabilidade
+  batchId: z.string(),
 });
 
 const manualActionSchema = z.object({
@@ -42,12 +42,11 @@ export type FgtsBalance = {
 
 // Helper function to construct the webhook URL
 function getWebhookUrl(): string {
-    const vercelUrl = process.env.NEXT_PUBLIC_VERCEL_URL;
-    if (vercelUrl) {
-        // Ensure it starts with https
-        return `https://${vercelUrl}/api/webhook/balance`;
+    if (process.env.NEXT_PUBLIC_VERCEL_URL) {
+        // Production environment on Vercel
+        return `https://${process.env.NEXT_PUBLIC_VERCEL_URL}/api/webhook/balance`;
     }
-    // Fallback to localhost for local development
+    // Fallback for local development
     return 'http://localhost:9002/api/webhook/balance';
 }
 

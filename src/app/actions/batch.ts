@@ -522,6 +522,7 @@ async function processV8BatchInBackground(batchId: string) {
         const { token: authToken, error: authError } = await getAuthToken(credentials);
         if (authError || !authToken) throw new Error(authError || "Failed to get V8 auth token.");
         
+        // Don't await these, let them run in parallel
         for (const cpf of cpfs) {
             const consultationId = `${batchId}-${cpf}`;
              consultarSaldoV8({ 
@@ -530,7 +531,8 @@ async function processV8BatchInBackground(batchId: string) {
                 userEmail,
                 token: authToken, 
                 provider: v8Provider,
-                consultationId
+                consultationId,
+                batchId
             });
         }
         
@@ -894,20 +896,3 @@ async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiC
         return { credentials: null, error: message };
     }
 }
-    
-
-    
-
-
-
-
-
-
-    
-
-
-
-    
-
-
-    
