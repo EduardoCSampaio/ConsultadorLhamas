@@ -60,7 +60,9 @@ export default function EsteiraPage() {
             toast({ variant: 'destructive', title: 'Erro ao buscar lotes', description: fetchError });
             setBatches([]);
         } else {
-            setBatches(fetchedBatches || []);
+            // Sort batches on the client-side
+            const sortedBatches = (fetchedBatches || []).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            setBatches(sortedBatches);
         }
         if(showLoading) setIsLoading(false);
     }, [toast, user]);

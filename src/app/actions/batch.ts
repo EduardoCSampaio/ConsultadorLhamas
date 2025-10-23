@@ -138,7 +138,7 @@ export async function getBatches(input: { userId: string }): Promise<{ status: '
             query = query.where('userId', '==', input.userId);
         }
         
-        const batchesSnapshot = await query.orderBy('createdAt', 'desc').get();
+        const batchesSnapshot = await query.get();
 
         if (batchesSnapshot.empty) {
             return { status: 'success', batches: [] };
@@ -822,6 +822,7 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
     
 
     
+
 
 
 
