@@ -39,7 +39,8 @@ export async function POST(request: NextRequest) {
     // Use the unique consultationId as the document ID.
     const docRef = firestore.collection('webhookResponses').doc(consultationId.toString());
 
-    const batchId = consultationId.startsWith('batch-') ? consultationId.split('-')[1] : undefined;
+    // Correctly extract the batchId from the consultationId (e.g., 'batch-fgts-V8-12345-abcde-00011122233')
+    const batchId = consultationId.startsWith('batch-') ? consultationId.split('-').slice(0, 5).join('-') : undefined;
 
     const v8Partner = payload.provider || 'qi';
     const errorMessage = payload.errorMessage || payload.error || payload.message;
@@ -145,7 +146,3 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 }
-
-  
-
-    
