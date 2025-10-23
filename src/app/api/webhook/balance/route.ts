@@ -6,6 +6,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 
 /**
  * Handles GET requests to the webhook URL for validation purposes.
+ * Some APIs will send a GET request to verify the endpoint is active.
  */
 export async function GET(request: NextRequest) {
   return NextResponse.json({
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
                     return;
                 }
                 const batchData = batchDoc.data()!;
-                if (batchData.status === 'completed' || batchData.status === 'error') {
+                if (batchData.status === 'completed' || (batchData.status === 'error' && batchData.processedCpfs >= batchData.totalCpfs)) {
                     console.log(`[Batch ${batchId}] Already finished. Ignoring webhook update.`);
                     return;
                 }
