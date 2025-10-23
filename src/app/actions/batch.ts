@@ -139,12 +139,8 @@ export async function getBatches(input: { userId: string }): Promise<{ status: '
             return { status: 'error', error: "Usuário não encontrado." };
         }
         
-        const userData = userDoc.data();
-        let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> = firestore.collection('batches');
-        
-        if (userData?.role !== 'super_admin') {
-            query = query.where('userId', '==', input.userId);
-        }
+        // Always filter by the current user's ID. No special case for super_admin.
+        let query = firestore.collection('batches').where('userId', '==', input.userId);
         
         const batchesSnapshot = await query.get();
 
@@ -905,3 +901,4 @@ async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiC
 
 
     
+
