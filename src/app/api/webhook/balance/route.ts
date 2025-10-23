@@ -19,54 +19,35 @@ export async function POST(request: NextRequest) {
     console.log("Body (Payload):", JSON.stringify(payload, null, 2));
 
     const balanceId = payload.balanceId;
-    const documentNumber = payload.documentNumber;
 
-    if (!balanceId && !documentNumber) {
-        console.log("Webhook validation request received (empty or invalid body). Responding 200 OK.");
-        return NextResponse.json({
-            status: 'success',
-            message: 'Webhook test successful. Endpoint is active.',
-        }, { status: 200 });
-    }
-
-    let docRef: FirebaseFirestore.DocumentReference | null = null;
-    let docSnapshot: FirebaseFirestore.DocumentSnapshot | null = null;
-    let foundBy: 'balanceId' | 'query' | null = null;
-
-    if (balanceId) {
-        docRef = firestore.collection('webhookResponses').doc(balanceId.toString());
-        docSnapshot = await docRef.get();
-        if (docSnapshot.exists) {
-            foundBy = 'balanceId';
+    // A V8 sometimes sends a validation request with an empty body.
+    if (!balanceId) {
+        if (Object.keys(payload).length === 0) {
+            console.log("Webhook validation request received (empty body). Responding 200 OK.");
+            return NextResponse.json({ status: 'success', message: 'Webhook test successful.'}, { status: 200 });
         }
-    }
-    
-    // Fallback to querying by documentNumber if not found by balanceId
-    if (!docSnapshot || !docSnapshot.exists) {
-        console.warn(`Webhook doc not found for balanceId: ${balanceId}. Falling back to query.`);
-        const querySnapshot = await firestore.collection('webhookResponses')
-            .where('documentNumber', '==', documentNumber)
-            .orderBy('createdAt', 'desc')
-            .limit(1)
-            .get();
-        
-        if (!querySnapshot.empty) {
-            docSnapshot = querySnapshot.docs[0];
-            docRef = docSnapshot.ref;
-            foundBy = 'query';
-        }
+        // If it's not a validation request but is missing the ID, it's an error.
+        console.error("Webhook payload missing 'balanceId'. Cannot process.", payload);
+        return NextResponse.json({ status: 'error', message: "Webhook payload missing 'balanceId'."}, { status: 400 });
     }
 
-    if (!docRef || !docSnapshot || !docSnapshot.exists) {
-        console.error(`Webhook received for unknown identifier. Payload:`, payload);
-        // We can't process this webhook, but we don't want the sender to retry.
-        return NextResponse.json({
+    const docRef = firestore.collection('webhookResponses').doc(balanceId.toString());
+    const docSnapshot = await docRef.get();
+
+    if (!docSnapshot.exists) {
+        console.error(`Webhook received for unknown balanceId: ${balanceId}. Storing anyway.`);
+        // Even if we don't know this balanceId, we store it for debugging.
+        // We can't update a batch, but at least we log the data.
+        await docRef.set({
             status: 'error',
-            message: 'No corresponding document found for this webhook response.',
-        }, { status: 404 });
+            message: 'Received webhook for an unknown balanceId.',
+            responseBody: payload,
+            createdAt: FieldValue.serverTimestamp(),
+        });
+        return NextResponse.json({ status: 'success', message: 'Webhook for unknown ID stored.' }, { status: 200 });
     }
 
-    console.log(`Found document ${docRef.id} by ${foundBy}.`);
+    console.log(`Found document ${docRef.id}. Processing...`);
     
     const existingData = docSnapshot.data();
     const batchId = existingData?.batchId;
@@ -86,8 +67,8 @@ export async function POST(request: NextRequest) {
         message: isError ? `Webhook received with error: ${errorMessage}` : 'Webhook payload successfully stored.',
     };
     
-    await docRef.set(dataToUpdate, { merge: true });
-    console.log(`Payload stored/updated in Firestore for ID: ${docRef.id}. Status: ${status}.`);
+    await docRef.update(dataToUpdate);
+    console.log(`Payload updated in Firestore for ID: ${docRef.id}. Status: ${status}.`);
 
     if (batchId && batchId.startsWith('batch-')) {
         const batchRef = firestore.collection('batches').doc(batchId);
