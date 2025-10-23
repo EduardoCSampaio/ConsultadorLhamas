@@ -136,8 +136,23 @@ export async function deleteBatch(input: z.infer<typeof deleteBatchSchema>): Pro
 export async function getBatches(input: { userId: string }): Promise<{ status: 'success' | 'error'; batches?: BatchJob[]; message?: string, error?: string }> {
     try {
         let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> = firestore.collection('batches');
+        const userDoc = await firestore.collection('users').doc(input.userId).get();
+        const userRole = userDoc.data()?.role;
 
-        query = query.where('userId', '==', input.userId);
+        if (userRole === 'user') {
+            query = query.where('userId', '==', input.userId);
+        } else if (userRole === 'manager') {
+            const teamId = userDoc.data()?.teamId;
+            if (!teamId) return { status: 'success', batches: [] };
+            const teamMembersSnapshot = await firestore.collection('users').where('teamId', '==', teamId).get();
+            const memberIds = teamMembersSnapshot.docs.map(doc => doc.id);
+            if (memberIds.length > 0) {
+                 query = query.where('userId', 'in', memberIds);
+            } else {
+                 return { status: 'success', batches: [] };
+            }
+        }
+        // Super admin sees all batches, so no filter is applied
         
         const batchesSnapshot = await query.get();
 
@@ -498,7 +513,7 @@ async function processV8BatchInBackground(batchId: string) {
     const batchRef = firestore.collection('batches').doc(batchId);
 
     try {
-        await batchRef.update({ status: 'processing', message: 'Iniciando processamento...' });
+        await batchRef.update({ status: 'processing', message: 'Enviando requisições para a API V8...' });
 
         const batchDoc = await batchRef.get();
         if (!batchDoc.exists) throw new Error(`Lote ${batchId} não encontrado.`);
@@ -571,16 +586,7 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
             .where('status', '==', 'success') 
             .get();
         
-        const successfullyProcessedCpfs = new Set(webhookResponsesSnapshot.docs.map(doc => {
-             const docId = doc.id;
-             if (originalBatchData.provider.toLowerCase() === 'facta') {
-                 return docId.replace('facta-', '');
-             }
-             if (originalBatchData.provider.toLowerCase() === 'v8digital') {
-                 return docId.split('-').pop();
-             }
-             return docId;
-        }));
+        const successfullyProcessedCpfs = new Set(webhookResponsesSnapshot.docs.map(doc => doc.data().documentNumber));
 
         const cpfsToReprocess = originalBatchData.cpfs.filter(cpf => !successfullyProcessedCpfs.has(cpf));
 
@@ -685,8 +691,10 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
 
         webhookDocs.forEach(doc => {
             const data = doc.data();
-            const cpf = data.id; // Assuming `id` field in webhookResponses is the CPF
+            const cpf = data.documentNumber; // Use documentNumber as the key
             if (cpf) {
+                // If a CPF has multiple entries, this will only keep the last one.
+                // You might need more sophisticated logic if multiple results per CPF are expected.
                 responsesByCpf[cpf] = data;
             }
         });

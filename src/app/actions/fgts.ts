@@ -8,6 +8,7 @@ import type { ApiCredentials } from './users';
 import { getFactaAuthToken, consultarSaldoFgtsFacta } from './facta';
 import { logActivity } from './users';
 import { getAuthToken, getUserCredentials } from './clt';
+import { randomUUID } from 'crypto';
 
 
 const actionSchema = z.object({
@@ -16,7 +17,7 @@ const actionSchema = z.object({
   provider: z.enum(['qi', 'cartos', 'bms']),
   userId: z.string(), 
   userEmail: z.string(),
-  balanceId: z.string(), // Changed from consultationId to balanceId
+  balanceId: z.string(),
   batchId: z.string(),
 });
 
@@ -88,7 +89,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       status: 'pending_webhook',
       provider: 'V8DIGITAL',
       v8Provider: provider,
-      id: documentNumber, // Keep the CPF here for reference
+      documentNumber: documentNumber, // Store the CPF here for easy lookup
       createdAt: FieldValue.serverTimestamp(),
       batchId: batchId, 
   };
@@ -219,7 +220,7 @@ export async function consultarSaldoManual(input: z.infer<typeof manualActionSch
             const { token: v8Token, error: v8TokenError } = await getAuthToken(credentials);
             if (v8Token) {
                 const v8Promise = new Promise(async (resolve) => {
-                    const balanceId = `manual-${Date.now()}-${cpf}`;
+                    const balanceId = randomUUID();
                     
                     await consultarSaldoFgts({ 
                         documentNumber: cpf, 
