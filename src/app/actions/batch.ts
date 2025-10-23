@@ -2,13 +2,14 @@
 'use server';
 
 import { z } from 'zod';
-import { consultarSaldoFgts as consultarSaldoV8, getAuthToken as getV8AuthToken } from './fgts';
+import { consultarSaldoFgts as consultarSaldoV8 } from './fgts';
 import { consultarSaldoFgtsFacta, getFactaAuthToken } from './facta';
 import { consultarLinkAutorizacaoC6, consultarOfertasCLTC6, verificarStatusAutorizacaoC6, type C6Offer } from './c6';
 import * as XLSX from 'xlsx';
 import { firestore } from '@/firebase/server-init';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { type ApiCredentials, logActivity } from './users';
+import { getAuthToken, getUserCredentials } from './clt';
 
 
 type Provider = "v8" | "facta" | "c6";
@@ -124,15 +125,14 @@ export async function deleteBatch(input: z.infer<typeof deleteBatchSchema>): Pro
 
 export async function getBatches(input: { userId: string }): Promise<{ status: 'success' | 'error'; batches?: BatchJob[]; message?: string, error?: string }> {
     try {
-        let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> = firestore.collection('batches');
-
         const userDoc = await firestore.collection('users').doc(input.userId).get();
         if (!userDoc.exists) {
             return { status: 'error', error: "Usuário não encontrado." };
         }
         
         const userRole = userDoc.data()?.role;
-
+        let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> = firestore.collection('batches');
+        
         // super_admin can see all batches, other users can only see their own.
         if (userRole !== 'super_admin') {
             query = query.where('userId', '==', input.userId);
@@ -165,6 +165,7 @@ export async function getBatches(input: { userId: string }): Promise<{ status: '
             };
         });
 
+        // Sorting is done on the client-side in esteira/page.tsx
         return { status: 'success', batches };
     } catch (error) {
         const message = error instanceof Error ? error.message : "Erro ao buscar lotes.";
@@ -202,17 +203,23 @@ async function processFactaBatchInBackground(batchId: string) {
         
         await batchRef.update({ status: 'processing', message: 'Iniciando processamento...', processedCpfs: currentProcessedCount });
         
-        const userDoc = await firestore.collection('users').doc(batchData.userId).get();
-        if (!userDoc.exists) throw new Error("Usuário do lote não encontrado.");
-        const userCredentials = userDoc.data() as ApiCredentials;
-        const { token, error: tokenError } = await getFactaAuthToken(userCredentials.facta_username, userCredentials.facta_password);
+        const { credentials, error: credError } = await getFactaUserCredentials(batchData.userId);
+        if (credError || !credentials) {
+             throw new Error(credError || `Credenciais da Facta não encontradas para o usuário ${batchData.userId}`);
+        }
+        
+        const { token, error: tokenError } = await getFactaAuthToken(credentials.facta_username, credentials.facta_password);
         if (tokenError || !token) throw new Error(tokenError || "Falha ao obter token da Facta.");
         
         const cpfsToProcess = batchData.cpfs.filter(cpf => !processedCpfIds.has(cpf)).slice(0, CHUNK_SIZE);
 
-        if (cpfsToProcess.length === 0) {
+        if (cpfsToProcess.length === 0 && currentProcessedCount >= batchData.totalCpfs) {
             await batchRef.update({ status: 'completed', processedCpfs: batchData.totalCpfs, message: "Todos os CPFs foram processados.", completedAt: FieldValue.serverTimestamp() });
             console.log(`[Batch ${batchId}] All CPFs processed. Batch completed.`);
+            return;
+        } else if (cpfsToProcess.length === 0) {
+            // This case might happen if there are pending webhooks. We'll let the periodic check handle it.
+            console.log(`[Batch ${batchId}] No new CPFs to process in this chunk, but batch not complete. Waiting...`);
             return;
         }
 
@@ -345,6 +352,11 @@ async function processC6BatchInBackground(batchId: string) {
             throw new Error(`Dados de CPFs não encontrados no lote ${batchId}.`);
         }
         await batchRef.update({ status: 'processing', message: 'Verificando status e buscando ofertas...' });
+        
+        const { credentials, error: credError } = await getC6UserCredentials(batchData.userId);
+        if (credError || !credentials) {
+            throw new Error(credError || `Credenciais do C6 não encontradas para o usuário ${batchData.userId}`);
+        }
 
         const processCpf = async (cpfData: CpfData): Promise<[string, { status: string; link?: string; message: string; offers?: C6Offer[] }]> => {
             try {
@@ -507,11 +519,12 @@ async function processV8BatchInBackground(batchId: string) {
             throw new Error("V8 sub-provider (qi, cartos, bms) is missing.");
         }
 
-        const userDoc = await firestore.collection('users').doc(userId).get();
-        if (!userDoc.exists) throw new Error(`User with ID ${userId} not found.`);
-        const userCredentials = userDoc.data() as ApiCredentials;
+        const { credentials, error: credError } = await getUserCredentials(userId);
+        if (credError || !credentials) {
+            throw new Error(credError || `Credenciais da V8 não encontradas para o usuário ${userId}`);
+        }
         
-        const { token: authToken, error: authError } = await getV8AuthToken(userCredentials);
+        const { token: authToken, error: authError } = await getAuthToken(credentials);
         if (authError || !authToken) throw new Error(authError || "Failed to get V8 auth token.");
         
         for (const cpf of cpfs) {
@@ -813,6 +826,68 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
 }
       
 
+async function getFactaUserCredentials(userId: string): Promise<{ credentials: ApiCredentials | null; error: string | null }> {
+    if (!userId) {
+        return { credentials: null, error: 'ID do usuário não fornecido.' };
+    }
+    try {
+        const userDoc = await firestore.collection('users').doc(userId).get();
+        if (!userDoc.exists) {
+            return { credentials: null, error: 'Usuário não encontrado.' };
+        }
+        const userData = userDoc.data()!;
+        const credentials = {
+            facta_username: userData.facta_username,
+            facta_password: userData.facta_password,
+        };
+
+        if (!credentials.facta_username || !credentials.facta_password) {
+            const missing = [
+                !credentials.facta_username && "Username",
+                !credentials.facta_password && "Password",
+            ].filter(Boolean).join(', ');
+            return { credentials: null, error: `Credenciais da Facta incompletas. Faltando: ${missing}. Por favor, configure-as na página de Configurações.` };
+        }
+
+        return { credentials, error: null };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro ao carregar credenciais da API Facta.";
+        console.error(`[getFactaUserCredentials] Error fetching credentials for user ${userId}:`, error);
+        return { credentials: null, error: message };
+    }
+}
+
+
+async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiCredentials | null; error: string | null }> {
+    if (!userId) {
+        return { credentials: null, error: 'ID do usuário não fornecido.' };
+    }
+    try {
+        const userDoc = await firestore.collection('users').doc(userId).get();
+        if (!userDoc.exists) {
+            return { credentials: null, error: 'Usuário não encontrado.' };
+        }
+        const userData = userDoc.data()!;
+        const credentials = {
+            c6_username: userData.c6_username,
+            c6_password: userData.c6_password,
+        };
+
+        if (!credentials.c6_username || !credentials.c6_password) {
+            const missing = [
+                !credentials.c6_username && "Username",
+                !credentials.c6_password && "Password",
+            ].filter(Boolean).join(', ');
+            return { credentials: null, error: `Credenciais do C6 incompletas. Faltando: ${missing}. Por favor, configure-as na página de Configurações.` };
+        }
+
+        return { credentials, error: null };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro ao carregar credenciais da API C6.";
+        console.error(`[getC6UserCredentials] Error fetching credentials for user ${userId}:`, error);
+        return { credentials: null, error: message };
+    }
+}
     
 
     
