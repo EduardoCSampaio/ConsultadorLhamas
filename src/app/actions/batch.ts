@@ -122,19 +122,23 @@ export async function deleteBatch(input: z.infer<typeof deleteBatchSchema>): Pro
 }
 
 
-export async function getBatches(input?: { userId: string }): Promise<{ status: 'success' | 'error'; batches?: BatchJob[]; message?: string, error?: string }> {
+export async function getBatches(input: { userId: string }): Promise<{ status: 'success' | 'error'; batches?: BatchJob[]; message?: string, error?: string }> {
     try {
         let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> = firestore.collection('batches');
 
-        if (input?.userId) {
-            const userDoc = await firestore.collection('users').doc(input.userId).get();
-            const userRole = userDoc.data()?.role;
-            if(userRole !== 'super_admin') {
-                query = query.where('userId', '==', input.userId);
-            }
+        const userDoc = await firestore.collection('users').doc(input.userId).get();
+        if (!userDoc.exists) {
+            return { status: 'error', error: "Usuário não encontrado." };
         }
         
-        const batchesSnapshot = await query.get();
+        const userRole = userDoc.data()?.role;
+
+        // super_admin can see all batches, other users can only see their own.
+        if (userRole !== 'super_admin') {
+            query = query.where('userId', '==', input.userId);
+        }
+        
+        const batchesSnapshot = await query.orderBy('createdAt', 'desc').get();
 
         if (batchesSnapshot.empty) {
             return { status: 'success', batches: [] };
@@ -161,12 +165,13 @@ export async function getBatches(input?: { userId: string }): Promise<{ status: 
             };
         });
 
-        batches.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
         return { status: 'success', batches };
     } catch (error) {
         const message = error instanceof Error ? error.message : "Erro ao buscar lotes.";
         console.error("getBatches error:", error);
+        if (message.includes('requires an index')) {
+            return { status: 'error', error: 'A consulta de lotes requer um índice do Firestore que não foi criado. Contacte o suporte.' };
+        }
         return { status: 'error', error: message };
     }
 }
@@ -817,5 +822,6 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
     
 
     
+
 
 
