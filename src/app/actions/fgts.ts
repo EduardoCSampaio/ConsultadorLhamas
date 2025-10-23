@@ -78,8 +78,8 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
 
   // Use the unique consultationId as the document ID
   const webhookResponseRef = firestore.collection('webhookResponses').doc(consultationId);
-  await webhookResponseRef.set({
-      batchId: batchId,
+  
+  const initialWebhookData: { [key: string]: any } = {
       consultationId: consultationId,
       userId: userId,
       status: 'pending_webhook',
@@ -87,7 +87,13 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       v8Provider: provider,
       id: documentNumber, // Keep the CPF here for reference
       createdAt: FieldValue.serverTimestamp()
-  }, { merge: true });
+  };
+
+  if(batchId) {
+    initialWebhookData['batchId'] = batchId;
+  }
+  
+  await webhookResponseRef.set(initialWebhookData, { merge: true });
 
 
   const API_URL_CONSULTA = 'https://bff.v8sistema.com/fgts/balance';
