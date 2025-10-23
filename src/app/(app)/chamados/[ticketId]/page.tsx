@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from 'next/link';
 import { PageHeader } from "@/components/page-header";
@@ -52,43 +52,82 @@ export default function ChamadoDetalhePage() {
     const ticketId = params.ticketId as string;
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
+    const [ticket, setTicket] = useState<Ticket | null>(null);
+    const [ticketLoading, setTicketLoading] = useState(true);
+
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [newMessage, setNewMessage] = useState("");
     const [participantProfiles, setParticipantProfiles] = useState<Record<string, UserProfile | null>>({});
 
-
-    const ticketRef = useMemoFirebase(() => {
-        if (!firestore || !ticketId) return null;
-        return doc(firestore, 'tickets', ticketId);
-    }, [firestore, ticketId]);
-    const { data: ticket, isLoading: ticketLoading } = useDoc<Ticket>(ticketRef);
     
     const userProfileRef = useMemoFirebase(() => {
         if (!firestore || !user) return null;
         return doc(firestore, 'users', user.uid);
     }, [firestore, user]);
-    const { data: userProfile } = useDoc<UserProfile>(userProfileRef);
+    const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userProfileRef);
 
     const messagesQuery = useMemoFirebase(() => {
-        if (!firestore || !ticketId) return null;
+        if (!firestore || !ticketId || !ticket) return null;
         return query(collection(firestore, `tickets/${ticketId}/messages`), orderBy('createdAt', 'asc'));
-    }, [firestore, ticketId]);
+    }, [firestore, ticketId, ticket]);
     const { data: messages, isLoading: messagesLoading } = useCollection<TicketMessage>(messagesQuery);
     
-    const pageIsLoading = ticketLoading || messagesLoading;
     const isAdmin = userProfile?.role === 'super_admin' || userProfile?.role === 'manager';
 
-    useEffect(() => {
-       async function processTicketAndMessages() {
-           if (pageIsLoading || !ticket || !user || !firestore) return;
-           
-            if (!isAdmin && user.uid !== ticket.userId) {
-                toast({ variant: 'destructive', title: 'Acesso Negado' });
-                router.push('/chamados');
-                return;
+    const fetchTicket = useCallback(async () => {
+        if (!firestore || !user || !userProfile) return;
+
+        setTicketLoading(true);
+        setError(null);
+        try {
+            const ticketRef = doc(firestore, 'tickets', ticketId);
+            const ticketSnap = await getDoc(ticketRef);
+
+            if (!ticketSnap.exists()) {
+                throw new Error("Chamado não encontrado.");
             }
             
+            const ticketData = ticketSnap.data() as Omit<Ticket, 'id' | 'createdAt' | 'updatedAt'> & { createdAt: Timestamp, updatedAt: Timestamp};
+            
+            // Server-side permission check logic, adapted for client-side
+            const hasPermission = isAdmin || ticketData.userId === user.uid;
+
+            if (!hasPermission) {
+                throw new Error("Você não tem permissão para visualizar este chamado.");
+            }
+            
+            setTicket({
+                ...ticketData,
+                id: ticketSnap.id,
+                createdAt: ticketData.createdAt.toDate().toISOString(),
+                updatedAt: ticketData.updatedAt.toDate().toISOString(),
+            });
+
+        } catch (e) {
+            const errorMessage = e instanceof Error ? e.message : "Ocorreu um erro ao buscar o chamado.";
+            setError(errorMessage);
+            toast({ variant: 'destructive', title: 'Erro ao carregar chamado', description: errorMessage });
+        } finally {
+            setTicketLoading(false);
+        }
+    }, [firestore, user, userProfile, ticketId, isAdmin, toast]);
+
+
+    useEffect(() => {
+        if (!isProfileLoading && userProfile) {
+            fetchTicket();
+        }
+         else if (!isProfileLoading && !userProfile && !user) {
+            router.push('/login');
+        }
+    }, [isProfileLoading, userProfile, fetchTicket, user, router]);
+
+
+    useEffect(() => {
+       async function processMessages() {
+           if (messagesLoading || !ticket || !user || !firestore) return;
+           
             await markTicketAsRead({ ticketId, userId: user.uid });
 
             const messageSenderIds = messages?.map(m => m.senderId) || [];
@@ -114,8 +153,8 @@ export default function ChamadoDetalhePage() {
                 setParticipantProfiles(prev => ({ ...prev, ...newProfiles }));
             }
        }
-       processTicketAndMessages();
-    }, [ticket, messages, user, isAdmin, pageIsLoading, ticketId, router, toast, firestore, participantProfiles]);
+       processMessages();
+    }, [ticket, messages, user, messagesLoading, ticketId, firestore, participantProfiles]);
 
 
     useEffect(() => {
@@ -123,7 +162,7 @@ export default function ChamadoDetalhePage() {
     }, [messages]);
 
     const handleSendMessage = async () => {
-        if (!user || !userProfile || !newMessage.trim()) return;
+        if (!user || !userProfile || !newMessage.trim() || !ticket) return;
         
         setIsSubmitting(true);
         const result = await addMessageToTicket({
@@ -136,6 +175,10 @@ export default function ChamadoDetalhePage() {
 
         if (result.success) {
             setNewMessage("");
+            // Optimistically update status if it was 'aberto'
+            if (isAdmin && ticket.status === 'aberto') {
+                setTicket(prev => prev ? { ...prev, status: 'em_atendimento' } : null);
+            }
         } else {
             toast({ variant: 'destructive', title: 'Erro ao enviar mensagem', description: result.message });
         }
@@ -146,6 +189,7 @@ export default function ChamadoDetalhePage() {
         const result = await updateTicketStatus({ ticketId, status: newStatus });
         if(result.success) {
             toast({ title: "Status do chamado atualizado!"});
+            setTicket(prev => prev ? { ...prev, status: newStatus } : null);
         } else {
             toast({ variant: 'destructive', title: "Erro ao atualizar status", description: result.message });
         }
@@ -155,7 +199,7 @@ export default function ChamadoDetalhePage() {
         return email.substring(0, 2).toUpperCase();
     };
 
-    if (pageIsLoading) {
+    if (isProfileLoading || ticketLoading) {
         return (
             <div className="flex flex-col gap-6">
                  <PageHeader title={<Skeleton className="h-8 w-64" />} description={<Skeleton className="h-5 w-80" />} />
@@ -178,7 +222,18 @@ export default function ChamadoDetalhePage() {
     }
     
     if (!ticket) {
-        return <div>Chamado não encontrado.</div>
+        return (
+            <div className="flex flex-col items-center justify-center h-full">
+                <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Chamado não encontrado</AlertTitle>
+                    <AlertDescription>O chamado que você está procurando não existe ou você não tem permissão para vê-lo.</AlertDescription>
+                     <Button variant="outline" size="sm" asChild className="mt-4">
+                        <Link href="/chamados">Voltar</Link>
+                    </Button>
+                </Alert>
+            </div>
+        )
     }
 
     return (
