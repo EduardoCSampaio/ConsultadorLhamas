@@ -39,6 +39,14 @@ export type FgtsBalance = {
     balance: number;
 };
 
+// Helper function to construct the webhook URL
+function getWebhookUrl(): string {
+    const vercelUrl = process.env.NEXT_PUBLIC_VERCEL_URL;
+    const baseUrl = vercelUrl ? `https://${vercelUrl}` : 'http://localhost:9002';
+    return `${baseUrl}/api/webhook/balance`;
+}
+
+
 export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): Promise<ActionResult> {
   const validation = actionSchema.safeParse(input);
 
@@ -83,6 +91,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   const requestBody = { 
       documentNumber, 
       provider,
+      webhookUrl: getWebhookUrl(), // Dynamically add the webhook URL
       ...(batchId && { batchId })
   };
 
@@ -249,5 +258,3 @@ export async function consultarSaldoManual(input: z.infer<typeof manualActionSch
 
     return { balances: finalBalances };
 }
-
-  
