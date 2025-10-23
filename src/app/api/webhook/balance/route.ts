@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     
     const docRef = firestore.collection('webhookResponses').doc(docId.toString());
 
-    // Before writing, let's see if we can find a batchId from a pre-existing doc.
+    // Prioritize batchId from payload, then from existing doc.
     let batchId: string | undefined = payload.batchId;
     let userId: string | undefined;
 

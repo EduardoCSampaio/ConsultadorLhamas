@@ -33,6 +33,15 @@ const processCltActionSchema = z.object({
   fileName: z.string(),
 });
 
+const processFgtsActionSchema = z.object({
+    cpfs: z.array(z.string()),
+    provider: z.enum(["v8", "facta"]),
+    userId: z.string(),
+    userEmail: z.string(),
+    fileName: z.string(),
+    v8Provider: z.enum(['qi', 'cartos', 'bms']).optional(),
+});
+
 
 const reportActionSchema = z.object({
   cpfs: z.array(z.string()),
@@ -130,11 +139,10 @@ export async function getBatches(input: { userId: string }): Promise<{ status: '
             return { status: 'error', error: "Usuário não encontrado." };
         }
         
-        const userRole = userDoc.data()?.role;
+        const userData = userDoc.data();
         let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> = firestore.collection('batches');
         
-        // super_admin can see all batches, other users can only see their own.
-        if (userRole !== 'super_admin') {
+        if (userData?.role !== 'super_admin') {
             query = query.where('userId', '==', input.userId);
         }
         
@@ -265,8 +273,8 @@ async function processFactaBatchInBackground(batchId: string) {
     }
 }
 
-export async function processarLoteFgts(input: z.infer<typeof processCltActionSchema> & { v8Provider?: V8Provider }): Promise<ProcessActionResult> {
-  const validation = processCltActionSchema.extend({ v8Provider: z.enum(['qi', 'cartos', 'bms']).optional() }).safeParse(input);
+export async function processarLoteFgts(input: z.infer<typeof processFgtsActionSchema>): Promise<ProcessActionResult> {
+  const validation = processFgtsActionSchema.safeParse(input);
 
   if (!validation.success) {
     return { 
@@ -275,8 +283,7 @@ export async function processarLoteFgts(input: z.infer<typeof processCltActionSc
     };
   }
 
-  const { cpfsData, provider, userId, userEmail, fileName, v8Provider } = validation.data;
-  const cpfs = cpfsData.map(d => d.cpf);
+  const { cpfs, provider, userId, userEmail, fileName, v8Provider } = validation.data;
   
   const displayProvider = provider === 'v8' ? 'V8DIGITAL' : 'facta';
   
@@ -599,8 +606,8 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
             return { status: 'success', message: 'Todos os CPFs já haviam sido processados com sucesso. Lote finalizado.' };
         }
 
-        const newBatchAction: z.infer<typeof processCltActionSchema> & {v8Provider?: V8Provider} = {
-            cpfsData: cpfsToReprocess.map(cpf => ({cpf})),
+        const newBatchAction: z.infer<typeof processFgtsActionSchema> = {
+            cpfs: cpfsToReprocess,
             provider: originalBatchData.provider === 'V8DIGITAL' ? 'v8' : 'facta',
             userId: originalBatchData.userId,
             userEmail: originalBatchData.userEmail,
