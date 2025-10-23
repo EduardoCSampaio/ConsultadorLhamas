@@ -65,8 +65,12 @@ export async function POST(request: NextRequest) {
       message: statusMessage,
       provider: "V8DIGITAL",
       v8Provider: v8Partner,
-      ...(batchId && { batchId: batchId }),
     };
+    
+    // Only add batchId if it exists to avoid saving 'undefined'
+    if (batchId) {
+      dataToUpdate.batchId = batchId;
+    }
 
 
     await docRef.set(dataToUpdate, { merge: true });
