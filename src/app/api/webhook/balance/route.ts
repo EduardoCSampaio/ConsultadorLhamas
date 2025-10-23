@@ -34,9 +34,9 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
     }
     
-    const docRef = firestore.collection('webhookResponses').doc(consultationId.toString());
-    
     // --- START: NEW ROBUST LOGIC ---
+    
+    const docRef = firestore.collection('webhookResponses').doc(consultationId.toString());
 
     // 1. First, get the existing document to safely retrieve the batchId.
     const docSnapshot = await docRef.get();
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
         status: status,
         message: isError ? `Webhook received with error: ${errorMessage}` : 'Webhook payload successfully stored.',
         provider: "V8DIGITAL",
-        v8Provider: payload.provider || 'qi',
+        v8Provider: payload.provider || existingData?.v8Provider || 'qi', // Use existing v8Provider as fallback
     };
     
     // 3. Update the webhook response document. This does NOT include `batchId`.
