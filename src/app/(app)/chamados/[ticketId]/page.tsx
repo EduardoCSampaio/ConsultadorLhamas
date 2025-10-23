@@ -10,8 +10,8 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Send, ArrowLeft, AlertCircle } from 'lucide-react';
 import { addMessageToTicket, markTicketAsRead, updateTicketStatus, type Ticket, type TicketMessage } from '@/app/actions/tickets';
-import { useUser, useDoc, useFirestore, useMemoFirebase, useCollection } from "@/firebase";
-import { doc, collection, orderBy, query, getDoc, type Timestamp } from 'firebase/firestore';
+import { useUser, useDoc, useFirestore, useMemoFirebase } from "@/firebase";
+import { doc, collection, orderBy, query, getDoc, getDocs, type Timestamp } from 'firebase/firestore';
 import type { UserProfile } from '@/app/actions/users';
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -53,7 +53,8 @@ export default function ChamadoDetalhePage() {
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const [ticket, setTicket] = useState<Ticket | null>(null);
-    const [ticketLoading, setTicketLoading] = useState(true);
+    const [messages, setMessages] = useState<TicketMessage[]>([]);
+    const [pageLoading, setPageLoading] = useState(true);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -67,18 +68,12 @@ export default function ChamadoDetalhePage() {
     }, [firestore, user]);
     const { data: userProfile, isLoading: isProfileLoading } = useDoc<UserProfile>(userProfileRef);
 
-    const messagesQuery = useMemoFirebase(() => {
-        if (!firestore || !ticketId || !ticket) return null;
-        return query(collection(firestore, `tickets/${ticketId}/messages`), orderBy('createdAt', 'asc'));
-    }, [firestore, ticketId, ticket]);
-    const { data: messages, isLoading: messagesLoading } = useCollection<TicketMessage>(messagesQuery);
-    
     const isAdmin = userProfile?.role === 'super_admin' || userProfile?.role === 'manager';
 
-    const fetchTicket = useCallback(async () => {
+    const fetchTicketAndMessages = useCallback(async () => {
         if (!firestore || !user || !userProfile) return;
 
-        setTicketLoading(true);
+        setPageLoading(true);
         setError(null);
         try {
             const ticketRef = doc(firestore, 'tickets', ticketId);
@@ -90,71 +85,70 @@ export default function ChamadoDetalhePage() {
             
             const ticketData = ticketSnap.data() as Omit<Ticket, 'id' | 'createdAt' | 'updatedAt'> & { createdAt: Timestamp, updatedAt: Timestamp};
             
-            // Server-side permission check logic, adapted for client-side
             const hasPermission = isAdmin || ticketData.userId === user.uid;
 
             if (!hasPermission) {
                 throw new Error("Você não tem permissão para visualizar este chamado.");
             }
             
-            setTicket({
+            const fetchedTicket = {
                 ...ticketData,
                 id: ticketSnap.id,
                 createdAt: ticketData.createdAt.toDate().toISOString(),
                 updatedAt: ticketData.updatedAt.toDate().toISOString(),
-            });
+            };
+            setTicket(fetchedTicket);
+
+            // Now that we have permission and the ticket, fetch messages
+            const messagesQuery = query(collection(firestore, `tickets/${ticketId}/messages`), orderBy('createdAt', 'asc'));
+            const messagesSnap = await getDocs(messagesQuery);
+            const fetchedMessages = messagesSnap.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                createdAt: (doc.data().createdAt as Timestamp).toDate().toISOString()
+            } as TicketMessage));
+            setMessages(fetchedMessages);
+
+            // Mark as read after fetching
+            await markTicketAsRead({ ticketId, userId: user.uid });
+
+            // Fetch participant profiles
+            const senderIds = fetchedMessages.map(m => m.senderId);
+            const allParticipantIds = Array.from(new Set([fetchedTicket.userId, ...senderIds]));
+            
+            const profilesToFetch = allParticipantIds.filter(id => id && !participantProfiles[id]);
+            if (profilesToFetch.length > 0) {
+                const newProfiles: Record<string, UserProfile | null> = {};
+                for (const id of profilesToFetch) {
+                     try {
+                        const userDoc = await getDoc(doc(firestore, 'users', id));
+                        newProfiles[id] = userDoc.exists() ? (userDoc.data() as UserProfile) : null;
+                    } catch (e) {
+                         newProfiles[id] = null;
+                         console.error(`Failed to fetch profile for user ${id}:`, e);
+                    }
+                }
+                 setParticipantProfiles(prev => ({ ...prev, ...newProfiles }));
+            }
 
         } catch (e) {
             const errorMessage = e instanceof Error ? e.message : "Ocorreu um erro ao buscar o chamado.";
             setError(errorMessage);
             toast({ variant: 'destructive', title: 'Erro ao carregar chamado', description: errorMessage });
         } finally {
-            setTicketLoading(false);
+            setPageLoading(false);
         }
-    }, [firestore, user, userProfile, ticketId, isAdmin, toast]);
+    }, [firestore, user, userProfile, ticketId, isAdmin, toast, participantProfiles]);
 
 
     useEffect(() => {
         if (!isProfileLoading && userProfile) {
-            fetchTicket();
+            fetchTicketAndMessages();
         }
          else if (!isProfileLoading && !userProfile && !user) {
             router.push('/login');
         }
-    }, [isProfileLoading, userProfile, fetchTicket, user, router]);
-
-
-    useEffect(() => {
-       async function processMessages() {
-           if (messagesLoading || !ticket || !user || !firestore) return;
-           
-            await markTicketAsRead({ ticketId, userId: user.uid });
-
-            const messageSenderIds = messages?.map(m => m.senderId) || [];
-            const allParticipantIds = Array.from(new Set([ticket.userId, ...messageSenderIds]));
-            
-            const profilesToFetch = allParticipantIds.filter(id => id && !participantProfiles[id]);
-
-            if (profilesToFetch.length > 0) {
-                const newProfiles: Record<string, UserProfile | null> = {};
-                for (const id of profilesToFetch) {
-                    try {
-                        const userDoc = await getDoc(doc(firestore, 'users', id));
-                        if (userDoc.exists()) {
-                            newProfiles[id] = userDoc.data() as UserProfile;
-                        } else {
-                            newProfiles[id] = null; 
-                        }
-                    } catch (e) {
-                         newProfiles[id] = null;
-                         console.error(`Failed to fetch profile for user ${id}:`, e);
-                    }
-                }
-                setParticipantProfiles(prev => ({ ...prev, ...newProfiles }));
-            }
-       }
-       processMessages();
-    }, [ticket, messages, user, messagesLoading, ticketId, firestore, participantProfiles]);
+    }, [isProfileLoading, userProfile, fetchTicketAndMessages, user, router]);
 
 
     useEffect(() => {
@@ -175,7 +169,16 @@ export default function ChamadoDetalhePage() {
 
         if (result.success) {
             setNewMessage("");
-            // Optimistically update status if it was 'aberto'
+            // Optimistic update
+            const optimisticMessage: TicketMessage = {
+                id: new Date().toISOString(),
+                senderId: user.uid,
+                senderEmail: user.email!,
+                content: newMessage,
+                createdAt: new Date().toISOString(),
+            };
+            setMessages(prev => [...prev, optimisticMessage]);
+
             if (isAdmin && ticket.status === 'aberto') {
                 setTicket(prev => prev ? { ...prev, status: 'em_atendimento' } : null);
             }
@@ -199,7 +202,7 @@ export default function ChamadoDetalhePage() {
         return email.substring(0, 2).toUpperCase();
     };
 
-    if (isProfileLoading || ticketLoading) {
+    if (pageLoading) {
         return (
             <div className="flex flex-col gap-6">
                  <PageHeader title={<Skeleton className="h-8 w-64" />} description={<Skeleton className="h-5 w-80" />} />
@@ -227,7 +230,7 @@ export default function ChamadoDetalhePage() {
                 <Alert>
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle>Chamado não encontrado</AlertTitle>
-                    <AlertDescription>O chamado que você está procurando não existe ou você não tem permissão para vê-lo.</AlertDescription>
+                    <AlertDescription>O chamado que você está procurando não existe ou foi removido.</AlertDescription>
                      <Button variant="outline" size="sm" asChild className="mt-4">
                         <Link href="/chamados">Voltar</Link>
                     </Button>
@@ -275,12 +278,7 @@ export default function ChamadoDetalhePage() {
             
             <Card className="flex flex-col h-[65vh]">
                 <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
-                   {messagesLoading && !messages && (
-                       <div className="flex items-center justify-center h-full">
-                           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                       </div>
-                   )}
-                   {messages?.map(message => {
+                   {messages.map(message => {
                         const senderProfile = participantProfiles[message.senderId];
                         const isProfileLoading = senderProfile === undefined;
                         
