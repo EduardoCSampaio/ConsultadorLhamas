@@ -189,7 +189,14 @@ async function processFactaBatchInBackground(batchId: string) {
         
         batchData = batchDoc.data() as BatchJob;
         
-        if (batchData.status === 'completed' || (batchData.status === 'error' && batchData.processedCpfs === batchData.totalCpfs)) {
+        const processedCpfsSnapshot = await firestore.collection('webhookResponses')
+            .where('batchId', '==', batchId)
+            .get();
+        const processedCpfIds = new Set(processedCpfsSnapshot.docs.map(doc => doc.id.replace('facta-', '')));
+        
+        const currentProcessedCount = processedCpfIds.size;
+        
+        if (batchData.status === 'completed' || (batchData.status === 'error' && currentProcessedCount === batchData.totalCpfs)) {
             console.log(`[Batch ${batchId}] Batch already finished with status: ${batchData.status}.`);
             return;
         }
@@ -201,11 +208,6 @@ async function processFactaBatchInBackground(batchId: string) {
         const userCredentials = userDoc.data() as ApiCredentials;
         const { token, error: tokenError } = await getFactaAuthToken(userCredentials.facta_username, userCredentials.facta_password);
         if (tokenError || !token) throw new Error(tokenError || "Falha ao obter token da Facta.");
-
-        const processedCpfsSnapshot = await firestore.collection('webhookResponses')
-            .where('batchId', '==', batchId)
-            .get();
-        const processedCpfIds = new Set(processedCpfsSnapshot.docs.map(doc => doc.id.replace('facta-', '')));
         
         const cpfsToProcess = batchData.cpfs.filter(cpf => !processedCpfIds.has(cpf)).slice(0, CHUNK_SIZE);
 
@@ -245,10 +247,10 @@ async function processFactaBatchInBackground(batchId: string) {
 
         await Promise.all(processingPromises);
         
-        const currentProcessedCount = batchData.processedCpfs + cpfsToProcess.length;
-        await batchRef.update({ processedCpfs: currentProcessedCount });
+        const newProcessedCount = currentProcessedCount + cpfsToProcess.length;
+        await batchRef.update({ processedCpfs: newProcessedCount });
 
-        if (currentProcessedCount < batchData.totalCpfs) {
+        if (newProcessedCount < batchData.totalCpfs) {
             console.log(`[Batch ${batchId}] Chunk processed. Triggering next one.`);
             await processFactaBatchInBackground(batchId); // Recursive call
         } else {
@@ -826,3 +828,6 @@ export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchem
 
 
 
+
+
+    
