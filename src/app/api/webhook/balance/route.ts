@@ -30,13 +30,11 @@ export async function POST(request: NextRequest) {
 
     // Prioritize batchId from payload, then from existing doc.
     let batchId: string | undefined = payload.batchId;
-    let userId: string | undefined;
-
-    const existingDoc = await docRef.get();
-    if (existingDoc.exists) {
-        const existingData = existingDoc.data();
-        if (!batchId) batchId = existingData?.batchId;
-        if (!userId) userId = existingData?.userId;
+    if (!batchId) {
+        const existingDoc = await docRef.get();
+        if (existingDoc.exists) {
+            batchId = existingDoc.data()?.batchId;
+        }
     }
 
     const v8Partner = payload.provider || 'qi';
@@ -55,22 +53,18 @@ export async function POST(request: NextRequest) {
         statusMessage = 'Webhook payload with balance successfully stored.';
     }
 
-    const dataToSet: any = {
+    const dataToUpdate: any = {
       responseBody: payload,
-      updatedAt: FieldValue.serverTimestamp(), // Use a different field to avoid overwriting createdAt
+      updatedAt: FieldValue.serverTimestamp(),
       status: status,
       message: statusMessage,
-      id: docId.toString(),
       provider: "V8DIGITAL",
       v8Provider: v8Partner,
       ...(batchId && { batchId: batchId }),
     };
-    if (userId) {
-        dataToSet.userId = userId;
-    }
 
 
-    await docRef.set(dataToSet, { merge: true });
+    await docRef.set(dataToUpdate, { merge: true });
 
     console.log(`Payload stored in Firestore with ID: ${docId}. Status: ${status}. Provider: V8DIGITAL (${v8Partner})`);
     
@@ -89,18 +83,30 @@ export async function POST(request: NextRequest) {
                     return;
                 }
 
-                const newProcessedCount = (batchData.processedCpfs || 0) + 1;
-                const updates: any = { processedCpfs: newProcessedCount };
+                const updates: any = { };
 
-                if (newProcessedCount >= batchData.totalCpfs) {
-                    console.log(`[Batch ${batchId}] Final CPF received. Marking as complete.`);
-                    updates.status = 'completed';
-                    updates.message = 'Processamento concluído via webhooks.';
-                    updates.completedAt = FieldValue.serverTimestamp();
-                    
+                // Change status from 'pending' to 'processing' on the first response
+                if (batchData.status === 'pending') {
+                    updates.status = 'processing';
+                    updates.message = 'Processamento iniciado.';
                 }
+                
+                updates.processedCpfs = FieldValue.increment(1);
 
                 transaction.update(batchRef, updates);
+
+                // Check for completion after incrementing
+                const newProcessedCount = (batchData.processedCpfs || 0) + 1;
+                if (newProcessedCount >= batchData.totalCpfs) {
+                     console.log(`[Batch ${batchId}] Final CPF received. Marking as complete.`);
+                     const finalUpdates: any = { 
+                        status: 'completed',
+                        message: 'Processamento concluído via webhooks.',
+                        completedAt: FieldValue.serverTimestamp()
+                     };
+                     // We run a second update within the transaction to ensure it happens atomically
+                     transaction.update(batchRef, finalUpdates);
+                }
             });
              console.log(`[Batch ${batchId}] Progress transaction completed successfully.`);
         } catch (e) {
@@ -137,3 +143,5 @@ export async function POST(request: NextRequest) {
 }
 
   
+
+    

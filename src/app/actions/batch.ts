@@ -134,13 +134,8 @@ export async function deleteBatch(input: z.infer<typeof deleteBatchSchema>): Pro
 
 export async function getBatches(input: { userId: string }): Promise<{ status: 'success' | 'error'; batches?: BatchJob[]; message?: string, error?: string }> {
     try {
-        const userDoc = await firestore.collection('users').doc(input.userId).get();
-        if (!userDoc.exists) {
-            return { status: 'error', error: "Usuário não encontrado." };
-        }
-        
-        // Always filter by the current user's ID. No special case for super_admin.
-        let query = firestore.collection('batches').where('userId', '==', input.userId);
+        let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> = firestore.collection('batches');
+        query = query.where('userId', '==', input.userId);
         
         const batchesSnapshot = await query.get();
 
@@ -184,7 +179,6 @@ export async function getBatches(input: { userId: string }): Promise<{ status: '
 async function processFactaBatchInBackground(batchId: string) {
     console.log(`[Batch ${batchId}] Starting/Continuing FACTA background processing...`);
     const batchRef = firestore.collection('batches').doc(batchId);
-    const CHUNK_SIZE = 25; 
 
     try {
         const batchDoc = await batchRef.get();
@@ -205,7 +199,10 @@ async function processFactaBatchInBackground(batchId: string) {
         
         const currentProcessedCount = processedCpfIds.size;
         
-        await batchRef.update({ status: 'processing', message: 'Iniciando processamento...', processedCpfs: currentProcessedCount });
+        // Start processing if not already processing
+        if (batchData.status === 'pending') {
+            await batchRef.update({ status: 'processing', message: 'Iniciando processamento...', processedCpfs: currentProcessedCount });
+        }
         
         const { credentials, error: credError } = await getFactaUserCredentials(batchData.userId);
         if (credError || !credentials) {
@@ -215,15 +212,11 @@ async function processFactaBatchInBackground(batchId: string) {
         const { token, error: tokenError } = await getFactaAuthToken(credentials.facta_username, credentials.facta_password);
         if (tokenError || !token) throw new Error(tokenError || "Falha ao obter token da Facta.");
         
-        const cpfsToProcess = batchData.cpfs.filter(cpf => !processedCpfIds.has(cpf)).slice(0, CHUNK_SIZE);
+        const cpfsToProcess = batchData.cpfs.filter(cpf => !processedCpfIds.has(cpf));
 
-        if (cpfsToProcess.length === 0 && currentProcessedCount >= batchData.totalCpfs) {
+        if (cpfsToProcess.length === 0) {
             await batchRef.update({ status: 'completed', processedCpfs: batchData.totalCpfs, message: "Todos os CPFs foram processados.", completedAt: FieldValue.serverTimestamp() });
             console.log(`[Batch ${batchId}] All CPFs processed. Batch completed.`);
-            return;
-        } else if (cpfsToProcess.length === 0) {
-            // This case might happen if there are pending webhooks. We'll let the periodic check handle it.
-            console.log(`[Batch ${batchId}] No new CPFs to process in this chunk, but batch not complete. Waiting...`);
             return;
         }
 
@@ -243,21 +236,18 @@ async function processFactaBatchInBackground(batchId: string) {
                     batchId: batchId,
                 };
                 await docRef.set(responseData, { merge: true });
+                 await batchRef.update({ processedCpfs: FieldValue.increment(1) });
             } catch (cpfError) {
                 const message = cpfError instanceof Error ? cpfError.message : "Erro desconhecido ao processar CPF.";
                 await docRef.set({ status: 'error', message, batchId: batchId, provider: 'facta' }, { merge: true });
+                await batchRef.update({ processedCpfs: FieldValue.increment(1) }); // Increment even on error
             }
         });
 
         await Promise.all(processingPromises);
         
-        const newProcessedCount = currentProcessedCount + cpfsToProcess.length;
-        await batchRef.update({ processedCpfs: newProcessedCount });
-
-        if (newProcessedCount < batchData.totalCpfs) {
-            console.log(`[Batch ${batchId}] Chunk processed. Triggering next one.`);
-            await processFactaBatchInBackground(batchId); // Recursive call
-        } else {
+        const finalBatchDoc = await batchRef.get();
+        if(finalBatchDoc.data()?.processedCpfs >= finalBatchDoc.data()?.totalCpfs) {
              await batchRef.update({ status: 'completed', message: "Todos os CPFs foram processados.", completedAt: FieldValue.serverTimestamp() });
             console.log(`[Batch ${batchId}] Final chunk processed. Batch completed.`);
         }
@@ -514,7 +504,6 @@ async function processV8BatchInBackground(batchId: string) {
         if (!batchDoc.exists) throw new Error(`Lote ${batchId} não encontrado.`);
 
         batchData = batchDoc.data() as BatchJob;
-        await batchRef.update({ status: 'processing', message: 'Enviando solicitações para a V8...' });
         
         const { cpfs, userId, userEmail, v8Provider } = batchData;
         
@@ -541,9 +530,8 @@ async function processV8BatchInBackground(batchId: string) {
             });
         }
         
-        await batchRef.update({ 
-            message: 'Solicitações enviadas. Aguardando respostas do webhook.',
-        });
+        // Don't update status here, let the webhook do it on the first response
+        console.log(`[Batch ${batchId}] All ${cpfs.length} requests sent. Waiting for webhooks.`);
 
     } catch (error) {
         const message = error instanceof Error ? error.message : "An unknown error occurred.";
@@ -902,3 +890,6 @@ async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiC
 
     
 
+
+
+    
