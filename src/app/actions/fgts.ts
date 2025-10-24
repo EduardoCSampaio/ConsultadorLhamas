@@ -13,11 +13,11 @@ import { randomUUID } from 'crypto';
 
 const actionSchema = z.object({
   documentNumber: z.string(),
-  token: z.string().optional(),
+  token: z.string(),
   provider: z.enum(['qi', 'cartos', 'bms']),
   userId: z.string(), 
   userEmail: z.string(),
-  balanceId: z.string(),
+  balanceId: z.string().uuid(),
   batchId: z.string(),
 });
 
@@ -44,13 +44,14 @@ export type FgtsBalance = {
 // Helper function to construct the webhook URL
 function getWebhookUrl(): string {
     const vercelEnv = process.env.VERCEL_ENV;
+    // Use VERCEL_URL which is set by Vercel for both production and preview deployments
     const vercelUrl = process.env.VERCEL_URL;
 
     if (vercelEnv === 'production' || vercelEnv === 'preview') {
         return `https://${vercelUrl}/api/webhook/balance`;
     }
     
-    // For local development
+    // For local development, fallback to a local URL
     return process.env.LOCAL_WEBHOOK_URL || 'http://localhost:9002/api/webhook/balance';
 }
 
@@ -62,28 +63,12 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
     return { status: 'error', stepIndex: 0, message: 'Dados de entrada inválidos.' };
   }
   
-  const { documentNumber, userId, userEmail, provider, balanceId, batchId } = validation.data;
-  let authToken = validation.data.token;
+  const { documentNumber, token: authToken, userId, userEmail, provider, balanceId, batchId } = validation.data;
   
-
-  if (!authToken) {
-      const { credentials, error: credError } = await getUserCredentials(userId);
-      if (credError || !credentials) {
-         return { status: 'error', stepIndex: 0, message: credError || "Credenciais V8 não encontradas." };
-      }
-      
-      const { token, error: tokenError } = await getAuthToken(credentials);
-      if (tokenError) {
-        return { status: 'error', stepIndex: 0, message: tokenError };
-      }
-      authToken = token!;
-  }
-
   // Use the unique balanceId as the document ID
   const webhookResponseRef = firestore.collection('webhookResponses').doc(balanceId);
   
   const initialWebhookData = {
-      balanceId: balanceId,
       userId: userId,
       status: 'pending_webhook',
       provider: 'V8DIGITAL',
@@ -106,6 +91,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   };
 
   try {
+    // Log manual queries, but not every single request from a batch
     if (batchId && batchId.startsWith('manual-')) {
         await logActivity({
             userId: userId,
@@ -164,6 +150,7 @@ async function waitForV8Response(balanceId: string, timeout = 7000): Promise<{ b
         const unsubscribe = docRef.onSnapshot((doc) => {
             if (doc.exists) {
                 const data = doc.data();
+                // Check for a definitive success or error status from the webhook
                 if (data?.status === 'success' && data.responseBody?.balance > 0) {
                     unsubscribe();
                     resolve({ 
@@ -177,6 +164,7 @@ async function waitForV8Response(balanceId: string, timeout = 7000): Promise<{ b
             }
         });
         
+        // Timeout to prevent hanging indefinitely
         setTimeout(() => {
             unsubscribe();
             resolve(null); 
@@ -202,6 +190,7 @@ export async function consultarSaldoManual(input: z.infer<typeof manualActionSch
     const finalBalances: FgtsBalance[] = [];
     const promises: Promise<any>[] = [];
 
+    // --- Facta Provider Logic ---
     if (providers.includes('facta')) {
         const factaPromise = new Promise(async (resolve) => {
             const { token, error: tokenError } = await getFactaAuthToken(user.facta_username, user.facta_password);
@@ -219,24 +208,27 @@ export async function consultarSaldoManual(input: z.infer<typeof manualActionSch
         promises.push(factaPromise);
     }
     
+    // --- V8 Provider Logic ---
     if (providers.includes('v8') && v8Provider) {
         const { credentials, error: credError } = await getUserCredentials(userId);
         if (credentials) {
             const { token: v8Token, error: v8TokenError } = await getAuthToken(credentials);
             if (v8Token) {
                 const v8Promise = new Promise(async (resolve) => {
-                    const balanceId = randomUUID();
+                    const balanceId = randomUUID(); // Generate a unique ID for this request
                     
-                    await consultarSaldoFgts({ 
+                    // Dispatch the request but don't wait for the fetch itself
+                    consultarSaldoFgts({ 
                         documentNumber: cpf, 
                         userId, 
                         userEmail, 
                         provider: v8Provider, 
                         token: v8Token, 
                         balanceId,
-                        batchId: `manual-${balanceId}`
+                        batchId: `manual-${balanceId}` // A unique "batch" id for this manual request
                     });
 
+                    // Wait for the webhook response
                     const v8result = await waitForV8Response(balanceId);
                     if (v8result && v8result.balance > 0) {
                         finalBalances.push({ 

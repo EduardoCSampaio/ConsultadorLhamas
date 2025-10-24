@@ -18,8 +18,7 @@ export async function POST(request: NextRequest) {
     console.log("--- Balance Webhook Received (Admin SDK) ---");
     console.log("Body (Payload):", JSON.stringify(payload, null, 2));
     
-    // The V8 API sends balanceId on success, but not on some failures.
-    // We will use balanceId as the primary key.
+    // The V8 API sends balanceId on success, but not always on failures.
     const balanceId = payload.balanceId;
 
     if (Object.keys(payload).length === 0) {
@@ -28,10 +27,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!balanceId) {
-        console.error("Webhook payload missing 'balanceId'. Cannot process directly.", payload);
-        // We could add a fallback here to query by documentNumber if needed,
-        // but for now, we'll log it and return an error to highlight the API behavior.
-        // This helps in debugging if the V8 API changes its error response format.
+        console.error("Webhook payload missing 'balanceId'. Cannot process.", payload);
         return NextResponse.json({ status: 'error', message: "Webhook payload missing 'balanceId'."}, { status: 400 });
     }
 
@@ -40,9 +36,8 @@ export async function POST(request: NextRequest) {
 
     if (!docSnapshot.exists) {
         console.error(`Webhook received for unknown balanceId: ${balanceId}. Storing anyway.`);
-        // We are receiving a webhook for an ID we don't have a pending record for.
-        // This could happen if the batch creation failed but the V8 request went through.
-        // We'll store it so the data isn't lost, but progress won't be updated.
+        // This is a failsafe. If we receive a webhook for an ID we don't recognize,
+        // we still store it so the data isn't lost. This indicates a problem in the calling function.
         await docRef.set({
             status: 'error',
             message: 'Received webhook for an unknown balanceId.',

@@ -327,6 +327,7 @@ export async function processarLoteFgts(input: z.infer<typeof processFgtsActionS
   }
   
   if (provider === 'v8') {
+    // Fire and forget - the function will run in the background
     processV8BatchInBackground(batchId);
   } else if (provider === 'facta') {
     processFactaBatchInBackground(batchId);
@@ -538,7 +539,7 @@ async function processV8BatchInBackground(batchId: string) {
         for (const cpf of cpfs) {
             // The balanceId must be consistent for each CPF request within this batch run.
             const balanceId = randomUUID();
-             consultarSaldoFgts({ 
+            await consultarSaldoFgts({ 
                 documentNumber: cpf, 
                 userId, 
                 userEmail,
