@@ -67,19 +67,6 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   
   const webhookResponseRef = firestore.collection('webhookResponses').doc(balanceId);
   
-  const initialWebhookData = {
-      userId: userId,
-      status: 'pending_webhook',
-      provider: 'V8DIGITAL',
-      v8Provider: provider,
-      documentNumber: documentNumber,
-      createdAt: FieldValue.serverTimestamp(),
-      batchId: batchId, 
-  };
-  
-  await webhookResponseRef.set(initialWebhookData, { merge: true });
-
-
   const API_URL_CONSULTA = 'https://bff.v8sistema.com/fgts/balance';
   
   const requestBody = { 
@@ -90,6 +77,20 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   };
 
   try {
+    
+    // CRITICAL FIX: Create the document in Firestore *before* calling the external API.
+    // This ensures that when the webhook fires, the document it needs to update already exists.
+    const initialWebhookData = {
+        userId: userId,
+        status: 'pending_webhook',
+        provider: 'V8DIGITAL',
+        v8Provider: provider,
+        documentNumber: documentNumber, // CRITICAL: Ensure the CPF is stored for association.
+        createdAt: FieldValue.serverTimestamp(),
+        batchId: batchId, 
+    };
+    await webhookResponseRef.set(initialWebhookData, { merge: true });
+
     if (batchId && batchId.startsWith('manual-')) {
         await logActivity({
             userId: userId,
@@ -130,6 +131,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   } catch (error) {
     console.error("[V8 API] Erro de comunicação na consulta de saldo:", error);
     const message = error instanceof Error ? error.message : 'Ocorreu um erro de comunicação com a API.';
+    // Update the existing doc with the error, as it was created before the fetch call.
     await webhookResponseRef.set({
         responseBody: { error: message },
         updatedAt: FieldValue.serverTimestamp(),
@@ -210,7 +212,7 @@ export async function consultarSaldoManual(input: z.infer<typeof manualActionSch
                 const v8Promise = new Promise(async (resolve) => {
                     const balanceId = randomUUID(); 
                     
-                    consultarSaldoFgts({ 
+                    await consultarSaldoFgts({ 
                         documentNumber: cpf, 
                         userId, 
                         userEmail, 

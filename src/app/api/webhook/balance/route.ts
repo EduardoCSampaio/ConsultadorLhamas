@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
 
     if (!docSnapshot.exists) {
         console.error(`Webhook received for unknown balanceId: ${balanceId}. The document was not found in Firestore.`);
+        // Respond with 404 Not Found, as the resource this webhook is supposed to update doesn't exist.
         return NextResponse.json({ status: 'error', message: `Webhook received for unknown balanceId: ${balanceId}. The document was not found in Firestore.` }, { status: 404 });
     }
 
