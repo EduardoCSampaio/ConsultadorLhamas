@@ -2,8 +2,8 @@
 'use server';
 
 import { z } from 'zod';
-import { consultarSaldoFgts } from './fgts';
-import { consultarSaldoFgtsFacta, getFactaAuthToken } from './facta';
+import { consultarSaldoManual, consultarSaldoFgts } from './fgts';
+import { consultarOfertasFacta, getFactaAuthToken, consultarSaldoFgtsFacta } from './facta';
 import { consultarLinkAutorizacaoC6, consultarOfertasCLTC6, verificarStatusAutorizacaoC6, type C6Offer } from './c6';
 import * as XLSX from 'xlsx';
 import { firestore } from '@/firebase/server-init';
@@ -94,7 +94,7 @@ type ProcessActionResult = {
 
 type ReprocessActionResult = {
   status: 'success' | 'error';
-  message: string;
+  message?: string;
   newBatch?: BatchJob;
 };
 
@@ -221,9 +221,10 @@ async function processFactaBatchInBackground(batchId: string) {
             await batchRef.update({ status: 'processing', message: 'Iniciando processamento...', processedCpfs: currentProcessedCount });
         }
         
-        const userDoc = await firestore.collection('users').doc(batchData.userId).get();
-        if (!userDoc.exists) throw new Error(`Usuário ${batchData.userId} não encontrado.`);
-        const credentials = userDoc.data() as ApiCredentials;
+        const { credentials, error: credError } = await getUserCredentials(batchData.userId);
+        if (credError || !credentials) {
+            throw new Error(credError || `Credenciais Facta não encontradas para o usuário ${batchData.userId}`);
+        }
         
         const { token, error: tokenError } = await getFactaAuthToken(credentials.facta_username, credentials.facta_password);
         if (tokenError || !token) throw new Error(tokenError || "Falha ao obter token da Facta.");
@@ -622,7 +623,7 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
         }
         
         if (originalBatchData.type === 'fgts') {
-            return await processarLoteFgts({
+            const result = await processarLoteFgts({
                 cpfs: cpfsToReprocess,
                 provider: originalBatchData.provider.toLowerCase() as 'v8' | 'facta',
                 userId: originalBatchData.userId,
@@ -630,15 +631,26 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
                 fileName: `${originalBatchData.fileName} (Reprocessamento)`,
                 v8Provider: originalBatchData.v8Provider,
             });
+            return {
+                status: result.status,
+                message: result.message,
+                newBatch: result.batch,
+            };
+
         } else if (originalBatchData.type === 'clt' && originalBatchData.cpfsData) {
             const cpfsDataToReprocess = originalBatchData.cpfsData.filter(cpfData => cpfsToReprocess.includes(cpfData.cpf));
-            return await processarLoteClt({
+            const result = await processarLoteClt({
                  cpfsData: cpfsDataToReprocess,
                  provider: originalBatchData.provider.toLowerCase() as 'v8' | 'facta' | 'c6',
                  userId: originalBatchData.userId,
                  userEmail: originalBatchData.userEmail,
                  fileName: `${originalBatchData.fileName} (Reprocessamento)`,
             });
+            return {
+                status: result.status,
+                message: result.message,
+                newBatch: result.batch,
+            };
         }
         
         return { status: 'error', message: 'Tipo de lote não suportado para reprocessamento.' };
@@ -649,5 +661,3 @@ export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatc
         return { status: 'error', message };
     }
 }
-
-    
