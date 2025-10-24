@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
 
     if (!docSnapshot.exists) {
         console.error(`Webhook received for unknown balanceId: ${balanceId}. The document was not found in Firestore.`);
-        return NextResponse.json({ status: 'error', message: `Webhook received for unknown balanceId: ${balanceId}.` }, { status: 404 });
+        return NextResponse.json({ status: 'error', message: `Webhook received for unknown balanceId: ${balanceId}. The document was not found in Firestore.` }, { status: 404 });
     }
 
     console.log(`Found document ${docRef.id}. Processing...`);
@@ -123,5 +123,3 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 }
-
-    
