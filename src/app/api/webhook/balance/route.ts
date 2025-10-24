@@ -35,13 +35,9 @@ export async function POST(request: NextRequest) {
 
     if (!docSnapshot.exists) {
         console.error(`Webhook received for unknown balanceId: ${balanceId}. Storing anyway.`);
-        await docRef.set({
-            status: 'error',
-            message: 'Received webhook for an unknown balanceId.',
-            responseBody: payload,
-            createdAt: FieldValue.serverTimestamp(),
-        });
-        return NextResponse.json({ status: 'success', message: 'Webhook for unknown ID stored.' }, { status: 200 });
+        // Don't create a new document if it's unknown, as it can't be linked to a batch.
+        // It's better to log this as a server-side monitoring issue.
+        return NextResponse.json({ status: 'error', message: `Webhook received for unknown balanceId: ${balanceId}.` }, { status: 404 });
     }
 
     console.log(`Found document ${docRef.id}. Processing...`);
