@@ -73,20 +73,18 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       borrowerDocumentNumber, 
       provider,
       webhookUrl: getWebhookUrl(),
-      balanceId: balanceId,
+      consultationId: balanceId,
   };
 
   try {
     
-    // CRITICAL FIX: Create the document in Firestore *before* calling the external API.
-    // This ensures that when the webhook fires, the document it needs to update already exists.
     const initialWebhookData = {
-        id: balanceId, // Store the balanceId as the main ID for lookup
+        id: balanceId,
         userId: userId,
         status: 'pending_webhook',
         provider: 'V8DIGITAL',
         v8Provider: provider,
-        documentNumber: borrowerDocumentNumber, // CRITICAL: Ensure the CPF is stored for association.
+        documentNumber: borrowerDocumentNumber,
         createdAt: FieldValue.serverTimestamp(),
         batchId: batchId, 
     };
@@ -132,7 +130,6 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
   } catch (error) {
     console.error("[V8 API] Erro de comunicação na consulta de saldo:", error);
     const message = error instanceof Error ? error.message : 'Ocorreu um erro de comunicação com a API.';
-    // Update the existing doc with the error, as it was created before the fetch call.
     await webhookResponseRef.update({
         responseBody: { error: message },
         updatedAt: FieldValue.serverTimestamp(),
@@ -250,5 +247,3 @@ export async function consultarSaldoManual(input: z.infer<typeof manualActionSch
 
     return { balances: finalBalances };
 }
-
-    
