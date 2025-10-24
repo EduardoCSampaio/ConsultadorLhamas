@@ -891,3 +891,6 @@ async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiC
         return { credentials: null, error: message };
     }
 }
+
+
+    

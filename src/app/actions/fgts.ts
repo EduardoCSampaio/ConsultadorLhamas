@@ -100,21 +100,27 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
         });
     }
 
-    fetch(API_URL_CONSULTA, {
+    // This is now an awaited call to ensure the request is sent before moving on.
+    const response = await fetch(API_URL_CONSULTA, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${authToken}`,
       },
       body: JSON.stringify(requestBody),
-    }).catch(fetchError => {
-        console.error(`[V8 BATCH] Failed to send request for balanceId ${balanceId}:`, fetchError);
-        webhookResponseRef.set({
-            status: 'error',
-            message: `Falha ao enviar a requisição para a API V8: ${fetchError.message}`,
-            responseBody: { error: fetchError.message }
-        }, { merge: true });
     });
+
+    if (!response.ok) {
+        const errorData = await response.json();
+        const errorMessage = errorData.message || `API V8 retornou erro ${response.status}`;
+        console.error(`[V8 BATCH] Failed to send request for balanceId ${balanceId}:`, errorMessage);
+        await webhookResponseRef.set({
+            status: 'error',
+            message: `Falha ao enviar a requisição para a API V8: ${errorMessage}`,
+            responseBody: { error: errorMessage }
+        }, { merge: true });
+        return { status: 'error', stepIndex: 1, message: errorMessage };
+    }
     
     return { 
         status: 'success', 
@@ -242,3 +248,5 @@ export async function consultarSaldoManual(input: z.infer<typeof manualActionSch
 
     return { balances: finalBalances };
 }
+
+    

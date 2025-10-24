@@ -34,9 +34,7 @@ export async function POST(request: NextRequest) {
     const docSnapshot = await docRef.get();
 
     if (!docSnapshot.exists) {
-        console.error(`Webhook received for unknown balanceId: ${balanceId}. Storing anyway.`);
-        // Don't create a new document if it's unknown, as it can't be linked to a batch.
-        // It's better to log this as a server-side monitoring issue.
+        console.error(`Webhook received for unknown balanceId: ${balanceId}. The document was not found in Firestore.`);
         return NextResponse.json({ status: 'error', message: `Webhook received for unknown balanceId: ${balanceId}.` }, { status: 404 });
     }
 
@@ -125,3 +123,5 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 }
+
+    
