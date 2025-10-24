@@ -47,6 +47,7 @@ function getWebhookUrl(): string {
     const vercelUrl = process.env.VERCEL_URL || process.env.NEXT_PUBLIC_VERCEL_URL;
 
     if (vercelEnv === 'production' || vercelEnv === 'preview') {
+        // Ensure the URL starts with https://
         return `https://${vercelUrl}/api/webhook/balance`;
     }
     
@@ -71,7 +72,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       status: 'pending_webhook',
       provider: 'V8DIGITAL',
       v8Provider: provider,
-      documentNumber: documentNumber, // CPF being queried
+      documentNumber: documentNumber,
       createdAt: FieldValue.serverTimestamp(),
       batchId: batchId, 
   };
@@ -85,11 +86,10 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       documentNumber, 
       provider,
       webhookUrl: getWebhookUrl(),
-      balanceId
+      balanceId: balanceId,
   };
 
   try {
-    // Log manual queries, but not every single request from a batch
     if (batchId && batchId.startsWith('manual-')) {
         await logActivity({
             userId: userId,
@@ -100,7 +100,6 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
         });
     }
 
-    // This is now an awaited call to ensure the request is sent before moving on.
     const response = await fetch(API_URL_CONSULTA, {
       method: 'POST',
       headers: {
