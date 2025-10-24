@@ -21,12 +21,12 @@ export async function POST(request: NextRequest) {
     const balanceId = payload.balanceId;
 
     // A V8 sometimes sends a validation request with an empty body.
+    if (Object.keys(payload).length === 0) {
+        console.log("Webhook validation request received (empty body). Responding 200 OK.");
+        return NextResponse.json({ status: 'success', message: 'Webhook test successful.'}, { status: 200 });
+    }
+
     if (!balanceId) {
-        if (Object.keys(payload).length === 0) {
-            console.log("Webhook validation request received (empty body). Responding 200 OK.");
-            return NextResponse.json({ status: 'success', message: 'Webhook test successful.'}, { status: 200 });
-        }
-        // If it's not a validation request but is missing the ID, it's an error.
         console.error("Webhook payload missing 'balanceId'. Cannot process.", payload);
         return NextResponse.json({ status: 'error', message: "Webhook payload missing 'balanceId'."}, { status: 400 });
     }
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     };
     
     await docRef.update(dataToUpdate);
-    console.log(`Payload updated in Firestore for ID: ${docRef.id}. Status: ${status}.`);
+    console.log(`Payload stored/updated in Firestore for ID: ${docRef.id}. Status: ${status}.`);
 
     if (batchId && batchId.startsWith('batch-')) {
         const batchRef = firestore.collection('batches').doc(batchId);
