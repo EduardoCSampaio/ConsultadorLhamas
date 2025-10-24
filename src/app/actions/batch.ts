@@ -328,8 +328,8 @@ export async function processarLoteFgts(input: z.infer<typeof processFgtsActionS
     return { status: 'error', message };
   }
   
+  // Fire and forget - the function will run in the background
   if (provider === 'v8') {
-    // Fire and forget - the function will run in the background
     processV8BatchInBackground(batchId);
   } else if (provider === 'facta') {
     processFactaBatchInBackground(batchId);
@@ -894,3 +894,5 @@ async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiC
     }
 }
 
+
+    
