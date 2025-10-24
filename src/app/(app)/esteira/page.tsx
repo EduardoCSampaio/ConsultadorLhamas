@@ -23,9 +23,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { useUser } from "@/firebase";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { collection, query, where, orderBy } from 'firebase/firestore';
 
 
 const formatDuration = (ms: number) => {
@@ -43,22 +42,43 @@ const formatDuration = (ms: number) => {
 export default function EsteiraPage() {
     const { toast } = useToast();
     const { user } = useUser();
-    const firestore = useFirestore();
-    const [isManualLoading, setIsManualLoading] = useState(false);
-    
-    // Real-time listener for batches
-    const batchesQuery = useMemoFirebase(() => {
-        if (!firestore || !user) return null;
-        // This simple query fetches all batches. Filtering by user/team can be added here if needed.
-        // For now, let's assume filtering happens on the client or is not required based on current rules.
-        return query(collection(firestore, 'batches'), orderBy('createdAt', 'desc'));
-    }, [firestore, user]);
-
-    const { data: batches, isLoading, error } = useCollection<BatchJob>(batchesQuery);
-
+    const [batches, setBatches] = useState<BatchJob[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     const [isReprocessing, setIsReprocessing] = useState<string | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+
+
+    const fetchBatches = useCallback(async () => {
+        if (!user) return;
+        
+        setIsLoading(true);
+        const { batches: fetchedBatches, error: fetchError } = await getBatches({ userId: user.uid });
+        if (fetchError) {
+            setError(fetchError);
+            setBatches([]);
+        } else {
+            // Sort batches by creation date descending
+            const sortedBatches = (fetchedBatches || []).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            setBatches(sortedBatches);
+            setError(null);
+        }
+        setIsLoading(false);
+    }, [user]);
+
+    useEffect(() => {
+        fetchBatches(); // Initial fetch
+
+        const interval = setInterval(() => {
+            // Don't fetch if a modal is open to avoid distractions
+            if (!isModalOpen) {
+                fetchBatches();
+            }
+        }, 10000); // Poll every 10 seconds
+
+        return () => clearInterval(interval);
+    }, [fetchBatches, isModalOpen]);
 
 
     const handleDownloadReport = async (batch: BatchJob) => {
@@ -93,6 +113,7 @@ export default function EsteiraPage() {
         const { status, message } = await deleteBatch({ batchId });
         if (status === 'success') {
             toast({ title: 'Lote excluído!', description: message });
+            setBatches(prev => prev.filter(b => b.id !== batchId));
         } else {
             toast({ variant: 'destructive', title: 'Erro ao excluir lote', description: message });
         }
@@ -107,6 +128,7 @@ export default function EsteiraPage() {
                 title: 'Reprocessamento iniciado!',
                 description: result.message,
             });
+            await fetchBatches(); // Refresh list to show new batch
         } else {
             toast({
                 variant: 'destructive',
@@ -118,7 +140,6 @@ export default function EsteiraPage() {
     };
 
     const { inProgressBatches, completedBatches, errorBatches } = useMemo(() => {
-        if (!batches) return { inProgressBatches: [], completedBatches: [], errorBatches: [] };
         return {
             inProgressBatches: batches.filter(b => b.status === 'processing' || b.status === 'pending'),
             completedBatches: batches.filter(b => b.status === 'completed'),
@@ -144,17 +165,6 @@ export default function EsteiraPage() {
             case 'pending': return 'Pendente';
             default: return 'Desconhecido';
         }
-    }
-    
-    const fetchBatchesManually = async () => {
-        setIsManualLoading(true);
-        const { batches, error } = await getBatches({ userId: user!.uid });
-         if (error) {
-            toast({ variant: 'destructive', title: 'Erro ao atualizar', description: error });
-        } else {
-            toast({ title: 'Lista de lotes atualizada!'});
-        }
-        setIsManualLoading(false);
     }
 
     const BatchCard = ({ batch }: { batch: BatchJob }) => {
@@ -260,9 +270,7 @@ export default function EsteiraPage() {
     }
     
     const BatchList = ({ list, emptyMessage }: { list: BatchJob[], emptyMessage: string }) => {
-        const finalIsLoading = isLoading || isManualLoading;
-
-        if (finalIsLoading) {
+        if (isLoading && batches.length === 0) {
             return (
                 <div className="space-y-4">
                     {Array.from({ length: 2 }).map((_, i) => (
@@ -314,8 +322,8 @@ export default function EsteiraPage() {
                 title="Esteira de Processamento de Lotes"
                 description="Acompanhe o andamento e baixe os relatórios dos lotes enviados para consulta."
             >
-                <Button variant="outline" onClick={fetchBatchesManually} disabled={isLoading || isManualLoading}>
-                    <RefreshCw className={`mr-2 h-4 w-4 ${isManualLoading ? 'animate-spin' : ''}`} />
+                <Button variant="outline" onClick={fetchBatches} disabled={isLoading}>
+                    <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                     Atualizar
                 </Button>
             </PageHeader>
@@ -324,7 +332,7 @@ export default function EsteiraPage() {
                  <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle>Erro ao Carregar Esteira</AlertTitle>
-                    <AlertDescription>{error.message}</AlertDescription>
+                    <AlertDescription>{error}</AlertDescription>
                  </Alert>
             )}
 

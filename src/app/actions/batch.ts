@@ -133,17 +133,20 @@ export async function deleteBatch(input: z.infer<typeof deleteBatchSchema>): Pro
 }
 
 
-export async function getBatches(input: { userId: string }): Promise<{ status: 'success' | 'error'; batches?: BatchJob[]; message?: string, error?: string }> {
+export async function getBatches(input: { userId: string }): Promise<{ status: 'success' | 'error'; batches?: BatchJob[]; error?: string }> {
     try {
-        let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> = firestore.collection('batches');
+        let query: FirebaseFirestore.Query<FirebaseFirestore.DocumentData> = firestore.collection('batches').orderBy('createdAt', 'desc');
+
         const userDoc = await firestore.collection('users').doc(input.userId).get();
+        if (!userDoc.exists) {
+            return { status: 'error', error: 'Usuário não encontrado.' };
+        }
         const userRole = userDoc.data()?.role;
+        const teamId = userDoc.data()?.teamId;
 
         if (userRole === 'user') {
             query = query.where('userId', '==', input.userId);
-        } else if (userRole === 'manager') {
-            const teamId = userDoc.data()?.teamId;
-            if (!teamId) return { status: 'success', batches: [] };
+        } else if (userRole === 'manager' && teamId) {
             const teamMembersSnapshot = await firestore.collection('users').where('teamId', '==', teamId).get();
             const memberIds = teamMembersSnapshot.docs.map(doc => doc.id);
             if (memberIds.length > 0) {
@@ -152,15 +155,15 @@ export async function getBatches(input: { userId: string }): Promise<{ status: '
                  return { status: 'success', batches: [] };
             }
         }
-        // Super admin sees all batches, so no filter is applied
-        
+        // super_admin sees all, so no filter is applied to the base query
+
         const batchesSnapshot = await query.get();
 
         if (batchesSnapshot.empty) {
             return { status: 'success', batches: [] };
         }
         
-        let batches = batchesSnapshot.docs.map((doc): BatchJob => {
+        const batches = batchesSnapshot.docs.map((doc): BatchJob => {
             const data = doc.data()!;
             return {
                 id: doc.id,
@@ -181,7 +184,6 @@ export async function getBatches(input: { userId: string }): Promise<{ status: '
             };
         });
 
-        // Sorting is done on the client-side in esteira/page.tsx
         return { status: 'success', batches };
     } catch (error) {
         const message = error instanceof Error ? error.message : "Erro ao buscar lotes.";
@@ -891,3 +893,4 @@ async function getC6UserCredentials(userId: string): Promise<{ credentials: ApiC
         return { credentials: null, error: message };
     }
 }
+
