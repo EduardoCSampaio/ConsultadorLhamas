@@ -44,15 +44,12 @@ export type FgtsBalance = {
 // Helper function to construct the webhook URL
 function getWebhookUrl(): string {
     const vercelEnv = process.env.VERCEL_ENV;
-    // VERCEL_URL is provided by Vercel, but it doesn't include the protocol.
     const vercelUrl = process.env.VERCEL_URL;
 
-    // For production and preview deployments on Vercel, construct the full HTTPS URL.
     if ((vercelEnv === 'production' || vercelEnv === 'preview') && vercelUrl) {
         return `https://${vercelUrl}/api/webhook/balance`;
     }
     
-    // Fallback for local development. Ensure you use a tunnel like ngrok if you need to test webhooks locally.
     return process.env.LOCAL_WEBHOOK_URL || 'http://localhost:9002/api/webhook/balance';
 }
 

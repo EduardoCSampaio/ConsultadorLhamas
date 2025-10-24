@@ -20,7 +20,6 @@ export async function POST(request: NextRequest) {
 
     const balanceId = payload.balanceId;
 
-    // A V8 sometimes sends a validation request with an empty body.
     if (Object.keys(payload).length === 0) {
         console.log("Webhook validation request received (empty body). Responding 200 OK.");
         return NextResponse.json({ status: 'success', message: 'Webhook test successful.'}, { status: 200 });
@@ -36,8 +35,6 @@ export async function POST(request: NextRequest) {
 
     if (!docSnapshot.exists) {
         console.error(`Webhook received for unknown balanceId: ${balanceId}. Storing anyway.`);
-        // Even if we don't know this balanceId, we store it for debugging.
-        // We can't update a batch, but at least we log the data.
         await docRef.set({
             status: 'error',
             message: 'Received webhook for an unknown balanceId.',
