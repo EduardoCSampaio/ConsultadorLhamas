@@ -2,12 +2,11 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import Link from 'next/link';
 import { PageHeader } from "@/components/page-header";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Download, RefreshCw, AlertCircle, Inbox, Trash2, Play, Timer, CheckCircle, FileText, Briefcase, ExternalLink, CircleDashed } from 'lucide-react';
+import { Loader2, Download, RefreshCw, AlertCircle, Inbox, Trash2, Play, Timer, CheckCircle, FileText, Briefcase } from 'lucide-react';
 import { getBatches, deleteBatch, type BatchJob, gerarRelatorioLote, reprocessarLoteComErro } from '@/app/actions/batch';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -24,8 +23,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { useUser } from "@/firebase";
+import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { collection, query, where, orderBy } from 'firebase/firestore';
+
 
 const formatDuration = (ms: number) => {
     if (ms < 0) ms = 0;
@@ -42,62 +43,24 @@ const formatDuration = (ms: number) => {
 export default function EsteiraPage() {
     const { toast } = useToast();
     const { user } = useUser();
-    const [batches, setBatches] = useState<BatchJob[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const firestore = useFirestore();
+    const [isManualLoading, setIsManualLoading] = useState(false);
+    
+    // Real-time listener for batches
+    const batchesQuery = useMemoFirebase(() => {
+        if (!firestore || !user) return null;
+        // This simple query fetches all batches. Filtering by user/team can be added here if needed.
+        // For now, let's assume filtering happens on the client or is not required based on current rules.
+        return query(collection(firestore, 'batches'), orderBy('createdAt', 'desc'));
+    }, [firestore, user]);
+
+    const { data: batches, isLoading, error } = useCollection<BatchJob>(batchesQuery);
+
+
     const [isReprocessing, setIsReprocessing] = useState<string | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [_, setTick] = useState(0); // For re-rendering to update timer
     const [isModalOpen, setIsModalOpen] = useState(false);
 
 
-    const fetchBatches = useCallback(async (showLoading = true) => {
-        if (!user) return;
-        if(showLoading) setIsLoading(true);
-        setError(null);
-        const { batches: fetchedBatches, error: fetchError } = await getBatches({ userId: user.uid });
-        if (fetchError) {
-            setError(fetchError);
-            toast({ variant: 'destructive', title: 'Erro ao buscar lotes', description: fetchError });
-            setBatches([]);
-        } else {
-            // Sort batches on the client-side
-            const sortedBatches = (fetchedBatches || []).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-            setBatches(sortedBatches);
-        }
-        if(showLoading) setIsLoading(false);
-    }, [toast, user]);
-
-    useEffect(() => {
-        if (user) {
-            fetchBatches(true); // Initial fetch with loading screen
-        }
-    }, [user, fetchBatches]);
-
-    useEffect(() => {
-        // Interval to update the visual timer every second
-        const timerInterval = setInterval(() => {
-            if (!isModalOpen) {
-                setTick(t => t + 1);
-            }
-        }, 1000);
-        
-        // Interval to fetch data from the server every 10 seconds
-        const dataFetchInterval = setInterval(() => {
-            setBatches(currentBatches => {
-                // Only fetch data if there's a batch currently processing or pending
-                if (currentBatches.some(b => b.status === 'processing' || b.status === 'pending')) {
-                    fetchBatches(false); // Fetch silently in the background
-                }
-                return currentBatches;
-            });
-        }, 10000);
-
-        return () => {
-            clearInterval(timerInterval);
-            clearInterval(dataFetchInterval);
-        };
-    }, [fetchBatches, isModalOpen]);
-    
     const handleDownloadReport = async (batch: BatchJob) => {
         if (!user) {
             toast({ variant: "destructive", title: "Erro de autenticação" });
@@ -130,7 +93,6 @@ export default function EsteiraPage() {
         const { status, message } = await deleteBatch({ batchId });
         if (status === 'success') {
             toast({ title: 'Lote excluído!', description: message });
-            await fetchBatches(false); 
         } else {
             toast({ variant: 'destructive', title: 'Erro ao excluir lote', description: message });
         }
@@ -145,7 +107,6 @@ export default function EsteiraPage() {
                 title: 'Reprocessamento iniciado!',
                 description: result.message,
             });
-            await fetchBatches(false);
         } else {
             toast({
                 variant: 'destructive',
@@ -157,6 +118,7 @@ export default function EsteiraPage() {
     };
 
     const { inProgressBatches, completedBatches, errorBatches } = useMemo(() => {
+        if (!batches) return { inProgressBatches: [], completedBatches: [], errorBatches: [] };
         return {
             inProgressBatches: batches.filter(b => b.status === 'processing' || b.status === 'pending'),
             completedBatches: batches.filter(b => b.status === 'completed'),
@@ -183,8 +145,30 @@ export default function EsteiraPage() {
             default: return 'Desconhecido';
         }
     }
+    
+    const fetchBatchesManually = async () => {
+        setIsManualLoading(true);
+        const { batches, error } = await getBatches({ userId: user!.uid });
+         if (error) {
+            toast({ variant: 'destructive', title: 'Erro ao atualizar', description: error });
+        } else {
+            toast({ title: 'Lista de lotes atualizada!'});
+        }
+        setIsManualLoading(false);
+    }
 
     const BatchCard = ({ batch }: { batch: BatchJob }) => {
+        const [elapsedTime, setElapsedTime] = useState(Date.now() - new Date(batch.createdAt).getTime());
+
+        useEffect(() => {
+            if (batch.status === 'processing' || batch.status === 'pending') {
+                const interval = setInterval(() => {
+                    setElapsedTime(Date.now() - new Date(batch.createdAt).getTime());
+                }, 1000);
+                return () => clearInterval(interval);
+            }
+        }, [batch.status, batch.createdAt]);
+
         return (
              <AlertDialog onOpenChange={setIsModalOpen}>
                 <Card>
@@ -196,16 +180,16 @@ export default function EsteiraPage() {
                                     <h3 className="font-semibold">{batch.fileName} ({batch.provider.toUpperCase()})</h3>
                                 </div>
                                 <div className="text-sm text-muted-foreground">
-                                    Enviado em: {new Date(batch.createdAt).toLocaleString('pt-BR')}
+                                    Enviado por: {batch.userEmail} em {new Date(batch.createdAt).toLocaleString('pt-BR')}
                                 </div>
                                 {batch.status === 'processing' && (
                                     <div className="text-sm text-muted-foreground flex items-center gap-1.5">
                                         <Timer className="h-3.5 w-3.5"/>
-                                        Em andamento por: {formatDuration(Date.now() - new Date(batch.createdAt).getTime())}
+                                        Em andamento por: {formatDuration(elapsedTime)}
                                     </div>
                                 )}
                                 {(batch.status === 'completed' || batch.status === 'error') && batch.completedAt && (
-                                        <div className="text-sm text-muted-foreground flex items-center gap-1.5">
+                                    <div className="text-sm text-muted-foreground flex items-center gap-1.5">
                                         <CheckCircle className="h-3.5 w-3.5"/>
                                         Concluído em: {formatDuration(new Date(batch.completedAt).getTime() - new Date(batch.createdAt).getTime())}
                                     </div>
@@ -276,7 +260,9 @@ export default function EsteiraPage() {
     }
     
     const BatchList = ({ list, emptyMessage }: { list: BatchJob[], emptyMessage: string }) => {
-        if (isLoading) {
+        const finalIsLoading = isLoading || isManualLoading;
+
+        if (finalIsLoading) {
             return (
                 <div className="space-y-4">
                     {Array.from({ length: 2 }).map((_, i) => (
@@ -328,8 +314,8 @@ export default function EsteiraPage() {
                 title="Esteira de Processamento de Lotes"
                 description="Acompanhe o andamento e baixe os relatórios dos lotes enviados para consulta."
             >
-                <Button variant="outline" onClick={() => fetchBatches(true)} disabled={isLoading}>
-                    <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                <Button variant="outline" onClick={fetchBatchesManually} disabled={isLoading || isManualLoading}>
+                    <RefreshCw className={`mr-2 h-4 w-4 ${isManualLoading ? 'animate-spin' : ''}`} />
                     Atualizar
                 </Button>
             </PageHeader>
@@ -338,7 +324,7 @@ export default function EsteiraPage() {
                  <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle>Erro ao Carregar Esteira</AlertTitle>
-                    <AlertDescription>{error}</AlertDescription>
+                    <AlertDescription>{error.message}</AlertDescription>
                  </Alert>
             )}
 
@@ -373,5 +359,3 @@ export default function EsteiraPage() {
         </div>
     );
 }
-
-    
