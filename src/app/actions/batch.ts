@@ -2,7 +2,7 @@
 'use server';
 
 import { z } from 'zod';
-import { consultarSaldoFgts as consultarSaldoV8 } from './fgts';
+import { consultarSaldoFgts } from './fgts';
 import { consultarSaldoFgtsFacta, getFactaAuthToken } from './facta';
 import { consultarLinkAutorizacaoC6, consultarOfertasCLTC6, verificarStatusAutorizacaoC6, type C6Offer } from './c6';
 import * as XLSX from 'xlsx';
@@ -513,6 +513,7 @@ async function processV8BatchInBackground(batchId: string) {
     const batchRef = firestore.collection('batches').doc(batchId);
 
     try {
+        // Immediately update the status to 'processing'
         await batchRef.update({ status: 'processing', message: 'Enviando requisições para a API V8...' });
 
         const batchDoc = await batchRef.get();
@@ -535,14 +536,15 @@ async function processV8BatchInBackground(batchId: string) {
         if (authError || !authToken) throw new Error(authError || "Failed to get V8 auth token.");
         
         for (const cpf of cpfs) {
+            // The balanceId must be consistent for each CPF request within this batch run.
             const balanceId = randomUUID();
-             consultarSaldoV8({ 
+             consultarSaldoFgts({ 
                 documentNumber: cpf, 
                 userId, 
                 userEmail,
                 token: authToken, 
                 provider: v8Provider,
-                balanceId,
+                balanceId: balanceId,
                 batchId
             });
         }
