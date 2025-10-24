@@ -514,9 +514,7 @@ async function processV8BatchInBackground(batchId: string) {
     const batchRef = firestore.collection('batches').doc(batchId);
 
     try {
-        // Immediately update the status to 'processing'
         await batchRef.update({ status: 'processing', message: 'Enviando requisições para a API V8...' });
-
         const batchDoc = await batchRef.get();
         if (!batchDoc.exists) throw new Error(`Lote ${batchId} não encontrado.`);
 
@@ -537,7 +535,6 @@ async function processV8BatchInBackground(batchId: string) {
         if (authError || !authToken) throw new Error(authError || "Failed to get V8 auth token.");
         
         for (const cpf of cpfs) {
-            // The balanceId must be consistent for each CPF request within this batch run.
             const balanceId = randomUUID();
             await consultarSaldoFgts({ 
                 documentNumber: cpf, 

@@ -18,7 +18,6 @@ export async function POST(request: NextRequest) {
     console.log("--- Balance Webhook Received (Admin SDK) ---");
     console.log("Body (Payload):", JSON.stringify(payload, null, 2));
     
-    // The V8 API sends balanceId on success, but not always on failures.
     const balanceId = payload.balanceId;
 
     if (Object.keys(payload).length === 0) {
@@ -36,8 +35,6 @@ export async function POST(request: NextRequest) {
 
     if (!docSnapshot.exists) {
         console.error(`Webhook received for unknown balanceId: ${balanceId}. Storing anyway.`);
-        // This is a failsafe. If we receive a webhook for an ID we don't recognize,
-        // we still store it so the data isn't lost. This indicates a problem in the calling function.
         await docRef.set({
             status: 'error',
             message: 'Received webhook for an unknown balanceId.',
@@ -67,11 +64,9 @@ export async function POST(request: NextRequest) {
         message: isError ? `Webhook received with error: ${errorMessage}` : 'Webhook payload successfully stored.',
     };
     
-    // Update the specific webhook response document
     await docRef.update(dataToUpdate);
     console.log(`Payload stored/updated in Firestore for ID: ${docRef.id}. Status: ${status}.`);
 
-    // If this response is part of a batch, update the batch progress
     if (batchId && batchId.startsWith('batch-')) {
         const batchRef = firestore.collection('batches').doc(batchId);
         try {
@@ -82,7 +77,6 @@ export async function POST(request: NextRequest) {
                     return;
                 }
                 const batchData = batchDoc.data()!;
-                // Prevent updates on already finished batches
                 if (batchData.status === 'completed' || (batchData.status === 'error' && batchData.processedCpfs >= batchData.totalCpfs)) {
                     console.log(`[Batch ${batchId}] Already finished. Ignoring webhook update.`);
                     return;
@@ -94,7 +88,6 @@ export async function POST(request: NextRequest) {
 
                 const newProcessedCount = (batchData.processedCpfs || 0) + 1;
 
-                // If this is the last CPF, mark the batch as complete
                 if (newProcessedCount >= batchData.totalCpfs) {
                      console.log(`[Batch ${batchId}] Final CPF received. Marking as complete.`);
                      updates.status = 'completed';
@@ -117,7 +110,6 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     if (error instanceof SyntaxError && error.message.includes('Unexpected end of JSON input')) {
-        // This is likely a validation request from the API provider with an empty body.
         console.log("Webhook validation request received (empty body). Responding 200 OK.");
         return NextResponse.json({
             status: 'success',
