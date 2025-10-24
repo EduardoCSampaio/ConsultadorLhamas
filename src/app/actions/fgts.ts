@@ -44,14 +44,15 @@ export type FgtsBalance = {
 // Helper function to construct the webhook URL
 function getWebhookUrl(): string {
     const vercelEnv = process.env.VERCEL_ENV;
-    const vercelUrl = process.env.NEXT_PUBLIC_VERCEL_URL;
+    // VERCEL_URL gives the domain, but might not include the protocol.
+    const vercelUrl = process.env.VERCEL_URL;
 
-    if (vercelEnv === 'production' && vercelUrl) {
+    // In production or preview on Vercel, construct the full HTTPS URL.
+    if ((vercelEnv === 'production' || vercelEnv === 'preview') && vercelUrl) {
         return `https://${vercelUrl}/api/webhook/balance`;
     }
     
-    // Fallback for local development or other environments
-    // Ensure you have a tunnel like ngrok if testing webhooks locally
+    // Fallback for local development. Ensure you use a tunnel like ngrok for testing.
     return process.env.LOCAL_WEBHOOK_URL || 'http://localhost:9002/api/webhook/balance';
 }
 
@@ -89,7 +90,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       status: 'pending_webhook',
       provider: 'V8DIGITAL',
       v8Provider: provider,
-      documentNumber: documentNumber, // Store the CPF here for easy lookup
+      documentNumber: documentNumber,
       createdAt: FieldValue.serverTimestamp(),
       batchId: batchId, 
   };
@@ -103,7 +104,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
       documentNumber, 
       provider,
       webhookUrl: getWebhookUrl(),
-      balanceId // Pass the unique ID to the API
+      balanceId
   };
 
   try {
