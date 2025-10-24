@@ -12,7 +12,7 @@ import { randomUUID } from 'crypto';
 
 
 const actionSchema = z.object({
-  documentNumber: z.string(),
+  borrowerDocumentNumber: z.string(),
   token: z.string(),
   provider: z.enum(['qi', 'cartos', 'bms']),
   userId: z.string(), 
@@ -63,14 +63,14 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
     return { status: 'error', stepIndex: 0, message: 'Dados de entrada inválidos.' };
   }
   
-  const { documentNumber, token: authToken, userId, userEmail, provider, balanceId, batchId } = validation.data;
+  const { borrowerDocumentNumber, token: authToken, userId, userEmail, provider, balanceId, batchId } = validation.data;
   
   const webhookResponseRef = firestore.collection('webhookResponses').doc(balanceId);
   
   const API_URL_CONSULTA = 'https://bff.v8sistema.com/fgts/balance';
   
   const requestBody = { 
-      documentNumber, 
+      borrowerDocumentNumber, 
       provider,
       webhookUrl: getWebhookUrl(),
       balanceId: balanceId,
@@ -81,11 +81,12 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
     // CRITICAL FIX: Create the document in Firestore *before* calling the external API.
     // This ensures that when the webhook fires, the document it needs to update already exists.
     const initialWebhookData = {
+        id: balanceId, // Store the balanceId as the main ID for lookup
         userId: userId,
         status: 'pending_webhook',
         provider: 'V8DIGITAL',
         v8Provider: provider,
-        documentNumber: documentNumber, // CRITICAL: Ensure the CPF is stored for association.
+        documentNumber: borrowerDocumentNumber, // CRITICAL: Ensure the CPF is stored for association.
         createdAt: FieldValue.serverTimestamp(),
         batchId: batchId, 
     };
@@ -95,7 +96,7 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
         await logActivity({
             userId: userId,
             action: `Consulta FGTS - V8`,
-            documentNumber: documentNumber,
+            documentNumber: borrowerDocumentNumber,
             provider: 'V8DIGITAL',
             details: `Parceiro: ${provider}`
         });
@@ -114,11 +115,11 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
         const errorData = await response.json();
         const errorMessage = errorData.message || `API V8 retornou erro ${response.status}`;
         console.error(`[V8 BATCH] Failed to send request for balanceId ${balanceId}:`, errorMessage);
-        await webhookResponseRef.set({
+        await webhookResponseRef.update({
             status: 'error',
             message: `Falha ao enviar a requisição para a API V8: ${errorMessage}`,
             responseBody: { error: errorMessage }
-        }, { merge: true });
+        });
         return { status: 'error', stepIndex: 1, message: errorMessage };
     }
     
@@ -132,12 +133,12 @@ export async function consultarSaldoFgts(input: z.infer<typeof actionSchema>): P
     console.error("[V8 API] Erro de comunicação na consulta de saldo:", error);
     const message = error instanceof Error ? error.message : 'Ocorreu um erro de comunicação com a API.';
     // Update the existing doc with the error, as it was created before the fetch call.
-    await webhookResponseRef.set({
+    await webhookResponseRef.update({
         responseBody: { error: message },
         updatedAt: FieldValue.serverTimestamp(),
         status: 'error',
         message: message,
-    }, { merge: true });
+    });
     return { status: 'error', stepIndex: 1, message };
   }
 }
@@ -213,7 +214,7 @@ export async function consultarSaldoManual(input: z.infer<typeof manualActionSch
                     const balanceId = randomUUID(); 
                     
                     await consultarSaldoFgts({ 
-                        documentNumber: cpf, 
+                        borrowerDocumentNumber: cpf, 
                         userId, 
                         userEmail, 
                         provider: v8Provider, 
@@ -247,5 +248,4 @@ export async function consultarSaldoManual(input: z.infer<typeof manualActionSch
         return { balances: [], error: "Nenhum saldo encontrado para os provedores selecionados ou as consultas falharam."}
     }
 
-    return { balances: finalBalances };
-}
+    return
