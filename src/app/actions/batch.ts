@@ -221,10 +221,9 @@ async function processFactaBatchInBackground(batchId: string) {
             await batchRef.update({ status: 'processing', message: 'Iniciando processamento...', processedCpfs: currentProcessedCount });
         }
         
-        const { credentials, error: credError } = await getFactaUserCredentials(batchData.userId);
-        if (credError || !credentials) {
-             throw new Error(credError || `Credenciais da Facta não encontradas para o usuário ${batchData.userId}`);
-        }
+        const userDoc = await firestore.collection('users').doc(batchData.userId).get();
+        if (!userDoc.exists) throw new Error(`Usuário ${batchData.userId} não encontrado.`);
+        const credentials = userDoc.data() as ApiCredentials;
         
         const { token, error: tokenError } = await getFactaAuthToken(credentials.facta_username, credentials.facta_password);
         if (tokenError || !token) throw new Error(tokenError || "Falha ao obter token da Facta.");
@@ -329,11 +328,11 @@ export async function processarLoteFgts(input: z.infer<typeof processFgtsActionS
   }
   
   // Fire and forget - the function will run in the background
-  if (provider === 'v8') {
-    processV8BatchInBackground(batchId);
-  } else if (provider === 'facta') {
-    processFactaBatchInBackground(batchId);
-  }
+    if (provider === 'v8') {
+        processV8BatchInBackground(batchId);
+    } else if (provider === 'facta') {
+        processFactaBatchInBackground(batchId);
+    }
   
   const serializableBatch: BatchJob = {
     ...(batchData as any),
@@ -348,6 +347,47 @@ export async function processarLoteFgts(input: z.infer<typeof processFgtsActionS
   };
 }
 
+async function processV8BatchInBackground(batchId: string) {
+    console.log(`[Batch ${batchId}] Starting V8 background processing...`);
+    const batchRef = firestore.collection('batches').doc(batchId);
+    let batchData: BatchJob | null = null;
+    try {
+        const batchDoc = await batchRef.get();
+        if (!batchDoc.exists) throw new Error(`Lote ${batchId} não encontrado.`);
+        batchData = batchDoc.data() as BatchJob;
+        if (!batchData.v8Provider) throw new Error("Parceiro V8 não especificado no lote.");
+
+        await batchRef.update({ status: 'processing', message: 'Iniciando processamento...' });
+
+        const { credentials, error: credError } = await getUserCredentials(batchData.userId);
+        if (credError || !credentials) {
+            throw new Error(credError || `Credenciais V8 não encontradas para o usuário ${batchData.userId}`);
+        }
+
+        const { token, error: tokenError } = await getAuthToken(credentials);
+        if (tokenError || !token) {
+            throw new Error(tokenError || "Falha ao obter token da V8.");
+        }
+
+        for (const cpf of batchData.cpfs) {
+            const balanceId = randomUUID();
+            await consultarSaldoFgts({
+                borrowerDocumentNumber: cpf,
+                token: token,
+                provider: batchData.v8Provider,
+                userId: batchData.userId,
+                userEmail: batchData.userEmail,
+                balanceId: balanceId,
+                batchId: batchId,
+            });
+        }
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro desconhecido no processamento do lote V8.";
+        console.error(`[Batch ${batchId}] V8 BATCH FATAL ERROR:`, error);
+        await batchRef.update({ status: 'error', message: message, completedAt: FieldValue.serverTimestamp() });
+    }
+}
+
 
 async function processC6BatchInBackground(batchId: string) {
     console.log(`[Batch C6 ${batchId}] Starting C6 background processing...`);
@@ -360,4 +400,254 @@ async function processC6BatchInBackground(batchId: string) {
         
         batchData = batchDoc.data() as BatchJob;
         if (!batchData.cpfsData) {
-            throw new Error(`Dados de CPFs não encontrad
+            throw new Error(`Dados de CPFs não encontrados para o lote ${batchId}`);
+        }
+        
+        await batchRef.update({ status: 'processing', message: 'Iniciando processamento...' });
+
+        const results: Record<string, any> = {};
+        let processedCount = 0;
+
+        for (const cpfData of batchData.cpfsData) {
+            let status = 'error';
+            let message = '';
+            let link: string | undefined = undefined;
+            let offers: C6Offer[] | undefined = undefined;
+
+            try {
+                // 1. Gerar Link
+                const linkResponse = await consultarLinkAutorizacaoC6({
+                    cpf: cpfData.cpf,
+                    nome: cpfData.nome || 'N/A',
+                    data_nascimento: cpfData.data_nascimento || 'N/A',
+                    telefone: {
+                        codigo_area: cpfData.telefone_ddd || '00',
+                        numero: cpfData.telefone_numero || '000000000',
+                    },
+                    userId: batchData.userId,
+                });
+
+                if (linkResponse.success && linkResponse.data) {
+                    link = linkResponse.data.link;
+                    // 2. Verificar status (com alguma espera)
+                    await new Promise(resolve => setTimeout(resolve, 5000)); // Espera 5s
+                    const statusResponse = await verificarStatusAutorizacaoC6({ cpf: cpfData.cpf, userId: batchData.userId });
+
+                    if (statusResponse.success && statusResponse.data?.status === 'AUTORIZADO') {
+                        // 3. Buscar ofertas
+                        const offersResponse = await consultarOfertasCLTC6({ cpf: cpfData.cpf, userId: batchData.userId });
+                        if (offersResponse.success) {
+                            status = 'success';
+                            message = offersResponse.message || 'Ofertas consultadas.';
+                            offers = offersResponse.data;
+                        } else {
+                            message = `Autorizado, mas falhou ao buscar ofertas: ${offersResponse.message}`;
+                        }
+                    } else {
+                        message = `Status de autorização: ${statusResponse.data?.status || 'desconhecido'}. ${statusResponse.message}`;
+                    }
+                } else {
+                    message = `Falha ao gerar link: ${linkResponse.message}`;
+                }
+            } catch (e: any) {
+                message = `Erro inesperado no processamento do CPF: ${e.message}`;
+            }
+
+            results[cpfData.cpf] = { status, link, message, offers };
+            processedCount++;
+            await batchRef.update({
+                processedCpfs: processedCount,
+                results: results
+            });
+        }
+
+        await batchRef.update({
+            status: 'completed',
+            completedAt: FieldValue.serverTimestamp(),
+            message: 'Processamento do lote C6 concluído.',
+        });
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro fatal no processamento do lote C6.";
+        console.error(`[Batch C6 ${batchId}] FATAL ERROR:`, error);
+        await batchRef.update({ status: 'error', message, completedAt: FieldValue.serverTimestamp() });
+    }
+}
+
+
+export async function processarLoteClt(input: z.infer<typeof processCltActionSchema>): Promise<ProcessActionResult> {
+  const validation = processCltActionSchema.safeParse(input);
+
+  if (!validation.success) {
+    return { 
+        status: 'error', 
+        message: 'Dados de entrada inválidos para lote CLT.' 
+    };
+  }
+  const { cpfsData, provider, userId, userEmail, fileName } = validation.data;
+  
+  const batchId = `batch-clt-${provider}-${Date.now()}-${userId.substring(0, 5)}`;
+  const batchRef = firestore.collection('batches').doc(batchId);
+  
+  const batchJob: Omit<BatchJob, 'id'|'createdAt'> & { createdAt: FieldValue } = {
+      fileName: fileName,
+      type: 'clt',
+      provider: provider,
+      status: 'pending',
+      totalCpfs: cpfsData.length,
+      processedCpfs: 0,
+      cpfs: cpfsData.map(d => d.cpf),
+      cpfsData: cpfsData,
+      createdAt: FieldValue.serverTimestamp(),
+      userId: userId,
+      userEmail: userEmail,
+  };
+
+  try {
+      await batchRef.set(batchJob);
+      await logActivity({
+          userId,
+          action: `Consulta CLT em Lote`,
+          provider,
+          details: `Arquivo: ${fileName} (${cpfsData.length} CPFs)`
+      });
+
+      if (provider === 'c6') {
+          processC6BatchInBackground(batchId);
+      }
+      
+      const serializableBatch: BatchJob = {
+        ...batchJob,
+        id: batchId,
+        createdAt: new Date().toISOString(),
+      };
+      return {
+        status: 'success',
+        message: `Lote CLT para ${provider.toUpperCase()} iniciado.`,
+        batch: serializableBatch,
+      };
+
+  } catch(error) {
+    const message = error instanceof Error ? error.message : "Erro ao criar o lote no Firestore.";
+    console.error("Batch CLT init error:", message);
+    return { status: 'error', message };
+  }
+}
+
+export async function gerarRelatorioLote(input: z.infer<typeof reportActionSchema>): Promise<ReportActionResult> {
+    const validation = reportActionSchema.safeParse(input);
+    if (!validation.success) {
+        return { status: 'error', fileName: '', fileContent: '', message: 'Dados de entrada para o relatório são inválidos.' };
+    }
+    const { createdAt, provider, userId, batchId } = validation.data;
+    
+    await logActivity({ userId, action: 'Download de Relatório', provider, details: `Batch ID: ${batchId}` });
+
+    try {
+        const batchDoc = await firestore.collection('batches').doc(batchId).get();
+        if (!batchDoc.exists) {
+            return { status: 'error', fileName: '', fileContent: '', message: 'Lote não encontrado.' };
+        }
+        const batchData = batchDoc.data() as BatchJob;
+
+        const webhookResponses = await firestore.collection('webhookResponses').where('batchId', '==', batchId).get();
+        const responsesByCpf: Record<string, any> = {};
+
+        webhookResponses.forEach(doc => {
+            const data = doc.data();
+            const cpf = data.documentNumber;
+            if (cpf) {
+                responsesByCpf[cpf] = data.responseBody || { error: data.message };
+            }
+        });
+
+        const dataToExport = batchData.cpfs.map(cpf => {
+            const response = responsesByCpf[cpf];
+            if (response && response.balance !== undefined) {
+                return { CPF: cpf, SALDO: response.balance, MENSAGEM: 'Sucesso' };
+            }
+            return { CPF: cpf, SALDO: 0, MENSAGEM: response?.errorMessage || 'Sem resposta ou erro' };
+        });
+
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+        worksheet['!cols'] = [{ wch: 15 }, { wch: 15 }, { wch: 50 }];
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Resultados');
+
+        const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
+        const base64String = buffer.toString('base64');
+        const fileContent = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64String}`;
+        
+        const formattedDate = new Date(createdAt).toLocaleDateString('pt-BR').replace(/\//g, '-');
+        const fileName = `Relatorio_${provider}_${formattedDate}.xlsx`;
+
+        return { status: 'success', fileName, fileContent, message: 'Relatório gerado.' };
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro ao gerar relatório.";
+        console.error("gerarRelatorioLote error:", error);
+        return { status: 'error', fileName: '', fileContent: '', message };
+    }
+}
+
+
+export async function reprocessarLoteComErro(input: z.infer<typeof reprocessBatchSchema>): Promise<ReprocessActionResult> {
+    const validation = reprocessBatchSchema.safeParse(input);
+    if (!validation.success) {
+        return { status: 'error', message: 'ID do lote inválido.' };
+    }
+    const { batchId } = validation.data;
+
+    try {
+        const originalBatchRef = firestore.collection('batches').doc(batchId);
+        const originalBatchDoc = await originalBatchRef.get();
+
+        if (!originalBatchDoc.exists) {
+            return { status: 'error', message: 'Lote original não encontrado.' };
+        }
+        const originalBatchData = originalBatchDoc.data() as BatchJob;
+
+        const webhookResponses = await firestore.collection('webhookResponses').where('batchId', '==', batchId).get();
+        const successfulCpfs = new Set(
+            webhookResponses.docs
+                .filter(doc => doc.data().status === 'success' && (doc.data().responseBody?.balance > 0 || doc.data().responseBody?.offers?.length > 0))
+                .map(doc => doc.data().documentNumber)
+        );
+        
+        const cpfsToReprocess = originalBatchData.cpfs.filter(cpf => !successfulCpfs.has(cpf));
+
+        if (cpfsToReprocess.length === 0) {
+            return { status: 'success', message: 'Nenhum CPF para reprocessar. Todos tiveram sucesso ou falharam sem saldo.' };
+        }
+        
+        if (originalBatchData.type === 'fgts') {
+            return await processarLoteFgts({
+                cpfs: cpfsToReprocess,
+                provider: originalBatchData.provider.toLowerCase() as 'v8' | 'facta',
+                userId: originalBatchData.userId,
+                userEmail: originalBatchData.userEmail,
+                fileName: `${originalBatchData.fileName} (Reprocessamento)`,
+                v8Provider: originalBatchData.v8Provider,
+            });
+        } else if (originalBatchData.type === 'clt' && originalBatchData.cpfsData) {
+            const cpfsDataToReprocess = originalBatchData.cpfsData.filter(cpfData => cpfsToReprocess.includes(cpfData.cpf));
+            return await processarLoteClt({
+                 cpfsData: cpfsDataToReprocess,
+                 provider: originalBatchData.provider.toLowerCase() as 'v8' | 'facta' | 'c6',
+                 userId: originalBatchData.userId,
+                 userEmail: originalBatchData.userEmail,
+                 fileName: `${originalBatchData.fileName} (Reprocessamento)`,
+            });
+        }
+        
+        return { status: 'error', message: 'Tipo de lote não suportado para reprocessamento.' };
+
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro desconhecido ao tentar reprocessar o lote.";
+        console.error("reprocessarLoteComErro error:", error);
+        return { status: 'error', message };
+    }
+}
+
+    

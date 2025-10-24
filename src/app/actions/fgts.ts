@@ -248,4 +248,7 @@ export async function consultarSaldoManual(input: z.infer<typeof manualActionSch
         return { balances: [], error: "Nenhum saldo encontrado para os provedores selecionados ou as consultas falharam."}
     }
 
-    return
+    return { balances: finalBalances };
+}
+
+    
