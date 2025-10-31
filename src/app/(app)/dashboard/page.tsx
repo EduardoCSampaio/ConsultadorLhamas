@@ -425,14 +425,18 @@ function AdminDashboardLoader() {
                  <Card>
                     <CardHeader>
                         <CardTitle><Skeleton className="h-6 w-48"/></CardTitle>
-                        <CardDescription><Skeleton className="h-4 w-72"/></CardDescription>
+                        <div className="text-sm text-muted-foreground">
+                            <Skeleton className="h-4 w-72"/>
+                        </div>
                     </CardHeader>
                     <CardContent><Skeleton className="h-40 w-full"/></CardContent>
                 </Card>
                  <Card>
                     <CardHeader>
                         <CardTitle><Skeleton className="h-6 w-48"/></CardTitle>
-                        <CardDescription><Skeleton className="h-4 w-72"/></CardDescription>
+                        <div className="text-sm text-muted-foreground">
+                            <Skeleton className="h-4 w-72"/>
+                        </div>
                     </CardHeader>
                     <CardContent><Skeleton className="h-40 w-full"/></CardContent>
                 </Card>
