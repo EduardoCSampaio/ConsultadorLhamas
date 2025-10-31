@@ -7,7 +7,7 @@ export function Logo({ className }: { className?: string }) {
     <Link href="/" className={cn("flex items-center gap-3 text-inherit", className)}>
       <div className="bg-primary/20 p-1 rounded-lg flex items-center justify-center">
         <Image 
-            src="/lhamas.jpeg" 
+            src="/favicon.ico" 
             alt="Lhamascred Logo" 
             width={32} 
             height={32} 
