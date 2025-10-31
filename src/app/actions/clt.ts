@@ -4,6 +4,7 @@
 import { z } from 'zod';
 import type { ApiCredentials } from './users';
 import { firestore } from '@/firebase/server-init';
+import { logActivity } from './users';
 
 const phoneSchema = z.object({
     countryCode: z.string(),
@@ -14,11 +15,15 @@ const phoneSchema = z.object({
 const consentActionSchema = z.object({
   borrowerDocumentNumber: z.string(),
   gender: z.enum(["male", "female"]),
-  birthDate: z.string(),
+  birthDate: z.string(), // DD/MM/AAAA
   signerName: z.string(),
   signerEmail: z.string().email(),
   signerPhone: phoneSchema,
   provider: z.literal("QI"),
+  userId: z.string(),
+});
+
+const getConfigsSchema = z.object({
   userId: z.string(),
 });
 
@@ -71,6 +76,13 @@ type CreateSimulacaoResult = {
     message: string;
     simulation?: SimulationResult;
 };
+
+type GetConfigsResult = {
+    success: boolean;
+    message: string;
+    configs?: SimulationConfig[];
+}
+
 
 export async function getUserCredentials(userId: string): Promise<{ credentials: ApiCredentials | null; error: string | null }> {
     if (!userId) {
@@ -142,6 +154,11 @@ export async function getAuthToken(credentials: ApiCredentials): Promise<{token:
   }
 }
 
+function convertDateToYYYYMMDD(dateStr: string): string {
+    const [day, month, year] = dateStr.split('/');
+    return `${year}-${month}-${day}`;
+}
+
 
 export async function gerarTermoConsentimento(input: z.infer<typeof consentActionSchema>): Promise<CLTConsentResult> {
     const validation = consentActionSchema.safeParse(input);
@@ -149,7 +166,14 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
         return { success: false, message: 'Dados de entrada inválidos.' };
     }
 
-    const { userId, ...data } = validation.data;
+    const { userId, birthDate, ...data } = validation.data;
+
+    await logActivity({
+        userId,
+        action: 'Geração Termo CLT V8',
+        provider: 'V8',
+        documentNumber: data.borrowerDocumentNumber,
+    });
 
     const { credentials, error: credError } = await getUserCredentials(userId);
     if (credError || !credentials) {
@@ -168,68 +192,34 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
     };
 
     try {
-        // --- ETAPA 1: GERAR O TERMO DE CONSENTIMENTO ---
-        const generationBody = {
-            ...data
+        const requestBody = {
+            ...data,
+            birthDate: convertDateToYYYYMMDD(birthDate)
         };
 
-        console.log("--- [CLT_CONSENT DEBUG - ETAPA 1: GERAR] ---");
-        console.log("Endpoint:", API_URL);
-        console.log("Method: POST");
-        console.log("Headers:", JSON.stringify({ ...headers, Authorization: 'Bearer [REDACTED]' }, null, 2));
-        console.log("Request Body:", JSON.stringify(generationBody, null, 2));
-        console.log("------------------------------------------");
-
-        const generationResponse = await fetch(API_URL, {
+        const response = await fetch(API_URL, {
             method: 'POST',
             headers: headers,
-            body: JSON.stringify(generationBody),
+            body: JSON.stringify(requestBody),
         });
 
-        const generationData = await generationResponse.json();
+        const responseData = await response.json();
 
-        if (!generationResponse.ok) {
-            const errorMessage = generationData.message || generationData.error || 'Erro desconhecido da API ao gerar o termo.';
-            console.error(`[CLT_CONSENT - ETAPA 1] API Error: ${JSON.stringify(generationData)}`);
+        if (!response.ok) {
+            const errorMessage = responseData.message || responseData.error || 'Erro desconhecido da API ao gerar o termo.';
+            console.error(`[CLT_CONSENT] API Error: ${JSON.stringify(responseData)}`);
             return { success: false, message: `Falha ao gerar termo: ${errorMessage}` };
         }
         
-        const consultationId = generationData.id;
+        const consultationId = responseData.id;
         if (!consultationId) {
-            console.error('[CLT_CONSENT - ETAPA 1] API Success but no consultationId returned:', generationData);
+            console.error('[CLT_CONSENT] API Success but no consultationId returned:', responseData);
             return { success: false, message: "API retornou sucesso mas não incluiu o ID da consulta." };
         }
 
-        console.log(`[CLT_CONSENT - ETAPA 1] Sucesso! ID da Consulta: ${consultationId}`);
-
-        // --- ETAPA 2: AUTORIZAR O TERMO DE CONSENTIMENTO ---
-        const authorizationBody = { consult_id: consultationId };
-
-        console.log("--- [CLT_CONSENT DEBUG - ETAPA 2: AUTORIZAR] ---");
-        console.log("Endpoint:", API_URL);
-        console.log("Method: POST");
-        console.log("Headers:", JSON.stringify({ ...headers, Authorization: 'Bearer [REDACTED]' }, null, 2));
-        console.log("Request Body:", JSON.stringify(authorizationBody, null, 2));
-        console.log("---------------------------------------------");
-
-        const authorizationResponse = await fetch(API_URL, {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify(authorizationBody),
-        });
-
-        if (!authorizationResponse.ok) {
-            const authorizationData = await authorizationResponse.json();
-            const errorMessage = authorizationData.message || authorizationData.error || 'Erro desconhecido da API ao autorizar o termo.';
-            console.error(`[CLT_CONSENT - ETAPA 2] API Error: ${JSON.stringify(authorizationData)}`);
-            return { success: false, message: `O termo foi gerado, mas falhou ao autorizar: ${errorMessage}` };
-        }
-        
-        console.log(`[CLT_CONSENT - ETAPA 2] Sucesso! Termo autorizado.`);
-
         return { 
             success: true, 
-            message: 'Termo de consentimento gerado e autorizado com sucesso.',
+            message: 'Termo de consentimento gerado com sucesso.',
             consultationId: consultationId
         };
 
@@ -240,6 +230,44 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
     }
 }
 
+
+export async function getSimulationConfigs(input: z.infer<typeof getConfigsSchema>): Promise<GetConfigsResult> {
+    const validation = getConfigsSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: 'ID de usuário inválido.' };
+    }
+    const { userId } = validation.data;
+
+    const { credentials, error: credError } = await getUserCredentials(userId);
+    if (credError || !credentials) {
+        return { success: false, message: credError || "Credenciais não encontradas." };
+    }
+    const { token, error: tokenError } = await getAuthToken(credentials);
+    if (tokenError) {
+        return { success: false, message: tokenError };
+    }
+
+    const API_URL = 'https://bff.v8sistema.com/private-consignment/simulation/configs';
+    try {
+        const response = await fetch(API_URL, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        const responseData = await response.json();
+
+        if (!response.ok) {
+            const errorMessage = responseData.message || 'Erro ao buscar configurações de simulação.';
+            return { success: false, message: errorMessage };
+        }
+
+        return { success: true, message: "Configurações encontradas.", configs: responseData.configs };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Erro de rede ao buscar configurações.';
+        return { success: false, message };
+    }
+}
+
+
 export async function criarSimulacaoCLT(input: z.infer<typeof simulationActionSchema>): Promise<CreateSimulacaoResult> {
     const validation = simulationActionSchema.safeParse(input);
     if (!validation.success) {
@@ -247,6 +275,13 @@ export async function criarSimulacaoCLT(input: z.infer<typeof simulationActionSc
     }
 
     const { userId, ...simulationData } = validation.data;
+    
+    await logActivity({
+        userId,
+        action: 'Criação Simulação CLT V8',
+        provider: 'V8',
+        details: `Config ID: ${simulationData.config_id}, Valor: ${simulationData.disbursed_amount}`
+    });
 
     const { credentials, error: credError } = await getUserCredentials(userId);
     if (credError || !credentials) {
@@ -261,19 +296,24 @@ export async function criarSimulacaoCLT(input: z.infer<typeof simulationActionSc
     const API_URL = 'https://bff.v8sistema.com/private-consignment/simulation';
 
     try {
+        const requestBody = {
+            ...simulationData,
+            installment_face_value: 0 // API seems to require this, even if 0
+        };
+
         const response = await fetch(API_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`,
             },
-            body: JSON.stringify(simulationData),
+            body: JSON.stringify(requestBody),
         });
         const responseData = await response.json();
 
         if (!response.ok) {
              const errorMessage = responseData.message || responseData.error || 'Erro desconhecido ao criar simulação.';
-            return { success: false, message: errorMessage };
+            return { success: false, message: `Erro da API V8: ${errorMessage}` };
         }
 
         return { success: true, message: "Simulação criada com sucesso.", simulation: responseData };
@@ -282,5 +322,3 @@ export async function criarSimulacaoCLT(input: z.infer<typeof simulationActionSc
         return { success: false, message };
     }
 }
-
-  
