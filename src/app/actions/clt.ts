@@ -206,7 +206,7 @@ export async function gerarTermoConsentimento(input: z.infer<typeof consentActio
         const responseData = await response.json();
 
         if (!response.ok) {
-            const errorMessage = responseData.message || responseData.error || 'Erro desconhecido da API ao gerar o termo.';
+            const errorMessage = responseData.detail || responseData.message || responseData.error || 'Erro desconhecido da API ao gerar o termo.';
             console.error(`[CLT_CONSENT] API Error: ${JSON.stringify(responseData)}`);
             return { success: false, message: `Falha ao gerar termo: ${errorMessage}` };
         }

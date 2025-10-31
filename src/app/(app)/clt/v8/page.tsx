@@ -314,7 +314,7 @@ export default function V8CltPage() {
                                         <>
                                             <FormField control={simulationForm.control} name="numberOfInstallments" render={({ field }) => (
                                                 <FormItem><FormLabel>Número de Parcelas</FormLabel><FormControl>
-                                                    <RadioGroup onValueChange={field.onChange} defaultValue={String(field.value)} className="flex flex-wrap gap-x-4 gap-y-2 pt-2">
+                                                    <RadioGroup onValueChange={(value) => field.onChange(Number(value))} defaultValue={String(field.value)} className="flex flex-wrap gap-x-4 gap-y-2 pt-2">
                                                         {selectedConfig.number_of_installments.map(inst => (
                                                             <FormItem key={inst} className="flex items-center space-x-2"><FormControl><RadioGroupItem value={inst} /></FormControl><FormLabel className="font-normal">{inst}x</FormLabel></FormItem>
                                                         ))}
