@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -12,8 +12,8 @@
     --card-foreground: 222.2 47.4% 11.2%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 47.4% 11.2%;
-    --primary: 34 81% 54%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 210 40% 98%;
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 215.4 16.3% 46.9%;
     --muted: 210 40% 96.1%;
@@ -24,7 +24,7 @@
     --destructive-foreground: 0 0% 98%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 215 20.2% 65.1%;
+    --ring: 217 91% 60%;
 
     --chart-1: 220 80% 55%;
     --chart-2: 160 70% 40%;
@@ -32,27 +32,27 @@
     --chart-4: 220 80% 75%;
     --chart-5: 160 70% 60%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
     
     --sidebar-background: 240 5% 15%;
     --sidebar-foreground: 0 0% 90%;
-    --sidebar-primary: 34 81% 54%;
+    --sidebar-primary: 217 91% 60%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 240 5% 25%;
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 240 5% 25%;
-    --sidebar-ring: 34 81% 54%;
+    --sidebar-ring: 217 91% 60%;
   }
 
   .dark {
-    --background: 220 13% 11%;
+    --background: 224 71% 4%;
     --foreground: 210 40% 98%;
-    --card: 216 12% 14%;
+    --card: 220 13% 11%;
     --card-foreground: 210 40% 98%;
-    --popover: 220 13% 11%;
+    --popover: 220 13% 9%;
     --popover-foreground: 210 40% 98%;
-    --primary: 34 81% 54%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 210 40% 98%;
     --secondary: 216 12% 19%;
     --secondary-foreground: 210 40% 98%;
     --muted: 216 12% 19%;
@@ -63,7 +63,7 @@
     --destructive-foreground: 210 40% 98%;
     --border: 216 12% 19%;
     --input: 216 12% 19%;
-    --ring: 34 81% 54%;
+    --ring: 217 91% 60%;
 
     --chart-1: 220 80% 60%;
     --chart-2: 160 70% 45%;
@@ -73,11 +73,39 @@
     
     --sidebar-background: 220 13% 9%;
     --sidebar-foreground: 0 0% 90%;
-    --sidebar-primary: 34 81% 54%;
+    --sidebar-primary: 217 91% 60%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 216 12% 14%;
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 216 12% 14%;
-    --sidebar-ring: 34 81% 54%;
+    --sidebar-ring: 217 91% 60%;
   }
+}
+
+@layer components {
+    .dark .card-gradient-border {
+        position: relative;
+        background: hsl(var(--card));
+        border-radius: var(--radius);
+    }
+    .dark .card-gradient-border::before {
+        content: "";
+        position: absolute;
+        inset: -1px;
+        z-index: -1;
+        border-radius: calc(var(--radius) + 1px);
+        background: conic-gradient(from 180deg at 50% 50%, hsl(var(--primary) / 0.15), hsl(var(--primary) / 0.7) 50%, hsl(var(--primary) / 0.15));
+        transition: background 0.3s ease-in-out;
+    }
+     .dark .card-gradient-border:hover::before {
+        background: conic-gradient(from 180deg at 50% 50%, hsl(var(--primary) / 0.3), hsl(var(--primary) / 0.9) 50%, hsl(var(--primary) / 0.3));
+     }
+
+     .dark .btn-glow {
+        box-shadow: 0 0 0.5rem hsl(var(--primary) / 0.5);
+        transition: box-shadow 0.3s ease-in-out;
+     }
+      .dark .btn-glow:hover {
+        box-shadow: 0 0 1rem hsl(var(--primary) / 0.7);
+      }
 }
